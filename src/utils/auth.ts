@@ -2,21 +2,18 @@ import { ref } from 'vue'
 
 interface AuthToken {
     token: string
-    expiresAt: number
 }
 
 export const useAuth = () => {
     const isAuthenticated = ref(false)
 
-    // 使用 JWT 或其他加密 token
-    const setAuthToken = (token: string, expiresIn: number) => {
-        const expiresAt = new Date().getTime() + expiresIn * 1000
+    // 登录凭据保留至主动登出或清除本站浏览器数据。
+    const setAuthToken = (token: string) => {
         const authData: AuthToken = {
-            token,
-            expiresAt
+            token
         }
 
-        // 将 token 加密后存储
+        // 使用原有 Base64 格式保存，兼容已登录的浏览器。
         const encrypted = btoa(JSON.stringify(authData))
         localStorage.setItem('auth_token', encrypted)
         isAuthenticated.value = true
@@ -28,14 +25,16 @@ export const useAuth = () => {
 
         try {
             const decrypted = JSON.parse(atob(encrypted))
-            if (new Date().getTime() > decrypted.expiresAt) {
+            if (typeof decrypted?.token !== 'string' || !decrypted.token) {
                 localStorage.removeItem('auth_token')
                 isAuthenticated.value = false
                 return null
             }
             isAuthenticated.value = true
-            return decrypted
+            return { token: decrypted.token }
         } catch {
+            localStorage.removeItem('auth_token')
+            isAuthenticated.value = false
             return null
         }
     }

@@ -26,18 +26,16 @@ const router = createRouter({
 
 // 路由守卫
 router.beforeEach(async (to, _from, next) => {
-    if (to.meta.requiresAuth) {
-        const auth = useAuth()
-        const token = auth.getAuthToken()
+    const auth = useAuth()
+    const token = auth.getAuthToken()
 
-        if (!token) {
-            next('/login')
-        } else {
-            next()
-        }
+    if (to.meta.requiresAuth && !token) {
+        next('/login')
+    } else if (to.name === 'Login' && token) {
+        next({ name: 'Home' })
     } else {
         next()
     }
 })
 
-export default router 
+export default router

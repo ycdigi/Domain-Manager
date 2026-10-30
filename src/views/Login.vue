@@ -1,32 +1,36 @@
 <template>
     <div class="login-container">
-        <el-card class="login-card">
-            <div class="logo-container">
-                <img src="../../public/vite.svg" alt="Logo" class="logo" />
-                <h2>域名管理系统<br />(Domain-Manager)</h2>
-            </div>
-            <el-form :model="loginForm" @submit.prevent="handleLogin" label-position="top">
-                <el-form-item label="用户名">
-                    <el-input v-model="loginForm.username" placeholder="请输入用户名" :prefix-icon="User" clearable />
-                </el-form-item>
-                <el-form-item label="密码">
-                    <el-input v-model="loginForm.password" type="password" placeholder="请输入密码" :prefix-icon="Lock"
-                        show-password @keyup.enter="handleLogin" />
-                </el-form-item>
-                <el-form-item>
-                    <el-button type="primary" @click="handleLogin" style="width: 100%">登录</el-button>
-                </el-form-item>
-            </el-form>
-        </el-card>
+        <AppHeader />
+        <main class="workspace login-workspace">
+            <section class="login-panel" aria-labelledby="login-title">
+                <div class="login-heading">
+                    <h1 id="login-title">登录</h1>
+                    <p>域名管理系统</p>
+                </div>
+                <el-form ref="formRef" :model="loginForm" :rules="rules" @submit.prevent="handleLogin" label-position="top" :aria-busy="submitting">
+                    <el-form-item label="用户名" prop="username">
+                        <el-input v-model="loginForm.username" name="username" autocomplete="username" placeholder="请输入用户名" :prefix-icon="User" clearable />
+                    </el-form-item>
+                    <el-form-item label="密码" prop="password">
+                        <el-input v-model="loginForm.password" name="password" autocomplete="current-password" type="password" placeholder="请输入密码" :prefix-icon="Lock" show-password />
+                    </el-form-item>
+                    <p v-if="loginError" class="login-error" role="alert">{{ loginError }}</p>
+                    <el-button class="login-submit" type="primary" native-type="submit" :loading="submitting" :disabled="submitting">登录</el-button>
+                </el-form>
+            </section>
+        </main>
+        <AppFooter class="workspace login-footer" />
     </div>
 </template>
 
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import type { FormInstance, FormRules } from 'element-plus'
 import { useAuth } from '../utils/auth'
 import { User, Lock } from '@element-plus/icons-vue'
+import AppHeader from '../components/AppHeader.vue'
+import AppFooter from '../components/AppFooter.vue'
 
 interface ApiResponse<T = any> {
     status: number
@@ -40,12 +44,25 @@ interface LoginResponse {
 
 const auth = useAuth()
 const router = useRouter()
+const formRef = ref<FormInstance>()
+const submitting = ref(false)
+const loginError = ref('')
 const loginForm = ref({
     username: '',
     password: ''
 })
+const rules: FormRules = {
+    username: [{ required: true, message: '请输入用户名', trigger: 'blur' }],
+    password: [{ required: true, message: '请输入密码', trigger: 'blur' }]
+}
 
 const handleLogin = async () => {
+    if (submitting.value || !formRef.value) return
+    const valid = await formRef.value.validate().catch(() => false)
+    if (!valid || submitting.value) return
+
+    submitting.value = true
+    loginError.value = ''
     try {
         const response = await fetch('/api/login', {
             method: 'POST',
@@ -61,67 +78,18 @@ const handleLogin = async () => {
         const result = await response.json() as ApiResponse<LoginResponse>
 
         if (result.status === 200 && result.data?.token) {
-            const expiresIn = 6 * 60 * 60 // 6小时
-            auth.setAuthToken(result.data.token, expiresIn)
-            ElMessage.success('登录成功')
+            auth.setAuthToken(result.data.token)
             await router.push({ name: 'Home' })
         } else {
-            ElMessage.error(result.message || '用户名或密码错误')
+            loginError.value = result.message || '用户名或密码错误'
         }
     } catch (error) {
         console.error('Login error:', error)
-        ElMessage.error('登录失败')
+        loginError.value = '登录失败，请重试。'
+    } finally {
+        submitting.value = false
     }
 }
 </script>
 
-<style scoped>
-.login-container {
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    background: linear-gradient(135deg, #f5f7fa 0%, #e4e7eb 100%);
-}
-
-.login-card {
-    width: 400px;
-    padding: 30px;
-    border-radius: 12px;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.1);
-}
-
-.logo-container {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    margin-bottom: 30px;
-}
-
-.logo {
-    width: 100px;
-    height: 100px;
-    margin-bottom: 16px;
-}
-
-h2 {
-    text-align: center;
-    color: #409EFF;
-    font-size: 24px;
-    line-height: 1.4;
-    margin: 0;
-}
-
-:deep(.el-input__wrapper) {
-    padding-left: 0;
-}
-
-:deep(.el-form-item__label) {
-    font-weight: bold;
-}
-
-:deep(.el-button) {
-    height: 40px;
-    font-size: 16px;
-}
-</style>
+<style scoped src="../styles/login/login.css"></style>

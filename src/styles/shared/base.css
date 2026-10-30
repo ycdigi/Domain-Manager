@@ -1,0 +1,42 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: project · scope: explicit opt-in · v2.0.0 */
+/* Hallmark · pre-emit critique: reuse locked controls and document foundations across both existing page templates. */
+@import url('./tokens.css');
+
+html.dm-ui { overflow-x: clip; color-scheme: light; background: var(--color-paper); color: var(--color-ink); }
+html.dm-ui ::selection { background: var(--color-paper-3); color: var(--color-ink); }
+html.dm-ui body { margin: 0; overflow-x: clip; background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5; scrollbar-color: var(--color-field-edge) var(--color-paper-2); }
+html.dm-ui #app { min-height: 100dvh; }
+
+
+html:is(.dm-ui, .dm-home-route) :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+html:is(.dm-ui, .dm-home-route) .el-button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
+html:is(.dm-ui, .dm-home-route) .el-input__inner:focus-visible,
+html:is(.dm-ui, .dm-home-route) .el-textarea__inner:focus-visible { outline-offset: -2px; }
+html:is(.dm-ui, .dm-home-route) .el-input__wrapper.is-focus,
+html:is(.dm-ui, .dm-home-route) .el-select__wrapper.is-focused { box-shadow: 0 0 0 2px var(--color-focus) inset; }
+html:is(.dm-ui, .dm-home-route) .el-button { min-height: 36px; border-radius: var(--radius-control); font-family: var(--font-body); transition: none; }
+html:is(.dm-ui, .dm-home-route) .el-button + .el-button { margin-left: 0; }
+html:is(.dm-ui, .dm-home-route) .el-button:not(.is-disabled):active { transform: translateY(1px); }
+html:is(.dm-ui, .dm-home-route) .el-button.is-disabled { opacity: 0.55; cursor: not-allowed; }
+html:is(.dm-ui, .dm-home-route) .el-button--primary { --el-button-text-color: var(--color-accent-ink); --el-button-bg-color: var(--color-accent); --el-button-border-color: var(--color-accent); --el-button-hover-text-color: var(--color-accent-ink); --el-button-hover-bg-color: var(--color-accent-hover); --el-button-hover-border-color: var(--color-accent-hover); --el-button-active-bg-color: var(--color-accent-hover); --el-button-active-border-color: var(--color-accent-hover); --el-button-disabled-text-color: var(--color-accent-ink); --el-button-disabled-bg-color: var(--color-accent); --el-button-disabled-border-color: var(--color-accent); }
+html:is(.dm-ui, .dm-home-route) .el-dialog { max-width: calc(100% - 32px); margin: 5dvh auto; border-radius: var(--radius-panel); padding: var(--space-lg); }
+html:is(.dm-ui, .dm-home-route) .el-dialog__body { max-height: 70dvh; overflow-y: auto; padding-inline: var(--space-2xs); }
+html:is(.dm-ui, .dm-home-route) .el-dialog__footer,
+html:is(.dm-ui, .dm-home-route) .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+html:is(.dm-ui, .dm-home-route) .el-dialog .el-input,
+html:is(.dm-ui, .dm-home-route) .el-dialog .el-select,
+html:is(.dm-ui, .dm-home-route) .el-dialog .el-date-editor { max-width: 100%; }
+html:is(.dm-ui, .dm-home-route) .el-dialog .el-date-editor { width: 100%; }
+html:is(.dm-ui, .dm-home-route) .el-message-box { max-width: calc(100% - 32px); }
+html:is(.dm-ui, .dm-home-route) .el-dialog__headerbtn:focus-visible { outline-offset: -4px; }
+@media (max-width: 600px) {
+  html:is(.dm-ui, .dm-home-route) .el-button { min-height: 44px; }
+  html:is(.dm-ui, .dm-home-route) .el-dialog { padding: var(--space-md); }
+  html:is(.dm-ui, .dm-home-route) .el-dialog .el-form-item { display: block; }
+  html:is(.dm-ui, .dm-home-route) .el-dialog .el-form-item__label { display: block; width: auto !important; height: auto; text-align: left; padding: 0 0 var(--space-xs); line-height: 1.5; }
+  html:is(.dm-ui, .dm-home-route) .el-dialog .el-form-item__content { margin-left: 0 !important; }
+  html:is(.dm-ui, .dm-home-route) .el-dialog__headerbtn { min-width: 44px; min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  html:is(.dm-ui, .dm-home-route) *, html:is(.dm-ui, .dm-home-route) *::before, html:is(.dm-ui, .dm-home-route) *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }
+}

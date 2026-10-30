@@ -168,11 +168,3 @@ const handleSubmit = async () => {
     })
 }
 </script>
-
-<style scoped>
-.dialog-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-}
-</style>
