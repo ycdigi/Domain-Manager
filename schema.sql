@@ -13,6 +13,8 @@ CREATE TABLE IF NOT EXISTS domains (
     tgsend INTEGER DEFAULT 0,
     st_tgsend INTEGER DEFAULT 1,
     memo TEXT,
+    site_name TEXT,
+    industry TEXT,
     adsense_account_id INTEGER,
     adsense_connected TEXT NOT NULL DEFAULT '未知',
     adsense_opened_date TEXT,
@@ -66,6 +68,8 @@ CREATE INDEX IF NOT EXISTS idx_domains_seo_last_date ON domains(seo_last_date);
 CREATE INDEX IF NOT EXISTS idx_domains_expiry_date ON domains(expiry_date);
 CREATE INDEX IF NOT EXISTS idx_domains_platform ON domains(platform);
 CREATE INDEX IF NOT EXISTS idx_domains_content_stats_date ON domains(content_stats_updated_date);
+CREATE INDEX IF NOT EXISTS idx_domains_industry ON domains(industry);
+CREATE INDEX IF NOT EXISTS idx_domains_site_name ON domains(site_name);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_adsense_accounts_publisher_id
     ON adsense_accounts(publisher_id)
     WHERE publisher_id IS NOT NULL AND publisher_id <> '';

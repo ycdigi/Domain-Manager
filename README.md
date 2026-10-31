@@ -115,6 +115,7 @@
    - 在 Pages 项目中新增 Secret `CREDENTIAL_ENCRYPTION_KEY`，用于加密保存 GitHub Token；值需至少 32 个随机字符，例如本地运行 `openssl rand -hex 32` 生成；不要把它放进普通 Text 变量
    - 已有数据库升级到 AI 提示词和想法记录时，再执行一次 `schema-migration-v1.4.0.sql`
    - 已有数据库升级到 Publisher ID、网站技术栈、WordPress 内容统计和操作日期时，再执行一次 `schema-migration-v1.5.0.sql`
+   - 已有数据库升级到网站名称和行业字段时，再执行一次 `schema-migration-v1.6.0.sql`
 
 ### D1 命令行管理
 
@@ -154,6 +155,7 @@ npx wrangler d1 execute domains-db --remote --command "SELECT lower(rtrim(domain
 npm run db:migrate:v1.3.0
 npm run db:migrate:v1.4.0
 npm run db:migrate:v1.5.0
+npm run db:migrate:v1.6.0
 npm run db:verify:remote
 ```
 
@@ -233,7 +235,7 @@ Authorization: Bearer ${API_TOKEN}
 Content-Type: application/json
 ```
 
-它只更新已经存在的域名，不会因为域名拼写错误自动创建网站。支持同步状态、SEO 日期、日点击、技术栈、WordPress 数量、AdSense 网站状态、操作日期和 AI 提示词/想法。
+它只更新已经存在的域名，不会因为域名拼写错误自动创建网站。支持同步网站名称、行业、状态、SEO 日期、日点击、技术栈、WordPress 数量、AdSense 网站状态、操作日期和 AI 提示词/想法。
 
 示例：
 
@@ -241,6 +243,8 @@ Content-Type: application/json
 {
   "domain": "example.com",
   "fields": {
+    "site_name": "电气计算器站",
+    "industry": "电气/工程",
     "daily_clicks": 24,
     "clicks_updated_date": "2026-10-31",
     "seo_last_date": "2026-10-31",

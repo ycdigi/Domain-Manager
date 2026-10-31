@@ -18,7 +18,9 @@ interface Domain {
     service_type: string
     status: string
     memo: string
+    site_name?: string | null
+    industry?: string | null
     created_at?: string
 }
 
-export type { Env, ApiResponse, Domain } 
+export type { Env, ApiResponse, Domain }

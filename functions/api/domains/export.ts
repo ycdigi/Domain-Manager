@@ -17,6 +17,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         const { results } = await context.env.DB.prepare(
             `SELECT domains.domain, domains.registrar, domains.registrar_link, domains.registrar_date,
                     domains.expiry_date, domains.service_type, domains.status, domains.memo,
+                    domains.site_name, domains.industry,
                     domains.tgsend, domains.st_tgsend, domains.adsense_connected,
                     domains.adsense_opened_date, domains.seo_last_date, domains.daily_clicks,
                     domains.clicks_updated_date, domains.platform, domains.platform_other,

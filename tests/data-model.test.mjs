@@ -24,6 +24,8 @@ test('schema is repeatable and includes resource tables', () => {
     assert.ok(tables.includes('domain_ai_note_versions'))
     assert.ok(tables.includes('domain_operations'))
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /platform/)
+    assert.match(runSql(db, 'PRAGMA table_info(domains);'), /site_name/)
+    assert.match(runSql(db, 'PRAGMA table_info(domains);'), /industry/)
     assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
@@ -166,14 +168,16 @@ test('operation dates are unique per domain, date and kind, and cascade on delet
   }
 })
 
-test('v1.5 migration preserves legacy domains and adds operations and publisher data', () => {
+test('v1.6 migration preserves legacy domains and adds site identity fields', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/migration-v15.db'
   try {
     runSql(db, `CREATE TABLE domains (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, registrar TEXT NOT NULL, registrar_link TEXT, registrar_date TEXT NOT NULL, expiry_date TEXT NOT NULL, service_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT '离线', tgsend INTEGER DEFAULT 0, st_tgsend INTEGER DEFAULT 1, memo TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP); INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type) VALUES ('legacy.example.com', 'test', '2025-01-01', '2026-12-31', '正常网站');`)
-    for (const version of ['v1.1.0', 'v1.2.0', 'v1.3.0', 'v1.4.0', 'v1.5.0']) runSql(db, fs.readFileSync(path.join(repo, `schema-migration-${version}.sql`), 'utf8'))
+    for (const version of ['v1.1.0', 'v1.2.0', 'v1.3.0', 'v1.4.0', 'v1.5.0', 'v1.6.0']) runSql(db, fs.readFileSync(path.join(repo, `schema-migration-${version}.sql`), 'utf8'))
     const row = runSql(db, "SELECT domain || '|' || platform FROM domains;").trim()
     assert.equal(row, 'legacy.example.com|其他')
     assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
+    assert.match(runSql(db, 'PRAGMA table_info(domains);'), /site_name/)
+    assert.match(runSql(db, 'PRAGMA table_info(domains);'), /industry/)
     assert.match(runSql(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='domain_operations';"), /domain_operations/)
     runSql(db, "INSERT INTO domain_operations(domain_id, operation_date, operation_kind) VALUES (1, '2026-10-31', '技术');")
     assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_operations;').trim(), '1')

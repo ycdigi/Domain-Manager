@@ -100,7 +100,7 @@ Domain JSON may also include an `ai_notes` array with `kind` (`AI提示词` or `
 - Before v1.3.0, check `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`. Resolve any duplicate domain rows manually, then run `schema-migration-v1.3.0.sql` once for status-alert tracking, resource-status triggers, and revised indexes.
 - Add a Pages Secret named `CREDENTIAL_ENCRYPTION_KEY` with at least 32 random characters (for example, generate locally with `openssl rand -hex 32`) to encrypt GitHub tokens. Do not add it as a public text variable.
 - For existing databases, run `schema-migration-v1.4.0.sql` once to add per-domain AI prompts and idea notes.
-- For existing databases, run `schema-migration-v1.5.0.sql` once to add Publisher IDs, platform/content snapshots, and operation-date history.
+- For existing databases, run `schema-migration-v1.5.0.sql` once to add Publisher IDs, platform/content snapshots, and operation-date history, then run `schema-migration-v1.6.0.sql` once for site names and industries.
 
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 

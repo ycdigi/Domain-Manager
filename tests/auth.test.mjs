@@ -149,6 +149,9 @@ test('domain validation uses normalized names, real dates, and non-overlapping c
     assert.equal(isValidDate('2025-02-29'), false)
     const valid = { domain: 'example.com', registrar: 'test', registrar_date: '2025-01-01', expiry_date: '2027-01-01', service_type: '正常网站', status: '在线', daily_clicks: 30 }
     assert.equal(validateDomain(valid), null)
+    assert.equal(validateDomain({ ...valid, site_name: '电气计算器站', industry: '电气/工程' }), null)
+    assert.match(validateDomain({ ...valid, site_name: 'x'.repeat(201) }), /网站名称/)
+    assert.match(validateDomain({ ...valid, industry: 'x'.repeat(101) }), /行业/)
     assert.match(validateDomain({ ...valid, daily_clicks: -1 }), /非负整数/)
     assert.match(validateDomain({ ...valid, adsense_connected: '已开通' }), /开通日期/)
     assert.equal(validateDomain({ ...valid, platform: 'WordPress', wp_calculator_count: 12, wp_article_count: 40, content_stats_updated_date: '2026-10-31' }), null)

@@ -29,7 +29,7 @@
                         </div>
                     </div>
                     <div class="domain-filters">
-                        <el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、域名商、备注" clearable />
+                        <el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable />
                         <el-select v-model="ownerFilter" placeholder="归属人" clearable><el-option v-for="owner in ownerOptions" :key="owner" :label="owner" :value="owner" /></el-select>
                         <el-select v-model="accountFilter" placeholder="AdSense账号" clearable><el-option v-for="account in adsenseAccounts" :key="account.id" :label="account.name" :value="String(account.id)" /></el-select>
                         <el-select v-model="adsenseFilter" placeholder="AdSense 状态" clearable><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /><el-option label="未知" value="未知" /></el-select>
@@ -39,11 +39,14 @@
                         <el-select v-model="providerFilter" placeholder="服务商" clearable><el-option v-for="provider in providerOptions" :key="provider" :label="providerLabel(provider)" :value="provider" /></el-select>
                         <el-select v-model="resourceAccountFilter" placeholder="服务商账号" clearable><el-option v-for="option in resourceAccountOptions" :key="option.value" :label="`${providerLabel(option.provider)} · ${option.account}`" :value="option.value" /></el-select>
                         <el-select v-model="platformFilter" placeholder="技术栈" clearable><el-option v-for="platform in platformOptions" :key="platform" :label="platform" :value="platform" /></el-select>
+                        <el-select v-model="industryFilter" placeholder="行业" filterable clearable><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select>
                         <el-button @click="clearFilters">清除筛选</el-button>
                     </div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
                     <el-table :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :default-sort="{ prop: 'expiry_date', order: 'ascending' }">
                         <el-table-column prop="domain" label="域名" min-width="200" fixed sortable><template #default="scope"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a></template></el-table-column>
+                        <el-table-column prop="site_name" label="网站名称" min-width="170" sortable><template #default="scope">{{ scope.row.site_name || '未命名' }}</template></el-table-column>
+                        <el-table-column prop="industry" label="行业" min-width="130" sortable><template #default="scope">{{ scope.row.industry || '未分类' }}</template></el-table-column>
                         <el-table-column label="剩余时间" min-width="128" sortable :sort-method="(a, b) => calculateRemainingDays(a.expiry_date) - calculateRemainingDays(b.expiry_date)"><template #default="scope"><span class="expiry-label" :class="expiryClass(scope.row.expiry_date)">{{ formatRemainingDays(scope.row.expiry_date) }}</span></template></el-table-column>
                         <el-table-column prop="status" label="状态" min-width="88" sortable><template #default="scope"><span class="status-label" :class="scope.row.status === '在线' ? 'status-online' : 'status-offline'">{{ scope.row.status }}</span></template></el-table-column>
                         <el-table-column label="AdSense" min-width="180" sortable><template #default="scope"><span>{{ scope.row.adsense_connected }}<small v-if="scope.row.adsense_account_name"> · {{ scope.row.adsense_account_name }} / {{ scope.row.adsense_owner }}</small></span></template></el-table-column>
@@ -118,6 +121,7 @@ const resourceFilter = ref('');
 const providerFilter = ref('');
 const resourceAccountFilter = ref('');
 const platformFilter = ref('');
+const industryFilter = ref('');
 const loading = ref(false);
 const loadError = ref('');
 const alertDays = ref(30);
@@ -143,9 +147,10 @@ const resourceAccountOptions = computed(() => resourceAccounts.value.filter(acco
 const aiNotesDomainCount = computed(() => domains.value.filter(domain => (domain.ai_note_count || 0) > 0).length);
 const dataQualityCount = computed(() => Object.values(dashboard.value.quality || {}).reduce((sum, value) => sum + Number(value || 0), 0));
 const platformOptions = ['WordPress', 'Astro', 'Next.js', '其他'];
+const industryOptions = ['电气/工程', '工业/制造', '酒店/旅游', '家居/装修', '软件/工具', '健康/医疗', '教育', '其他'];
 const filteredDomains = computed(() => domains.value.filter(row => {
     const account = accountById.value.get(row.adsense_account_id || undefined);
-    const haystack = `${row.domain} ${row.registrar} ${row.memo}`.toLowerCase();
+    const haystack = `${row.domain} ${row.site_name || ''} ${row.industry || ''} ${row.registrar} ${row.memo}`.toLowerCase();
     if (searchText.value && !haystack.includes(searchText.value.trim().toLowerCase())) return false;
     if (ownerFilter.value && account?.owner !== ownerFilter.value) return false;
     if (accountFilter.value && String(row.adsense_account_id || '') !== accountFilter.value) return false;
@@ -158,6 +163,7 @@ const filteredDomains = computed(() => domains.value.filter(row => {
     if (providerFilter.value && !links.some(link => link.provider === providerFilter.value)) return false;
     if (resourceAccountFilter.value && !links.some(link => String(link.account_id || '') === resourceAccountFilter.value)) return false;
     if (platformFilter.value && row.platform !== platformFilter.value) return false;
+    if (industryFilter.value && row.industry !== industryFilter.value) return false;
     return true;
 }));
 
@@ -168,7 +174,7 @@ const handleEdit = (row: DomainData) => { isEdit.value = true; editData.value = 
 const openDomainDetail = (row: DomainData) => { detailDomain.value = row; detailVisible.value = true; };
 const handleConfig = () => { configVisible.value = true; };
 const handleImport = () => { importVisible.value = true; };
-const clearFilters = () => { searchText.value = ''; ownerFilter.value = ''; accountFilter.value = ''; adsenseFilter.value = ''; seoFilter.value = ''; clicksFilter.value = ''; resourceFilter.value = ''; providerFilter.value = ''; resourceAccountFilter.value = ''; platformFilter.value = ''; };
+const clearFilters = () => { searchText.value = ''; ownerFilter.value = ''; accountFilter.value = ''; adsenseFilter.value = ''; seoFilter.value = ''; clicksFilter.value = ''; resourceFilter.value = ''; providerFilter.value = ''; resourceAccountFilter.value = ''; platformFilter.value = ''; industryFilter.value = ''; };
 const daysSince = (date: string) => { const [y,m,d] = date.split('-').map(Number); const today = localDate().split('-').map(Number); return Math.max(0, Math.floor((Date.UTC(today[0], today[1] - 1, today[2]) - Date.UTC(y, m - 1, d)) / 86400000)); };
 const formatSeoAge = (date: string | null) => date ? `${daysSince(date)} 天前` : '未记录';
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());

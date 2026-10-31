@@ -27,6 +27,8 @@ export const validateDomain = (data: Partial<Domain>) => {
     }
     if (!isValidDate(data.registrar_date) || !isValidDate(data.expiry_date)) return '注册日期和到期日期必须是有效的 YYYY-MM-DD 日期'
     if (data.status !== '在线' && data.status !== '离线') return '网站状态无效'
+    if (data.site_name != null && (typeof data.site_name !== 'string' || data.site_name.length > 200)) return '网站名称不能超过 200 个字符'
+    if (data.industry != null && (typeof data.industry !== 'string' || data.industry.length > 100)) return '行业不能超过 100 个字符'
     if (data.adsense_connected !== undefined && !['未知', '已开通', '未开通'].includes(data.adsense_connected)) return 'AdSense 网站状态无效'
     if ((data.adsense_connected || '未知') === '已开通' && !isValidDate(data.adsense_opened_date)) return '已开通时必须填写有效开通日期'
     if (data.adsense_opened_date && data.registrar_date && data.adsense_opened_date < data.registrar_date) return 'AdSense 开通日期不能早于域名注册日期'
