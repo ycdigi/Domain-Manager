@@ -37,6 +37,29 @@ export interface Domain {
     resource_status?: string
     resource_count?: number
     resource_names?: string | null
+    ai_note_count?: number
+    created_at?: string
+}
+
+export type DomainAiNoteKind = 'AI提示词' | '想法说明'
+
+export interface DomainAiNote {
+    id?: number
+    domain_id: number
+    kind: DomainAiNoteKind
+    content: string
+    created_at?: string
+    updated_at?: string
+    archived_at?: string | null
+    version_count?: number
+}
+
+export interface DomainAiNoteVersion {
+    id?: number
+    note_id: number
+    kind: DomainAiNoteKind
+    content: string
+    version_no: number
     created_at?: string
 }
 

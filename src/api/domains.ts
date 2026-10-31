@@ -22,6 +22,7 @@ export interface DomainData {
     resource_status: string
     resource_count?: number
     resource_names?: string | null
+    ai_note_count?: number
     created_at?: string
 }
 

@@ -18,6 +18,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
                        FROM domain_resources dr JOIN provider_resources r ON r.id = dr.resource_id
                        LEFT JOIN provider_accounts a ON a.id = r.account_id WHERE dr.domain_id = d.id
                    )) AS resource_names,
+                   (SELECT COUNT(*) FROM domain_ai_notes n WHERE n.domain_id = d.id AND n.archived_at IS NULL) AS ai_note_count,
                    CASE WHEN EXISTS (SELECT 1 FROM domain_resources dr WHERE dr.domain_id = d.id) THEN '已关联' ELSE '未关联' END AS resource_status
             FROM domains d ORDER BY d.created_at DESC
         `).all<Domain>()

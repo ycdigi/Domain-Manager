@@ -53,6 +53,8 @@ The system supports batch importing of domain data via a JSON file. The import f
 - `service_type`: The type of service
 - `memo`: Additional notes or memo
 During import, the system will automatically validate the data format and provide detailed information on successful and failed entries.
+
+Domain JSON may also include an `ai_notes` array with `kind` (`AI提示词` or `想法说明`) and `content`; these records are managed from the domain's prompt detail drawer.
 ## Quick Start
 ### Prerequisites
 - A GitHub account
@@ -97,6 +99,7 @@ During import, the system will automatically validate the data format and provid
 - To add infrastructure accounts, resource links, encrypted credentials, and click fields, run `schema-migration-v1.2.0.sql` once. Do not run that migration twice.
 - Before v1.3.0, check `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`. Resolve any duplicate domain rows manually, then run `schema-migration-v1.3.0.sql` once for status-alert tracking, resource-status triggers, and revised indexes.
 - Add a Pages Secret named `CREDENTIAL_ENCRYPTION_KEY` with at least 32 random characters (for example, generate locally with `openssl rand -hex 32`) to encrypt GitHub tokens. Do not add it as a public text variable.
+- For existing databases, run `schema-migration-v1.4.0.sql` once to add per-domain AI prompts and idea notes.
 
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 

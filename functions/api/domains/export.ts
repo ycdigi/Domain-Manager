@@ -34,7 +34,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             LEFT JOIN provider_accounts a ON a.id = r.account_id
             ORDER BY dr.domain_id, r.provider, r.name
         `).all()
+        const { results: noteRows } = await context.env.DB.prepare(`
+            SELECT domain_id, kind, content
+            FROM domain_ai_notes
+            WHERE archived_at IS NULL
+            ORDER BY domain_id, kind, updated_at DESC, id DESC
+        `).all()
         const grouped = new Map<number, unknown[]>()
+        const notesByDomain = new Map<number, unknown[]>()
         for (const resource of resourceRows || []) {
             const item = resource as { domain_id: number }
             const list = grouped.get(item.domain_id) || []
@@ -42,9 +49,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             list.push(link)
             grouped.set(domain_id, list)
         }
+        for (const note of noteRows || []) {
+            const item = note as { domain_id: number; kind: string; content: string }
+            const list = notesByDomain.get(item.domain_id) || []
+            list.push({ kind: item.kind, content: item.content })
+            notesByDomain.set(item.domain_id, list)
+        }
         const enriched = (results || []).map((row: any) => {
             const { domain_id, ...exportRow } = row
-            return { ...exportRow, resources: grouped.get(domain_id) || [] }
+            return { ...exportRow, resources: grouped.get(domain_id) || [], ai_notes: notesByDomain.get(domain_id) || [] }
         })
 
         // 返回 JSON 文件，直接输出 domains 数组

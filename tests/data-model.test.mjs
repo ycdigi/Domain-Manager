@@ -20,6 +20,8 @@ test('schema is repeatable and includes resource tables', () => {
     assert.ok(tables.includes('provider_resources'))
     assert.ok(tables.includes('domain_resources'))
     assert.ok(tables.includes('provider_credentials'))
+    assert.ok(tables.includes('domain_ai_notes'))
+    assert.ok(tables.includes('domain_ai_note_versions'))
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }
@@ -49,6 +51,22 @@ test('resource link triggers keep derived domain status accurate', () => {
     assert.equal(runSql(db, 'SELECT resource_status FROM domains WHERE id=1;').trim(), '已关联')
     runSql(db, 'DELETE FROM domain_resources WHERE id=1;')
     assert.equal(runSql(db, 'SELECT resource_status FROM domains WHERE id=1;').trim(), '未关联')
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
+test('AI notes keep current records and version history, and domain deletion cascades', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/ai-notes.db'
+  try {
+    runSql(db, 'PRAGMA foreign_keys=ON;')
+    runSql(db, fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8'))
+    runSql(db, `INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type) VALUES ('example.com', 'test', '2025-01-01', '2027-01-01', '正常网站'); INSERT INTO domain_ai_notes(domain_id, kind, content) VALUES (1, 'AI提示词', '检查入口页'); INSERT INTO domain_ai_note_versions(note_id, kind, content, version_no) VALUES (1, 'AI提示词', '检查入口页', 1); UPDATE domain_ai_notes SET content='检查入口页和内链', updated_at=CURRENT_TIMESTAMP WHERE id=1; INSERT INTO domain_ai_note_versions(note_id, kind, content, version_no) VALUES (1, 'AI提示词', '检查入口页和内链', 2);`)
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_ai_notes WHERE archived_at IS NULL;').trim(), '1')
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_ai_note_versions WHERE note_id=1;').trim(), '2')
+    runSql(db, 'DELETE FROM domains WHERE id=1;')
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_ai_notes;').trim(), '0')
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_ai_note_versions;').trim(), '0')
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }
@@ -108,11 +126,15 @@ test('v1.1 through v1.3 migrations preserve existing domains', () => {
     runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.1.0.sql'), 'utf8'))
     runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.2.0.sql'), 'utf8'))
     runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.3.0.sql'), 'utf8'))
+    runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.4.0.sql'), 'utf8'))
     const row = runSql(db, "SELECT domain || '|' || adsense_connected || '|' || resource_status FROM domains;").trim()
     assert.equal(row, 'legacy.example.com|未知|未关联')
     const alertColumns = runSql(db, 'PRAGMA table_info(domains);')
     assert.match(alertColumns, /last_expiry_alert_date/)
     assert.match(alertColumns, /last_offline_alert_at/)
+    const aiTables = runSql(db, "SELECT name FROM sqlite_master WHERE type='table' AND name LIKE 'domain_ai_note%';")
+    assert.match(aiTables, /domain_ai_notes/)
+    assert.match(aiTables, /domain_ai_note_versions/)
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }

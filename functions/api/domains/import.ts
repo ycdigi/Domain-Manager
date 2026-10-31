@@ -3,6 +3,7 @@ import { verifyToken } from '../../utils/auth'
 import { isValidDate, normalizeDomain } from '../../utils/domain-validation'
 
 interface ResourceImport { provider: ProviderType; account?: string | null; resource: string; role: string }
+interface AiNoteImport { kind: 'AI提示词' | '想法说明'; content: string }
 interface DomainImport {
     domain: string
     registrar?: string
@@ -21,6 +22,7 @@ interface DomainImport {
     daily_clicks?: number | null
     clicks_updated_date?: string | null
     resources?: ResourceImport[]
+    ai_notes?: AiNoteImport[]
 }
 
 const providers = new Set<ProviderType>(['github', 'cloudflare', 'vhost', 'vps'])
@@ -81,6 +83,10 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (item.tgsend !== undefined && ![0, 1].includes(item.tgsend)) return '域名通知选项无效'
             if (item.st_tgsend !== undefined && ![0, 1].includes(item.st_tgsend)) return '状态通知选项无效'
             if (item.resources !== undefined && (!Array.isArray(item.resources) || item.resources.length > 20)) return '每个网站最多导入 20 个资源关联'
+            if (item.ai_notes !== undefined && (!Array.isArray(item.ai_notes) || item.ai_notes.length > 50)) return '每个网站最多导入 50 条 AI 记录'
+            for (const note of item.ai_notes || []) {
+                if (!note || !['AI提示词', '想法说明'].includes(note.kind) || typeof note.content !== 'string' || !note.content.trim() || note.content.length > 20000) return 'AI 记录格式无效或内容过长'
+            }
             const linkKeys = new Set<string>()
             for (const link of item.resources || []) {
                 const accountName = typeof link?.account === 'string' ? link.account.trim() : ''
@@ -174,6 +180,25 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                         statements.push(db.prepare(`INSERT INTO domain_resources (domain_id, resource_id, role) SELECT id, ?, ? FROM domains WHERE domain = ? COLLATE NOCASE`)
                             .bind(resourceId, link.role.trim(), domain))
                     }
+                }
+                for (const note of item.ai_notes || []) {
+                    statements.push(db.prepare(`
+                        INSERT INTO domain_ai_notes (domain_id, kind, content)
+                        SELECT id, ?, ? FROM domains
+                        WHERE lower(rtrim(domain, '.')) = ?
+                          AND NOT EXISTS (
+                              SELECT 1 FROM domain_ai_notes n
+                              WHERE n.domain_id = domains.id AND n.archived_at IS NULL AND n.kind = ? AND n.content = ?
+                          )
+                    `).bind(note.kind, note.content.trim(), domain, note.kind, note.content.trim()))
+                    statements.push(db.prepare(`
+                        INSERT INTO domain_ai_note_versions (note_id, kind, content, version_no)
+                        SELECT n.id, n.kind, n.content, 1
+                        FROM domain_ai_notes n
+                        WHERE n.domain_id = (SELECT id FROM domains WHERE lower(rtrim(domain, '.')) = ?)
+                          AND n.kind = ? AND n.content = ?
+                          AND NOT EXISTS (SELECT 1 FROM domain_ai_note_versions v WHERE v.note_id = n.id)
+                    `).bind(domain, note.kind, note.content.trim()))
                 }
                 success++
             }

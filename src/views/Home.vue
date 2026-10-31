@@ -5,6 +5,7 @@
                 <div class="summary-card"><span>域名总数</span><strong>{{ dashboard.totals.total_domains || domains.length }}</strong></div>
                 <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>资源待补全</span><strong>{{ dashboard.totals.incomplete_resources || 0 }}</strong></div>
+                <div class="summary-card"><span>有 AI 记录的网站</span><strong>{{ aiNotesDomainCount }}</strong></div>
                 <div class="summary-card sync-summary"><span>待同步任务</span><strong>{{ queue.pending.value.length }}</strong><span v-if="failedQueueCount" class="sync-failure">{{ failedQueueCount }} 项失败</span><button v-if="queue.pending.value.length" type="button" class="sidebar-link" @click="syncNow">立即同步</button><button v-if="failedQueueCount" type="button" class="sidebar-link" @click="retryFailedWrites">重试失败项</button></div>
             </section>
 
@@ -52,7 +53,7 @@
                         <el-table-column prop="registrar_date" label="注册时间" min-width="128" sortable />
                         <el-table-column prop="service_type" label="服务类型" min-width="112" sortable />
                         <el-table-column prop="memo" label="备注" min-width="160" show-overflow-tooltip />
-                        <el-table-column label="操作" width="190"><template #default="scope"><div class="row-actions"><button type="button" class="table-action" @click="handleEdit(scope.row)">修改</button><button type="button" class="table-action" @click="handleSeoToday(scope.row)" :title="`最近：${formatSeoAge(scope.row.seo_last_date)}`">今天优化</button><button type="button" class="table-action table-action-danger" @click="handleDelete(scope.row)">删除</button></div></template></el-table-column>
+                        <el-table-column label="操作" width="250"><template #default="scope"><div class="row-actions"><button type="button" class="table-action" @click="openDomainDetail(scope.row)">提示<span v-if="scope.row.ai_note_count" class="action-count">{{ scope.row.ai_note_count }}</span></button><button type="button" class="table-action" @click="handleEdit(scope.row)">修改</button><button type="button" class="table-action" @click="handleSeoToday(scope.row)" :title="`最近：${formatSeoAge(scope.row.seo_last_date)}`">今天优化</button><button type="button" class="table-action table-action-danger" @click="handleDelete(scope.row)">删除</button></div></template></el-table-column>
                         <template #empty><div class="empty-state" v-if="!loading && !loadError"><p>还没有域名</p><span>新增或导入域名后，会在此显示。</span><button type="button" class="table-action" @click="handleAdd">新增域名</button></div><div v-else class="empty-state"><span>{{ loading ? '正在加载域名…' : '域名列表未能加载，请重试。' }}</span></div></template>
                     </el-table>
                     <p class="table-scroll-hint">左右滑动查看全部字段和操作。</p>
@@ -72,6 +73,7 @@
         <ImportDialog v-model:visible="importVisible" @success="reloadAll" />
         <AdsenseManagerDialog v-model:visible="adsenseManagerVisible" :accounts="adsenseAccounts" @changed="reloadAll" />
         <ResourceManagerDialog v-model:visible="resourceManagerVisible" @changed="reloadAll" />
+        <DomainDetailDrawer v-model:visible="detailVisible" :domain="detailDomain" @changed="loadDomains" />
     </div>
 </template>
 
@@ -87,6 +89,7 @@ import AlertConfigDialog from '../components/AlertConfigDialog.vue';
 import ImportDialog from '../components/ImportDialog.vue';
 import AdsenseManagerDialog from '../components/AdsenseManagerDialog.vue';
 import ResourceManagerDialog from '../components/ResourceManagerDialog.vue';
+import DomainDetailDrawer from '../components/DomainDetailDrawer.vue';
 import { createDomain, updateDomain, deleteDomain, type DomainData } from '../api/domains';
 import { getWriteQueue } from '../utils/writeQueue';
 
@@ -120,6 +123,8 @@ const configVisible = ref(false);
 const isEdit = ref(false);
 const editData = ref<DomainData>();
 const importVisible = ref(false);
+const detailVisible = ref(false);
+const detailDomain = ref<DomainData>();
 interface DashboardData { totals: Record<string, number>; seo: Array<{ id: number; domain: string; seo_last_date: string | null; days_since: number | null }>; clicks: Record<string, number>; providers: Array<{ provider: string; account_count: number; resource_count: number; linked_domain_count: number }>; owner_income: Array<{ owner: string; currency: string; account_count: number; current_income: number }> }
 interface ResourceLinkData { id: number; domain_id: number; resource_id: number; role: string; provider: string; account_id: number | null; account_name: string | null; resource_name: string }
 interface ResourceAccountData { id: number; provider: string; name: string; status: string; linked_domain_count: number }
@@ -130,6 +135,7 @@ const accountById = computed(() => new Map(adsenseAccounts.value.map(account => 
 const ownerOptions = computed(() => [...new Set(adsenseAccounts.value.map(account => account.owner).filter(Boolean))]);
 const providerOptions = ['github', 'cloudflare', 'vhost', 'vps'];
 const resourceAccountOptions = computed(() => resourceAccounts.value.filter(account => account.status === '正常').map(account => ({ provider: account.provider, account: account.name, value: String(account.id) })));
+const aiNotesDomainCount = computed(() => domains.value.filter(domain => (domain.ai_note_count || 0) > 0).length);
 const filteredDomains = computed(() => domains.value.filter(row => {
     const account = accountById.value.get(row.adsense_account_id || undefined);
     const haystack = `${row.domain} ${row.registrar} ${row.memo}`.toLowerCase();
@@ -151,6 +157,7 @@ const checkLoginStatus = () => { if (!auth.getAuthToken()) router.push({ name: '
 const handleLogout = () => { auth.clearAuth(); router.push({ name: 'Login' }); };
 const handleAdd = () => { isEdit.value = false; editData.value = undefined; dialogVisible.value = true; };
 const handleEdit = (row: DomainData) => { isEdit.value = true; editData.value = row; dialogVisible.value = true; };
+const openDomainDetail = (row: DomainData) => { detailDomain.value = row; detailVisible.value = true; };
 const handleConfig = () => { configVisible.value = true; };
 const handleImport = () => { importVisible.value = true; };
 const clearFilters = () => { searchText.value = ''; ownerFilter.value = ''; accountFilter.value = ''; adsenseFilter.value = ''; seoFilter.value = ''; clicksFilter.value = ''; resourceFilter.value = ''; providerFilter.value = ''; resourceAccountFilter.value = ''; };

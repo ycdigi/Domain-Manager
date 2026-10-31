@@ -64,6 +64,8 @@
 
 导入时，系统会自动验证数据格式，并给出成功和失败的详细信息。
 
+域名 JSON 还可以包含 `ai_notes` 数组，每条记录使用 `kind`（`AI提示词` 或 `想法说明`）和 `content` 字段；这些内容会在对应网站的“提示”详情抽屉中管理。
+
 ## 快速开始
 
 ### 前置要求
@@ -111,6 +113,7 @@
    - 升级到基础设施账号、资源关联、Token 凭据和点击字段时，对已有数据库再执行一次 `schema-migration-v1.2.0.sql`；该迁移文件不要重复执行
    - 先检查 `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`。若有结果，先人工合并重复域名；之后执行 `schema-migration-v1.3.0.sql`，此迁移只执行一次
    - 在 Pages 项目中新增 Secret `CREDENTIAL_ENCRYPTION_KEY`，用于加密保存 GitHub Token；值需至少 32 个随机字符，例如本地运行 `openssl rand -hex 32` 生成；不要把它放进普通 Text 变量
+   - 已有数据库升级到 AI 提示词和想法记录时，再执行一次 `schema-migration-v1.4.0.sql`
 
 ### D1 命令行管理
 
@@ -148,6 +151,7 @@ npm run db:migrate:v1.2.0
 # v1.3.0 会创建规范化域名唯一索引；执行前先确认没有重复域名
 npx wrangler d1 execute domains-db --remote --command "SELECT lower(rtrim(domain, '.')) AS domain_key, COUNT(*) AS count FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;"
 npm run db:migrate:v1.3.0
+npm run db:migrate:v1.4.0
 npm run db:verify:remote
 ```
 
