@@ -33,7 +33,7 @@
         <div class="operation-form"><el-date-picker v-model="operationForm.operation_date" type="date" value-format="YYYY-MM-DD" /><el-select v-model="operationForm.operation_kind"><el-option v-for="kind in operationKinds" :key="kind" :label="kind" :value="kind" /></el-select><el-button type="primary" @click="saveOperation">记录</el-button></div>
         <div class="operation-quick"><el-button v-for="kind in operationKinds" :key="kind" text size="small" @click="recordToday(kind)">今天 {{ kind }}</el-button></div>
         <el-select v-model="operationFilter" class="operation-filter"><el-option label="全部类型" value="全部" /><el-option v-for="kind in operationKinds" :key="`filter-${kind}`" :label="kind" :value="kind" /></el-select>
-        <div v-if="filteredOperations.length" class="operation-list"><div v-for="operation in filteredOperations" :key="operation.id" class="operation-row"><span>{{ operation.operation_date }} · {{ operation.operation_kind }}</span><el-button text size="small" type="danger" @click="removeOperation(operation.id)">删除</el-button></div></div>
+        <div v-if="filteredOperations.length" class="operation-list"><div v-for="operation in filteredOperations" :key="operation.id" class="operation-row"><span>{{ operation.operation_date }} · {{ operation.operation_kind }}</span><el-button text size="small" type="danger" @click="removeOperation(operation)">删除</el-button></div></div>
         <p v-else class="detail-empty">还没有操作日期。</p>
       </section>
 
@@ -60,7 +60,7 @@
         <div class="note-form-actions"><el-button @click="editing = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveNote">保存</el-button></div>
       </el-form>
 
-      <el-dialog v-model="historyVisible" title="修改历史" width="460px" append-to-body>
+      <el-dialog v-model="historyVisible" :title="domain?.domain ? `修改历史 · ${domain.domain}` : '修改历史'" width="460px" append-to-body>
         <div v-if="history.length" class="history-list">
           <article v-for="version in history" :key="version.id" class="history-item"><div><strong>版本 {{ version.version_no }}</strong><span>{{ datePart(version.created_at) }}</span></div><p>{{ version.content }}</p></article>
         </div>
@@ -118,7 +118,7 @@ const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shang
 const loadOperations = async () => { if (!props.domain?.id) return; [operations.value, resources.value] = await Promise.all([api.get<Operation[]>(`/api/domains/${props.domain.id}/operations`), api.get<ResourceLink[]>(`/api/resources/links?domain_id=${props.domain.id}`)]) }
 const saveOperation = async () => { if (!props.domain?.id || !operationForm.value.operation_date) { ElMessage.warning('请选择操作日期'); return }; try { queue.enqueue({ type: 'domain_operation_add', domain_id: props.domain.id, operation_date: operationForm.value.operation_date, operation_kind: operationForm.value.operation_kind }); await queue.flush(); await loadOperations(); emit('changed'); ElMessage.success('操作日期已记录') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '操作日期已加入待同步队列') } }
 const recordToday = (kind: Operation['operation_kind']) => { operationForm.value = { operation_date: localDate(), operation_kind: kind }; void saveOperation() }
-const removeOperation = async (id: number) => { try { await confirmAction('删除后无法恢复，是否继续？', '删除操作记录', { confirmButtonText: '删除' }); await api.delete(`/api/domains/${props.domain?.id}/operations/${id}`); await loadOperations(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }
+const removeOperation = async (operation: Operation) => { try { await confirmAction(`删除“${props.domain?.domain || '当前网站'}”的 ${operation.operation_date} · ${operation.operation_kind} 操作记录？`, `删除操作记录 · ${props.domain?.domain || '当前网站'}`, { confirmButtonText: '删除' }); await api.delete(`/api/domains/${props.domain?.id}/operations/${operation.id}`); await loadOperations(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }
 const startCreate = () => { noteForm.value = { kind: 'AI提示词', content: '' }; editing.value = true }
 const startEdit = (note: Note) => { noteForm.value = { id: note.id, kind: note.kind, content: note.content }; editing.value = true }
 const saveNote = async () => {
@@ -132,7 +132,7 @@ const saveNote = async () => {
 }
 const archiveNote = async (note: Note) => {
   if (!props.domain?.id || !note.id) return
-  try { await confirmAction('归档后首页不再计入当前提示数量，但修改历史仍会保留。', '归档记录', { confirmButtonText: '归档' }); await api.post(`/api/domains/${props.domain.id}/ai-notes/${note.id}`); await loadNotes(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '归档失败') }
+  try { await confirmAction(`归档“${props.domain.domain}”的这条${note.kind}记录？归档后首页不再计入当前提示数量，但修改历史仍会保留。`, `归档记录 · ${props.domain.domain}`, { confirmButtonText: '归档' }); await api.post(`/api/domains/${props.domain.id}/ai-notes/${note.id}`); await loadNotes(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '归档失败') }
 }
 const showHistory = async (note: Note) => { if (!props.domain?.id || !note.id) return; try { history.value = await api.get<Version[]>(`/api/domains/${props.domain.id}/ai-notes/${note.id}/history`); historyVisible.value = true } catch (error) { ElMessage.error(error instanceof Error ? error.message : '历史读取失败') } }
 const copyNote = async (content: string) => { try { await navigator.clipboard.writeText(content); ElMessage.success('已复制') } catch { ElMessage.error('复制失败，请手动选择文本') } }

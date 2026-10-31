@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="dialogVisible" title="补充 AdSense 信息" width="420px" :close-on-click-modal="false">
+  <el-dialog v-model="dialogVisible" :title="domain ? `补充 AdSense 信息 · ${domain}` : '补充 AdSense 信息'" width="420px" :close-on-click-modal="false">
     <el-form ref="formRef" :model="form" :rules="rules" label-width="92px" @submit.prevent="submit">
       <el-form-item label="AdSense账号" prop="adsense_account_id">
         <el-select v-model="form.adsense_account_id" placeholder="选择关联账号" clearable>
@@ -26,7 +26,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 interface AccountOption { id?: number; name: string; owner: string }
 interface AdsenseQuickValue { adsense_account_id: number; adsense_opened_date: string }
 
-const props = defineProps<{ visible: boolean; accounts: AccountOption[]; accountId?: number | null; openedDate?: string | null; registrarDate?: string | null }>()
+const props = defineProps<{ visible: boolean; domain?: string | null; accounts: AccountOption[]; accountId?: number | null; openedDate?: string | null; registrarDate?: string | null }>()
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'save', value: AdsenseQuickValue): void }>()
 const dialogVisible = ref(props.visible)
 const formRef = ref<FormInstance>()

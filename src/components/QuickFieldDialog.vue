@@ -1,5 +1,5 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="title" width="420px" :close-on-click-modal="false">
+  <el-dialog v-model="dialogVisible" :title="context ? `${title} · ${context}` : title" width="420px" :close-on-click-modal="false">
     <el-form @submit.prevent="submit">
       <el-form-item :label="label">
         <el-input v-model="draft" :placeholder="placeholder" :maxlength="maxlength" show-word-limit clearable autofocus />
@@ -20,11 +20,12 @@ import { ref, watch } from 'vue'
 const props = withDefaults(defineProps<{
   visible: boolean
   title: string
+  context?: string | null
   label: string
   value?: string | null
   placeholder?: string
   maxlength?: number
-}>(), { value: '', placeholder: '', maxlength: 200 })
+}>(), { value: '', context: '', placeholder: '', maxlength: 200 })
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'save', value: string | null): void }>()
 const dialogVisible = ref(props.visible)
 const draft = ref(props.value || '')

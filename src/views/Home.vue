@@ -79,8 +79,8 @@
         <AdsenseManagerDialog v-model:visible="adsenseManagerVisible" :accounts="adsenseAccounts" @changed="reloadAll" />
         <ResourceManagerDialog v-model:visible="resourceManagerVisible" @changed="reloadAll" />
         <DomainDetailDrawer v-model:visible="detailVisible" :domain="detailDomain" @changed="loadDomains" />
-        <QuickFieldDialog v-model:visible="quickFieldVisible" :title="quickFieldTitle" :label="quickFieldLabel" :value="quickFieldValue" :placeholder="quickFieldPlaceholder" :maxlength="quickFieldMode === 'platform_other' ? 100 : 200" @save="saveQuickField" />
-        <AdsenseQuickDialog v-model:visible="adsenseQuickVisible" :accounts="adsenseAccounts" :account-id="adsenseQuickDomain?.adsense_account_id" :opened-date="adsenseQuickDomain?.adsense_opened_date" :registrar-date="adsenseQuickDomain?.registrar_date" @save="saveAdsenseQuick" />
+        <QuickFieldDialog v-model:visible="quickFieldVisible" :title="quickFieldTitle" :context="quickFieldDomain?.domain" :label="quickFieldLabel" :value="quickFieldValue" :placeholder="quickFieldPlaceholder" :maxlength="quickFieldMode === 'platform_other' ? 100 : 200" @save="saveQuickField" />
+        <AdsenseQuickDialog v-model:visible="adsenseQuickVisible" :domain="adsenseQuickDomain?.domain" :accounts="adsenseAccounts" :account-id="adsenseQuickDomain?.adsense_account_id" :opened-date="adsenseQuickDomain?.adsense_opened_date" :registrar-date="adsenseQuickDomain?.registrar_date" @save="saveAdsenseQuick" />
     </div>
 </template>
 
@@ -272,7 +272,7 @@ const reloadAll = async () => { await Promise.all([loadDomains(), loadAdsenseAcc
 
 const handleDelete = async (row: DomainData) => {
     try {
-        await confirmAction('删除后将移除该域名及其关联记录，是否继续？', '删除域名', { confirmButtonText: '删除' });
+        await confirmAction(`删除后将移除“${row.domain}”及其关联记录，是否继续？`, `删除域名 · ${row.domain}`, { confirmButtonText: '删除' });
         if (row.id) {
             await deleteDomain(row.id);
             await reloadAll();
