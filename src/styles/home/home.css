@@ -10,13 +10,13 @@
 /* Hallmark · answered F25 · the domain column stays pinned, every original field remains horizontally scrollable, and the phone view explains the scrolling. */
 /* Hallmark · finish-review: in-thread · 3 findings · 3 resolved · gap: none; preserve the domain ledger and the single primary action. */
 
-html.dm-home-route .home-container { min-height: 100dvh; background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5; }
+html.dm-home-route .home-container { min-height: 100svh; background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5; }
 html.dm-home-route .home-container * { box-sizing: border-box; }
 html.dm-home-route .home-container h1, html.dm-home-route .home-container h2 { margin: 0; color: var(--color-ink); font-family: var(--font-display); font-weight: 600; min-width: 0; overflow-wrap: break-word; text-wrap: balance; }
 html.dm-home-route .home-container p { margin: 0; }
 html.dm-home-route .logout-button { --el-button-bg-color: var(--color-clear); --el-button-border-color: var(--color-clear); --el-button-hover-border-color: var(--color-clear); }
 html.dm-home-route .logout-button, html.dm-home-route .ledger-actions .el-button { --el-button-hover-bg-color: var(--color-paper-3); --el-button-hover-text-color: var(--color-ink); }
-html.dm-home-route .workspace { width:100%; max-width:none; padding-block: var(--space-xl); }
+html.dm-home-route .workspace { width:100%; max-width:none; min-height:100svh; padding-block: var(--space-xl); }
 html.dm-home-route .summary-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-sm); margin-bottom:var(--space-lg); }
 html.dm-home-route .summary-card { display:flex; flex-direction:column; gap:var(--space-2xs); padding:var(--space-md); border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper-2); }
 html.dm-home-route .summary-card span { color:var(--color-muted); font-size:var(--text-sm); }
@@ -91,7 +91,8 @@ html.dm-home-route .table-scroll-hint { display: none; padding: var(--space-sm) 
   html.dm-home-route .ledger-actions .el-button { width: 100%; }
 }
 @media (prefers-reduced-motion: reduce) { html.dm-home-route .table-action:active { transform: none; } }
-html.dm-home-route .domain-filters { display:flex; flex-wrap:wrap; gap:var(--space-xs); padding:var(--space-sm) var(--space-md); border-bottom:1px solid var(--color-rule); background:var(--color-paper); }
-html.dm-home-route .domain-filters .el-input { width:240px; }
-html.dm-home-route .domain-filters .el-select { width:150px; }
-@media (max-width:760px) { html.dm-home-route .domain-filters .el-input, html.dm-home-route .domain-filters .el-select { flex:1 1 180px; width:auto; } }
+html.dm-home-route .domain-filters { display:flex; flex-wrap:nowrap; gap:var(--space-xs); padding:var(--space-sm) var(--space-md); border-bottom:1px solid var(--color-rule); background:var(--color-paper); overflow-x:auto; }
+html.dm-home-route .domain-filters .el-input { flex:1 1 240px; min-width:200px; width:auto; }
+html.dm-home-route .domain-filters .el-select { flex:1 1 0; min-width:116px; width:auto; }
+html.dm-home-route .domain-filters > .el-button { flex:0 0 auto; }
+@media (max-width:1100px) { html.dm-home-route .domain-filters { flex-wrap:wrap; overflow-x:visible; } html.dm-home-route .domain-filters .el-input, html.dm-home-route .domain-filters .el-select { flex:1 1 180px; width:auto; } }

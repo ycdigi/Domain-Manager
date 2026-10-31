@@ -13,17 +13,17 @@
                     <div class="ledger-toolbar">
                         <div class="ledger-title"><h2 id="domain-list-title">域名列表</h2><span class="record-count" role="status">{{ loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名` }}</span></div>
                         <div class="ledger-actions" aria-label="域名管理操作">
-                            <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新状态</el-button>
+                            <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
                             <el-button type="primary" :icon="Plus" @click="handleAdd">新增域名</el-button>
                             <el-button :icon="Upload" @click="handleImport">导入</el-button>
                             <el-button :icon="Download" @click="handleExport">导出</el-button>
+                            <el-button @click="resourceManagerVisible = true">资源管理</el-button>
+                            <el-button @click="adsenseManagerVisible = true">AdSense 管理</el-button>
                             <el-button :icon="Setting" @click="handleConfig">通知配置</el-button>
                             <el-dropdown>
                                 <el-button class="more-button">更多</el-button>
                                 <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
                             </el-dropdown>
-                            <el-button @click="resourceManagerVisible = true">资源管理</el-button>
-                            <el-button @click="adsenseManagerVisible = true">AdSense 管理</el-button>
                         </div>
                     </div>
                     <div class="domain-filters">
