@@ -58,7 +58,7 @@
       </el-tab-pane>
     </el-tabs>
 
-    <el-dialog v-model="accountFormVisible" :title="editingAccount ? '编辑基础设施账号' : '新增基础设施账号'" width="460px" append-to-body>
+    <el-dialog v-model="accountFormVisible" :title="editingAccount ? '编辑基础设施账号' : '新增基础设施账号'" width="460px" append-to-body :close-on-click-modal="false">
       <el-form :model="accountForm" label-width="90px">
         <el-form-item label="服务商"><el-select v-model="accountForm.provider" class="field-full"><el-option v-for="item in providers" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
         <el-form-item label="账号名称"><el-input v-model="accountForm.name" /></el-form-item>
@@ -68,7 +68,7 @@
       <template #footer><el-button @click="accountFormVisible = false">取消</el-button><el-button type="primary" @click="saveAccount">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="resourceFormVisible" :title="editingResourceId ? '编辑资源' : '新增资源'" width="520px" append-to-body>
+    <el-dialog v-model="resourceFormVisible" :title="editingResourceId ? '编辑资源' : '新增资源'" width="520px" append-to-body :close-on-click-modal="false">
       <el-form :model="resourceForm" label-width="90px">
         <el-form-item v-if="activeTab !== 'vps'" label="账号"><el-select v-model="resourceForm.account_id" class="field-full"><el-option v-for="item in accountsForProvider" :key="item.id" :label="item.name" :value="item.id || 0" /></el-select></el-form-item>
         <el-form-item v-else label="服务商账号"><el-select v-model="resourceForm.account_id" clearable class="field-full"><el-option label="不关联账号" :value="0" /><el-option v-for="item in accountsForProvider" :key="item.id" :label="item.name" :value="item.id || 0" /></el-select></el-form-item>
@@ -83,7 +83,7 @@
       <template #footer><el-button @click="resourceFormVisible = false">取消</el-button><el-button type="primary" @click="saveResource">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="credentialVisible" title="GitHub Token" width="520px" append-to-body>
+    <el-dialog v-model="credentialVisible" title="GitHub Token" width="520px" append-to-body :close-on-click-modal="false">
       <el-form :model="credentialForm" label-width="90px">
         <el-form-item label="账号"><span>{{ selectedAccount?.name }}</span></el-form-item>
         <el-form-item label="名称"><el-input v-model="credentialForm.label" /></el-form-item>
@@ -101,7 +101,7 @@
       <template #footer><el-button @click="credentialVisible = false">取消</el-button><el-button type="primary" @click="saveCredential">保存 Token</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="linkVisible" title="关联网站" width="460px" append-to-body>
+    <el-dialog v-model="linkVisible" title="关联网站" width="460px" append-to-body :close-on-click-modal="false">
       <el-form :model="linkForm" label-width="90px">
         <el-form-item label="资源"><span>{{ linkResource?.name }}</span></el-form-item>
         <el-form-item label="网站"><el-select v-model="linkForm.domain_id" filterable class="field-full"><el-option v-for="domain in domains" :key="domain.id" :label="domain.domain" :value="domain.id || 0" /></el-select></el-form-item>
@@ -119,6 +119,7 @@
 import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../utils/request'
+import { confirmAction, isDismissed } from '../utils/feedback'
 import type { ProviderAccount, ProviderCredential, ProviderResource, ProviderType } from '../../functions/types'
 
 const props = defineProps<{ visible: boolean }>()
@@ -157,7 +158,7 @@ const selectAccount = (account: ProviderAccount) => { selectedAccount.value = ac
 const openResourceForm = () => { editingResourceId.value = undefined; resourceForm.value = { provider: activeTab.value, account_id: activeTab.value === 'vps' ? 0 : selectedAccount.value?.id, name: '', resource_url: '', identifier: '', ip_address: '', port: undefined, region: '', memo: '' }; resourceFormVisible.value = true }
 const editResource = (resource: ProviderResource) => { editingResourceId.value = resource.id; activeTab.value = resource.provider; if (resource.account_id) selectedAccount.value = accounts.value.find(account => account.id === resource.account_id); resourceForm.value = { ...resource, account_id: resource.account_id ?? 0, port: resource.port ?? undefined }; resourceFormVisible.value = true }
 const saveResource = async () => { try { const payload = { ...resourceForm.value, account_id: resourceForm.value.account_id || null }; const url = editingResourceId.value ? `/api/resources/resources/${editingResourceId.value}` : '/api/resources'; await (editingResourceId.value ? api.put(url, payload) : api.post(url, payload)); resourceFormVisible.value = false; await load(); emit('changed'); ElMessage.success('资源已保存') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败') } }
-const disableAccount = async (account: ProviderAccount) => { try { await ElMessageBox.confirm(`停用“${account.name}”？关联记录会保留。`, '确认'); await api.post(`/api/resources/accounts/${account.id}`); await load(); emit('changed') } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '停用失败') } }
+const disableAccount = async (account: ProviderAccount) => { try { await confirmAction(`停用“${account.name}”？关联记录会保留。`, '停用账号', { confirmButtonText: '停用' }); await api.post(`/api/resources/accounts/${account.id}`); await load(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '停用失败') } }
 const disableResource = async (resource: ProviderResource) => { try { await api.post(`/api/resources/resources/${resource.id}`); await load(); emit('changed') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '停用失败') } }
 const openLinkForm = (resource: ProviderResource) => { linkResource.value = resource; linkForm.value = { domain_id: undefined, role: resource.provider === 'github' ? '代码仓库' : resource.provider === 'cloudflare' ? '部署平台' : resource.provider === 'vhost' ? '虚拟主机' : 'VPS', is_primary: false }; linkVisible.value = true }
 const saveLink = async () => { try { if (!linkForm.value.domain_id || !linkResource.value?.id) throw new Error('请选择网站'); await api.post('/api/resources/links', { domain_id: linkForm.value.domain_id, resource_id: linkResource.value.id, role: linkForm.value.role, is_primary: linkForm.value.is_primary }); linkVisible.value = false; await load(); emit('changed'); ElMessage.success('资源已关联') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '关联失败') } }
@@ -167,7 +168,7 @@ const unlink = async (id?: number) => { if (!id) return; try { await api.delete(
 const openCredential = async (account: ProviderAccount) => { selectedAccount.value = account; editingCredentialId.value = undefined; credentialForm.value = { label: '', token: '', expires_at: '' }; credentials.value = await api.get(`/api/resources/credentials?account_id=${account.id}`); credentialVisible.value = true }
 const editCredential = (item: ProviderCredential) => { editingCredentialId.value = item.id; credentialForm.value = { label: item.label, token: '', expires_at: item.expires_at || '' } }
 const saveCredential = async () => { try { const id = editingCredentialId.value; const url = id ? `/api/resources/credentials/${id}` : '/api/resources/credentials'; await (id ? api.put(url, { account_id: selectedAccount.value?.id, ...credentialForm.value }) : api.post(url, { account_id: selectedAccount.value?.id, ...credentialForm.value })); credentials.value = await api.get(`/api/resources/credentials?account_id=${selectedAccount.value?.id}`); credentialForm.value = { label: '', token: '', expires_at: '' }; editingCredentialId.value = undefined; ElMessage.success('Token 已保存') } catch (error) { ElMessage.error(error instanceof Error ? error.message : 'Token 保存失败') } }
-const deleteCredential = async (item: ProviderCredential) => { try { await ElMessageBox.confirm(`删除凭据“${item.label}”？`, '确认'); await api.delete(`/api/resources/credentials/${item.id}`); credentials.value = await api.get(`/api/resources/credentials?account_id=${selectedAccount.value?.id}`) } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '凭据删除失败') } }
+const deleteCredential = async (item: ProviderCredential) => { try { await confirmAction(`删除凭据“${item.label}”？`, '删除凭据', { confirmButtonText: '删除' }); await api.delete(`/api/resources/credentials/${item.id}`); credentials.value = await api.get(`/api/resources/credentials?account_id=${selectedAccount.value?.id}`) } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '凭据删除失败') } }
 const revealCredential = async (id?: number) => { if (!id) return; try { const result = await api.post<{ token: string }>(`/api/resources/credentials/${id}`); await ElMessageBox.alert(result.token, '完整 Token', { confirmButtonText: '复制并关闭', callback: () => { void navigator.clipboard?.writeText(result.token) } }) } catch (error) { ElMessage.error(error instanceof Error ? error.message : 'Token 读取失败') } }
 watch(() => props.visible, value => { dialogVisible.value = value; if (value) void load() })
 watch(dialogVisible, value => emit('update:visible', value))

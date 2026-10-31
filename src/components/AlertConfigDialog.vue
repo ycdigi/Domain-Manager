@@ -1,5 +1,5 @@
 <template>
-    <el-dialog v-model="dialogVisible" title="参数配置" width="500px">
+    <el-dialog v-model="dialogVisible" title="参数配置" width="500px" :close-on-click-modal="false">
         <el-form ref="formRef" :model="form" :rules="rules" label-width="120px">
             <el-form-item label="TG-token" prop="tg_token">
                 <el-input v-model="form.tg_token" placeholder="请输入 Telegram Bot Token" id="tg-token-input" />

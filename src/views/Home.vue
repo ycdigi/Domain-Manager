@@ -63,6 +63,7 @@
                     <p class="table-scroll-hint">左右滑动查看全部字段和操作。</p>
                 </section>
 
+                <button v-if="!sidebarCollapsed" type="button" class="sidebar-backdrop" aria-label="关闭概览" @click="toggleSidebar"></button>
                 <aside class="dashboard-sidebar" aria-label="管理概览">
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>AdSense 收入</h2><button class="sidebar-link" @click="adsenseManagerVisible = true">管理</button></div><div v-if="dashboard.owner_income.length" class="sidebar-list"><div v-for="item in dashboard.owner_income" :key="`${item.owner}-${item.currency}`" class="sidebar-row"><span>{{ item.owner }}<small>{{ item.account_count }} 个账号 · {{ item.currency }} · 本月</small></span><strong>{{ item.currency }} {{ Number(item.current_income || 0).toFixed(2) }}</strong></div></div><p v-else class="sidebar-empty">暂无月收入</p></section>
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>最久未 SEO</h2></div><div v-if="dashboard.seo.length" class="sidebar-list"><div v-for="item in dashboard.seo" :key="item.id" class="sidebar-row"><span>{{ item.domain }}<small>{{ item.seo_last_date || '从未优化' }} · {{ item.days_since ?? '—' }} 天</small></span><button v-if="seoState(item).actionable" class="sidebar-link" @click="markSeoById(item.id)">今天优化</button><span v-else class="sidebar-seo-locked" :title="seoState(item).title"><el-icon><Lock /></el-icon></span></div></div><p v-else class="sidebar-empty">暂无网站</p></section>
@@ -86,7 +87,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage, ElMessageBox } from 'element-plus';
+import { ElMessage } from 'element-plus';
 import { Setting, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, Document, Edit, Delete } from '@element-plus/icons-vue';
 import '../styles/home/home.css';
 import { useAuth } from '../utils/auth';
@@ -101,6 +102,7 @@ import AdsenseQuickDialog from '../components/AdsenseQuickDialog.vue';
 import { createDomain, updateDomain, deleteDomain, type DomainData } from '../api/domains';
 import { getWriteQueue } from '../utils/writeQueue';
 import { api, ApiError } from '../utils/request';
+import { confirmAction, isDismissed } from '../utils/feedback';
 
 interface AlertConfig { tg_token: string; tg_userid: string; days: number; }
 
@@ -125,7 +127,8 @@ const platformFilter = ref('');
 const industryFilter = ref('');
 const activeSummaryPreset = ref('');
 const domainLedgerRef = ref<HTMLElement>();
-const sidebarCollapsed = ref(localStorage.getItem('domain-manager.sidebar-collapsed') === '1');
+const storedSidebarState = localStorage.getItem('domain-manager.sidebar-collapsed');
+const sidebarCollapsed = ref(storedSidebarState === null ? window.innerWidth <= 760 : storedSidebarState === '1');
 const loading = ref(false);
 const loadError = ref('');
 const alertDays = ref(30);
@@ -269,12 +272,12 @@ const reloadAll = async () => { await Promise.all([loadDomains(), loadAdsenseAcc
 
 const handleDelete = async (row: DomainData) => {
     try {
-        await ElMessageBox.confirm('确定要删除该域名吗？', '提示', { type: 'warning' });
+        await confirmAction('删除后将移除该域名及其关联记录，是否继续？', '删除域名', { confirmButtonText: '删除' });
         if (row.id) {
             await deleteDomain(row.id);
             await reloadAll();
         }
-    } catch (error) { if (error !== 'cancel') ElMessage.error('删除失败'); }
+    } catch (error) { if (!isDismissed(error)) ElMessage.error('删除失败'); }
 };
 
 const handleDialogSubmit = async (formData: Omit<DomainData, 'id' | 'created_at'>) => {

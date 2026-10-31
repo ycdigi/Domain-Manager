@@ -24,7 +24,12 @@ html.dm-ui .el-dialog .el-input,
 html.dm-ui .el-dialog .el-select,
 html.dm-ui .el-dialog .el-date-editor { max-width: 100%; }
 html.dm-ui .el-dialog .el-date-editor { width: 100%; }
-html.dm-ui .el-message-box { max-width: calc(100% - 32px); }
+html.dm-ui .el-message-box { width: min(460px, calc(100vw - 32px)); max-width: calc(100% - 32px); padding: var(--space-md); border-radius: var(--radius-panel); }
+html.dm-ui .el-message-box__header { padding-bottom: var(--space-sm); }
+html.dm-ui .el-message-box__content { gap: var(--space-sm); padding-block: var(--space-sm); }
+html.dm-ui .el-message-box__message { min-width:0; overflow-wrap:anywhere; white-space:pre-wrap; }
+html.dm-ui .el-message-box__btns { display:flex; gap:var(--space-xs); padding-top:var(--space-sm); }
+html.dm-ui .el-message-box__btns .el-button { min-width:72px; }
 html.dm-ui .el-dialog__headerbtn:focus-visible { outline-offset: -4px; }
 @media (max-width: 600px) {
   html.dm-ui .el-button { min-height: 44px; }
@@ -33,6 +38,7 @@ html.dm-ui .el-dialog__headerbtn:focus-visible { outline-offset: -4px; }
   html.dm-ui .el-dialog .el-form-item__label { display: block; width: auto !important; height: auto; text-align: left; padding: 0 0 var(--space-xs); line-height: 1.5; }
   html.dm-ui .el-dialog .el-form-item__content { margin-left: 0 !important; }
   html.dm-ui .el-dialog__headerbtn { min-width: 44px; min-height: 44px; }
+  html.dm-ui .el-message-box { width: calc(100vw - 24px); max-width: calc(100vw - 24px); padding: var(--space-md); }
 }
 @media (prefers-reduced-motion: reduce) {
   html.dm-ui *, html.dm-ui *::before, html.dm-ui *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }

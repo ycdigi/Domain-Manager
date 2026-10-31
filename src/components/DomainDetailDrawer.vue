@@ -1,5 +1,5 @@
 <template>
-  <el-drawer v-model="drawerVisible" :title="domain?.domain ? `${domain.domain} · 运营详情` : '运营详情'" size="520px" destroy-on-close>
+  <el-drawer v-model="drawerVisible" :title="domain?.domain ? `${domain.domain} · 运营详情` : '运营详情'" size="520px" :close-on-click-modal="!editing" destroy-on-close>
     <template v-if="domain">
       <section class="detail-section">
         <div class="detail-grid">
@@ -72,9 +72,10 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
 import { api } from '../utils/request'
 import { getWriteQueue } from '../utils/writeQueue'
+import { confirmAction, isDismissed } from '../utils/feedback'
 import type { DomainData } from '../api/domains'
 
 type NoteKind = 'AI提示词' | '想法说明'
@@ -117,7 +118,7 @@ const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shang
 const loadOperations = async () => { if (!props.domain?.id) return; [operations.value, resources.value] = await Promise.all([api.get<Operation[]>(`/api/domains/${props.domain.id}/operations`), api.get<ResourceLink[]>(`/api/resources/links?domain_id=${props.domain.id}`)]) }
 const saveOperation = async () => { if (!props.domain?.id || !operationForm.value.operation_date) { ElMessage.warning('请选择操作日期'); return }; try { queue.enqueue({ type: 'domain_operation_add', domain_id: props.domain.id, operation_date: operationForm.value.operation_date, operation_kind: operationForm.value.operation_kind }); await queue.flush(); await loadOperations(); emit('changed'); ElMessage.success('操作日期已记录') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '操作日期已加入待同步队列') } }
 const recordToday = (kind: Operation['operation_kind']) => { operationForm.value = { operation_date: localDate(), operation_kind: kind }; void saveOperation() }
-const removeOperation = async (id: number) => { try { await ElMessageBox.confirm('删除这条操作日期记录？', '确认'); await api.delete(`/api/domains/${props.domain?.id}/operations/${id}`); await loadOperations(); emit('changed') } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }
+const removeOperation = async (id: number) => { try { await confirmAction('删除后无法恢复，是否继续？', '删除操作记录', { confirmButtonText: '删除' }); await api.delete(`/api/domains/${props.domain?.id}/operations/${id}`); await loadOperations(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }
 const startCreate = () => { noteForm.value = { kind: 'AI提示词', content: '' }; editing.value = true }
 const startEdit = (note: Note) => { noteForm.value = { id: note.id, kind: note.kind, content: note.content }; editing.value = true }
 const saveNote = async () => {
@@ -131,7 +132,7 @@ const saveNote = async () => {
 }
 const archiveNote = async (note: Note) => {
   if (!props.domain?.id || !note.id) return
-  try { await ElMessageBox.confirm('归档后首页不再计入当前提示数量，但修改历史仍会保留。', '归档记录', { type: 'warning' }); await api.post(`/api/domains/${props.domain.id}/ai-notes/${note.id}`); await loadNotes(); emit('changed') } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '归档失败') }
+  try { await confirmAction('归档后首页不再计入当前提示数量，但修改历史仍会保留。', '归档记录', { confirmButtonText: '归档' }); await api.post(`/api/domains/${props.domain.id}/ai-notes/${note.id}`); await loadNotes(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '归档失败') }
 }
 const showHistory = async (note: Note) => { if (!props.domain?.id || !note.id) return; try { history.value = await api.get<Version[]>(`/api/domains/${props.domain.id}/ai-notes/${note.id}/history`); historyVisible.value = true } catch (error) { ElMessage.error(error instanceof Error ? error.message : '历史读取失败') } }
 const copyNote = async (content: string) => { try { await navigator.clipboard.writeText(content); ElMessage.success('已复制') } catch { ElMessage.error('复制失败，请手动选择文本') } }

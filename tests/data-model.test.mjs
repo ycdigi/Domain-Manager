@@ -170,6 +170,23 @@ test('dashboard operating metrics use explicit date and click boundaries', () =>
   }
 })
 
+test('confirmation feedback is centralized and localized', () => {
+  const feedback = fs.readFileSync(path.join(repo, 'src/utils/feedback.ts'), 'utf8')
+  assert.match(feedback, /confirmButtonText: '确定'/)
+  assert.match(feedback, /cancelButtonText: '取消'/)
+  const sourceFiles = []
+  const walk = dir => {
+    for (const entry of fs.readdirSync(path.join(repo, dir), { withFileTypes: true })) {
+      const relative = path.join(dir, entry.name)
+      if (entry.isDirectory()) walk(relative)
+      else if (/\.(vue|ts)$/.test(entry.name)) sourceFiles.push(relative)
+    }
+  }
+  walk('src')
+  const source = sourceFiles.map(file => fs.readFileSync(path.join(repo, file), 'utf8')).join('\n')
+  assert.doesNotMatch(source.replace(feedback, ''), /ElMessageBox\.confirm/)
+})
+
 test('dashboard income remains one account-month total when it has multiple sites', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/dashboard.db'
   try {

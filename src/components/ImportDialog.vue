@@ -62,7 +62,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ElMessage } from 'element-plus'
+import { confirmAction } from '../utils/feedback'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile, UploadProps } from 'element-plus'
 import { api } from '../utils/request'
@@ -152,7 +153,7 @@ const handleImport = async () => {
             ElMessage.warning('预览发现错误，尚未写入数据')
             return
         }
-        await ElMessageBox.confirm(`将新增 ${preview.created || 0} 个域名、更新 ${preview.updated || 0} 个域名。确认导入？`, '导入预览', { type: 'warning', confirmButtonText: '确认导入' })
+        await confirmAction(`将新增 ${preview.created || 0} 个域名、更新 ${preview.updated || 0} 个域名。确认导入？`, '导入预览', { confirmButtonText: '确认导入' })
         const result = await sendImport(false)
         if (result.success > 0) {
             emit('success')
