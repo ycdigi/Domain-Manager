@@ -47,11 +47,13 @@
                     </div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
                     <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" @sort-change="handleTableSortChange">
-                        <el-table-column prop="site_name" label="网站名称" min-width="126" fixed sortable><template #default="scope"><button type="button" class="table-inline-text" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></template></el-table-column>
+                        <el-table-column prop="site_name" label="网站名称" min-width="142" fixed sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
                         <el-table-column prop="domain" label="域名" min-width="162" fixed sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
                         <el-table-column label="SEO" width="54"><template #default="scope"><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div></template></el-table-column>
                         <el-table-column prop="industry" label="行业" min-width="96" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable filterable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
                         <el-table-column prop="daily_clicks" label="日点击" min-width="96" sortable :sort-method="compareDailyClicks"><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
+                        <el-table-column label="计算器数" min-width="92"><template #default="scope"><el-input-number v-if="scope.row.platform === 'WordPress'" class="inline-count-input" size="small" :model-value="scope.row.wp_calculator_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" :placeholder="'未填'" :aria-label="`${scope.row.domain} 计算器数量`" @change="value => handleWordPressCount(scope.row, 'wp_calculator_count', value)" /><span v-else class="not-applicable">不适用</span></template></el-table-column>
+                        <el-table-column label="文章数" min-width="86"><template #default="scope"><el-input-number v-if="scope.row.platform === 'WordPress'" class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /><span v-else class="not-applicable">不适用</span></template></el-table-column>
                         <el-table-column prop="platform" label="技术栈" min-width="98" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.platform" @change="value => handleInlineSelect(scope.row, 'platform', value)"><el-option v-for="platform in platformOptions" :key="platform" :label="platformText({ ...scope.row, platform })" :value="platform" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
                         <el-table-column prop="latest_operation_date" label="最近操作" min-width="88" sortable><template #default="scope">{{ scope.row.latest_operation_date || '未记录' }}</template></el-table-column>
@@ -89,7 +91,7 @@
 import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type TableInstance } from 'element-plus';
-import { Setting, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
+import { Setting, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
 import '../styles/home/home.css';
 import { useAuth } from '../utils/auth';
 import DomainDialog from '../components/DomainDialog.vue';
@@ -248,6 +250,8 @@ const seoState = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: stri
     if (days <= 30) return { kind: 'stale', actionable: true, label: `${days} 天前`, title: `最近 ${days} 天前优化，可以再次安排` };
     return { kind: 'overdue', actionable: true, label: `${days} 天前`, title: `已经 ${days} 天未优化，建议优先处理` };
 };
+const seoNeedsAttention = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: string | null }) => ['never', 'overdue'].includes(seoState(row).kind);
+const hasRecentOperation = (row: Pick<DomainData, 'latest_operation_date'>) => Boolean(row.latest_operation_date && row.latest_operation_date <= localDate() && daysSince(row.latest_operation_date) <= 7);
 const clickRangeFromNumber = (value: number | null | undefined) => value == null ? null : value < 10 ? 'under10' : value < 30 ? '10to29' : value < 50 ? '30to49' : value < 100 ? '50to99' : 'over100';
 const clickRangeRank = (row: DomainData) => ({ under10: 1, '10to29': 2, '30to49': 3, '50to99': 4, over100: 5 } as Record<string, number>)[row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks) || ''] || 0;
 const compareDailyClicks = (a: DomainData, b: DomainData) => clickRangeRank(a) - clickRangeRank(b);
@@ -260,12 +264,42 @@ const providerLabel = (value: string) => ({ github: 'GitHub', cloudflare: 'Cloud
 const platformText = (row: DomainData) => row.platform === '其他' ? (row.platform_other || '其他') : row.platform;
 const handleInlineSelect = async (row: DomainData, field: 'status' | 'platform' | 'industry', value: string | null) => {
     if (!row.id) return;
-    const oldValue = row[field];
-    if (oldValue === value) return;
-    if (field === 'platform' && value === '其他') { row.platform_other = null; }
-    row[field] = value as never;
-    try { await api.patch(`/api/domains/${row.id}`, { [field]: value || null }); if (field === 'platform' && value !== '其他') row.platform_other = null; if (field === 'platform' && value === '其他') openQuickField(row, 'platform_other'); await applyTableSort(); }
-    catch (error) { row[field] = oldValue as never; ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
+    if (row[field] === value) return;
+    const snapshot = { ...row };
+    const fields: Record<string, unknown> = { [field]: value || null };
+    if (field === 'platform' && value !== '其他') fields.platform_other = null;
+    if (field === 'platform' && value !== 'WordPress') {
+        fields.wp_calculator_count = null;
+        fields.wp_article_count = null;
+        fields.content_stats_updated_date = null;
+    }
+    Object.assign(row, fields);
+    try {
+        await api.patch(`/api/domains/${row.id}`, fields);
+        if (field === 'platform' && value === '其他') openQuickField(row, 'platform_other');
+        await applyTableSort();
+    } catch (error) {
+        Object.assign(row, snapshot);
+        ElMessage.error(error instanceof Error ? error.message : '保存失败');
+    }
+};
+const handleWordPressCount = async (row: DomainData, field: 'wp_calculator_count' | 'wp_article_count', value: number | undefined | null) => {
+    if (!row.id || row.platform !== 'WordPress') return;
+    const nextValue = value == null ? null : value;
+    if (row[field] === nextValue) return;
+    const previousValue = row[field];
+    const previousDate = row.content_stats_updated_date;
+    const nextDate = row.wp_calculator_count == null && row.wp_article_count == null && nextValue == null ? null : localDate();
+    row[field] = nextValue;
+    row.content_stats_updated_date = nextDate;
+    try {
+        await api.patch(`/api/domains/${row.id}`, { [field]: nextValue, content_stats_updated_date: nextDate });
+        ElMessage.success('内容数量已更新');
+    } catch (error) {
+        row[field] = previousValue;
+        row.content_stats_updated_date = previousDate;
+        ElMessage.error(error instanceof Error ? error.message : '内容数量保存失败');
+    }
 };
 const handleAdsenseSelect = (row: DomainData, value: '未知' | '已开通' | '未开通') => {
     if (!row.id || value === row.adsense_connected) return;

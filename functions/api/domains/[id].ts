@@ -1,6 +1,6 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { dailyClicksRangeFromNumber, normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, isValidDate, normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
 
 export const onRequestPut: PagesFunction<Env> = async (context) => {
     try {
@@ -111,7 +111,7 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         const id = context.params.id as string
         const input = await context.request.json() as Record<string, unknown>
         const fields = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === '' ? null : value]))
-        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other', 'adsense_connected', 'adsense_account_id', 'adsense_opened_date']
+        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other', 'adsense_connected', 'adsense_account_id', 'adsense_opened_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date']
         const keys = Object.keys(fields)
         if (!keys.length || keys.some(key => !allowed.includes(key))) return Response.json({ status: 400, message: '局部更新包含不支持的字段', data: null }, { status: 400 })
 
@@ -121,6 +121,15 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         if ('adsense_account_id' in fields && fields.adsense_account_id != null) {
             const account = await context.env.DB.prepare('SELECT id FROM adsense_accounts WHERE id = ?').bind(fields.adsense_account_id).first()
             if (!account) return Response.json({ status: 400, message: 'AdSense 账号不存在', data: null }, { status: 400 })
+        }
+
+        for (const field of ['wp_calculator_count', 'wp_article_count'] as const) {
+            if (field in fields && fields[field] != null && (!Number.isInteger(fields[field]) || Number(fields[field]) < 0)) {
+                return Response.json({ status: 400, message: 'WordPress 内容数量必须是非负整数', data: null }, { status: 400 })
+            }
+        }
+        if ('content_stats_updated_date' in fields && fields.content_stats_updated_date != null && !isValidDate(fields.content_stats_updated_date)) {
+            return Response.json({ status: 400, message: '内容统计日期格式无效', data: null }, { status: 400 })
         }
 
         const merged = { ...current, ...fields }

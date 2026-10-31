@@ -145,6 +145,19 @@ test('domain quick editing exposes a narrow PATCH contract and SEO dual write', 
   assert.match(home, /registrar_date.*注册时间/)
 })
 
+test('WordPress content counts are editable in the ledger and PATCH with their statistics date', () => {
+  const patch = fs.readFileSync(path.join(repo, 'functions/api/domains/[id].ts'), 'utf8')
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  assert.match(home, /label="日点击"[\s\S]*?label="计算器数"[\s\S]*?label="文章数"/)
+  assert.match(home, /handleWordPressCount\(scope\.row, 'wp_calculator_count', value\)/)
+  assert.match(home, /handleWordPressCount\(scope\.row, 'wp_article_count', value\)/)
+  assert.match(home, /content_stats_updated_date: nextDate/)
+  assert.match(home, /field === 'platform' && value !== 'WordPress'[\s\S]*?fields\.wp_calculator_count = null[\s\S]*?fields\.wp_article_count = null[\s\S]*?fields\.content_stats_updated_date = null/)
+  assert.match(patch, /wp_calculator_count.*wp_article_count.*content_stats_updated_date/)
+  assert.match(patch, /Number\.isInteger\(fields\[field\]\)/)
+  assert.match(patch, /isValidDate\(fields\.content_stats_updated_date\)/)
+})
+
 test('domain table sorting is persisted and reapplied after data changes', () => {
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
   assert.match(home, /domain-manager\.table-sort/)
@@ -157,6 +170,24 @@ test('domain table sorting is persisted and reapplied after data changes', () =>
   for (const prop of ['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'latest_operation_date', 'registrar_date', 'expiry_date', 'status']) {
     assert.match(home, new RegExp(`sortableTableProps.*${prop}`))
   }
+})
+
+test('site name displays a warning marker for never-optimized and over-30-day SEO', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const css = fs.readFileSync(path.join(repo, 'src/styles/home/home.css'), 'utf8')
+  assert.match(home, /WarningFilled/)
+  assert.match(home, /seoNeedsAttention\(scope\.row\)/)
+  assert.match(home, /\['never', 'overdue'\]\.includes\(seoState\(row\)\.kind\)/)
+  assert.match(css, /\.site-seo-alert[^}]*color:var\(--color-error\)/)
+})
+
+test('site name star marks an operation in the last seven days', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const css = fs.readFileSync(path.join(repo, 'src/styles/home/home.css'), 'utf8')
+  assert.match(home, /StarFilled/)
+  assert.match(home, /hasRecentOperation\(scope\.row\)/)
+  assert.match(home, /latest_operation_date <= localDate\(\) && daysSince\(row\.latest_operation_date\) <= 7/)
+  assert.match(css, /\.site-recent-star[^}]*color:var\(--color-warning\)/)
 })
 
 test('copy actions share the clipboard fallback and keep domain copy local', () => {
