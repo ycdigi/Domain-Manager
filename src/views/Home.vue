@@ -147,7 +147,8 @@ const resourceAccountOptions = computed(() => resourceAccounts.value.filter(acco
 const aiNotesDomainCount = computed(() => domains.value.filter(domain => (domain.ai_note_count || 0) > 0).length);
 const dataQualityCount = computed(() => Object.values(dashboard.value.quality || {}).reduce((sum, value) => sum + Number(value || 0), 0));
 const platformOptions = ['WordPress', 'Astro', 'Next.js', '其他'];
-const industryOptions = ['电气/工程', '工业/制造', '酒店/旅游', '家居/装修', '软件/工具', '健康/医疗', '教育', '其他'];
+const industryBaseOptions = ['电气/工程', '工业/制造', '酒店/旅游', '家居/装修', '软件/工具', '健康/医疗', '教育', '其他'];
+const industryOptions = computed(() => [...new Set([...industryBaseOptions, ...domains.value.map(domain => domain.industry).filter((value): value is string => Boolean(value))])]);
 const filteredDomains = computed(() => domains.value.filter(row => {
     const account = accountById.value.get(row.adsense_account_id || undefined);
     const haystack = `${row.domain} ${row.site_name || ''} ${row.industry || ''} ${row.registrar} ${row.memo}`.toLowerCase();
