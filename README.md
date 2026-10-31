@@ -159,6 +159,22 @@ npm run db:verify:remote
 
 如果某个迁移提示列或表已存在，先停止，不要重复执行同一迁移；先用 `npm run db:inspect:remote` 和 Cloudflare D1 控制台确认当前结构。迁移完成后重新部署 Pages，使生产函数使用新表。
 
+如果页面出现 `D1_ERROR: no such table: adsense_accounts`，说明生产 D1 仍停留在旧结构，当前前端和接口已经进入 AdSense 数据模型。先备份并检查现有表，再按缺失版本从旧到新执行迁移；不要只执行某一个后续迁移：
+
+```bash
+npm run db:backup:remote
+npm run db:inspect:remote
+npm run db:migrate:v1.1.0
+npm run db:migrate:v1.2.0
+npx wrangler d1 execute domains-db --remote --command "SELECT lower(rtrim(domain, '.')) AS domain_key, COUNT(*) AS count FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;"
+npm run db:migrate:v1.3.0
+npm run db:migrate:v1.4.0
+npm run db:migrate:v1.5.0
+npm run db:verify:remote
+```
+
+如果这是全新且没有任何业务数据的 D1，直接执行 `npm run db:init:remote`，再执行 `npm run db:verify:remote`；已有数据库不要用初始化文件代替版本迁移。
+
 > `DB` 必须是 D1 database binding，不是 Variables and secrets 里的 Text 变量。绑定名称必须精确为 `DB`，修改绑定或表结构后需要重新部署 Pages 项目。
 
 `CREDENTIAL_ENCRYPTION_KEY` 是 GitHub Token 的加密密钥。请另行备份；丢失或更换后，已有密文无法解密，需要重新录入 Token。
