@@ -32,5 +32,5 @@ const draft = ref(props.value || '')
 
 watch(() => props.visible, value => { dialogVisible.value = value; if (value) draft.value = props.value || '' })
 watch(dialogVisible, value => emit('update:visible', value))
-const submit = () => { emit('save', draft.value.trim() || null); dialogVisible.value = false }
+const submit = () => { emit('save', draft.value.trim() || null) }
 </script>

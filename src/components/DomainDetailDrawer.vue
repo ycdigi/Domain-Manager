@@ -1,7 +1,18 @@
 <template>
-  <el-drawer v-model="drawerVisible" :title="domain?.domain ? `${domain.domain} · 运营详情` : '运营详情'" size="520px" :close-on-click-modal="!editing" destroy-on-close>
+  <el-drawer v-model="drawerVisible" size="min(560px, 94vw)" :aria-busy="detailLoading" :close-on-click-modal="!editing" destroy-on-close>
+    <template #header>
+      <div class="detail-drawer-header">
+        <div class="detail-drawer-title"><strong>{{ domain?.domain || '运营详情' }}</strong><span v-if="domain">运营详情</span></div>
+        <div v-if="domain" class="detail-drawer-actions">
+          <el-button text size="small" :icon="CopyDocument" :title="`复制 ${domain.domain}`" :aria-label="`复制 ${domain.domain}`" @click="copyDomain" />
+          <el-button text size="small" :icon="Edit" title="编辑域名信息" aria-label="编辑域名信息" @click="startDomainEdit" />
+        </div>
+      </div>
+    </template>
     <template v-if="domain">
+      <div v-if="detailError" class="detail-load-error" role="alert"><span>{{ detailError }}</span><el-button text size="small" @click="loadDetailData">重试</el-button></div>
       <section class="detail-section">
+        <div class="section-heading"><h3>基本信息</h3><span class="detail-muted">查看与维护</span></div>
         <div class="detail-grid">
           <div><span>状态</span><strong>{{ domain.status }}</strong></div>
           <div><span>网站名称</span><strong>{{ domain.site_name || '未记录' }}</strong></div>
@@ -73,9 +84,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { CopyDocument, Edit } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
 import { getWriteQueue } from '../utils/writeQueue'
 import { confirmAction, isDismissed } from '../utils/feedback'
+import { copyText } from '../utils/clipboard'
 import type { DomainData } from '../api/domains'
 
 type NoteKind = 'AI提示词' | '想法说明'
@@ -84,7 +97,7 @@ interface Version { id: number; note_id: number; kind: NoteKind; content: string
 interface Operation { id: number; domain_id: number; operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他'; created_at?: string }
 interface ResourceLink { id: number; provider: string; resource_name: string; resource_url?: string | null; ip_address?: string | null; port?: number | null; account_name?: string | null; login_email?: string | null; role: string; is_primary: number }
 const props = defineProps<{ visible: boolean; domain?: DomainData }>()
-const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'changed'): void }>()
+const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'changed'): void; (event: 'edit', domain: DomainData): void }>()
 const drawerVisible = computed({ get: () => props.visible, set: value => emit('update:visible', value) })
 const notes = ref<Note[]>([])
 const editing = ref(false)
@@ -94,6 +107,8 @@ const historyVisible = ref(false)
 const history = ref<Version[]>([])
 const operations = ref<Operation[]>([])
 const resources = ref<ResourceLink[]>([])
+const detailError = ref('')
+const detailLoading = ref(false)
 const operationKinds = ['SEO', '内容', '技术', '其他'] as const
 const operationForm = ref<{ operation_date: string; operation_kind: Operation['operation_kind'] }>({ operation_date: '', operation_kind: 'SEO' })
 const queue = getWriteQueue()
@@ -114,9 +129,22 @@ const qualityIssues = computed(() => {
 })
 const datePart = (value?: string | null) => value ? value.slice(0, 16).replace('T', ' ') : '未记录'
 const clickRangeLabel = (range?: string | null, value?: number | null) => ({ under10: '10 次以下', '10to29': '10–29 次', '30to49': '30–49 次', '50to99': '50–99 次', over100: '100 次以上' }[range || ''] || (value == null ? '未填写' : `${value} 次`))
+const copyDomain = async () => { if (!props.domain?.domain) return; try { await copyText(props.domain.domain); ElMessage.success(`已复制域名：${props.domain.domain}`) } catch { ElMessage.error('复制失败，请手动复制') } }
+const startDomainEdit = () => { if (props.domain) emit('edit', props.domain) }
 const loadNotes = async () => { if (!props.domain?.id) return; notes.value = await api.get(`/api/domains/${props.domain.id}/ai-notes`) }
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 const loadOperations = async () => { if (!props.domain?.id) return; [operations.value, resources.value] = await Promise.all([api.get<Operation[]>(`/api/domains/${props.domain.id}/operations`), api.get<ResourceLink[]>(`/api/resources/links?domain_id=${props.domain.id}`)]) }
+const loadDetailData = async () => {
+  if (!props.domain?.id) return
+  detailLoading.value = true
+  detailError.value = ''
+  notes.value = []
+  operations.value = []
+  resources.value = []
+  const results = await Promise.allSettled([loadNotes(), loadOperations()])
+  if (results.some(result => result.status === 'rejected')) detailError.value = '详情数据未能完整加载，基础信息仍可查看。'
+  detailLoading.value = false
+}
 const saveOperation = async () => { if (!props.domain?.id || !operationForm.value.operation_date) { ElMessage.warning('请选择操作日期'); return }; try { queue.enqueue({ type: 'domain_operation_add', domain_id: props.domain.id, operation_date: operationForm.value.operation_date, operation_kind: operationForm.value.operation_kind }); await queue.flush(); await loadOperations(); emit('changed'); ElMessage.success('操作日期已记录') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '操作日期已加入待同步队列') } }
 const recordToday = (kind: Operation['operation_kind']) => { operationForm.value = { operation_date: localDate(), operation_kind: kind }; void saveOperation() }
 const removeOperation = async (operation: Operation) => { try { await confirmAction(`删除“${props.domain?.domain || '当前网站'}”的 ${operation.operation_date} · ${operation.operation_kind} 操作记录？`, `删除操作记录 · ${props.domain?.domain || '当前网站'}`, { confirmButtonText: '删除' }); await api.delete(`/api/domains/${props.domain?.id}/operations/${operation.id}`); await loadOperations(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }
@@ -136,8 +164,8 @@ const archiveNote = async (note: Note) => {
   try { await confirmAction(`归档“${props.domain.domain}”的这条${note.kind}记录？归档后首页不再计入当前提示数量，但修改历史仍会保留。`, `归档记录 · ${props.domain.domain}`, { confirmButtonText: '归档' }); await api.post(`/api/domains/${props.domain.id}/ai-notes/${note.id}`); await loadNotes(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '归档失败') }
 }
 const showHistory = async (note: Note) => { if (!props.domain?.id || !note.id) return; try { history.value = await api.get<Version[]>(`/api/domains/${props.domain.id}/ai-notes/${note.id}/history`); historyVisible.value = true } catch (error) { ElMessage.error(error instanceof Error ? error.message : '历史读取失败') } }
-const copyNote = async (content: string) => { try { await navigator.clipboard.writeText(content); ElMessage.success('已复制') } catch { ElMessage.error('复制失败，请手动选择文本') } }
-watch(() => [props.visible, props.domain?.id], ([visible]) => { if (visible) { editing.value = false; operationFilter.value = '全部'; operationForm.value = { operation_date: localDate(), operation_kind: 'SEO' }; void Promise.all([loadNotes(), loadOperations()]) } })
+const copyNote = async (content: string) => { try { await copyText(content); ElMessage.success('已复制') } catch { ElMessage.error('复制失败，请手动选择文本') } }
+watch(() => [props.visible, props.domain?.id], ([visible]) => { if (visible) { editing.value = false; operationFilter.value = '全部'; operationForm.value = { operation_date: localDate(), operation_kind: 'SEO' }; void loadDetailData() } })
 </script>
 
 <style scoped src="../styles/dialogs/domain-detail.css"></style>

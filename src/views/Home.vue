@@ -29,6 +29,7 @@
                             </el-dropdown>
                         </div>
                     </div>
+                    <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
                     <div class="domain-filters">
                         <el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable />
                         <el-select v-model="ownerFilter" placeholder="归属人" clearable><el-option v-for="owner in ownerOptions" :key="owner" :label="owner" :value="owner" /></el-select>
@@ -45,17 +46,17 @@
                         <el-button @click="clearFilters">清除筛选</el-button>
                     </div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
-                    <el-table :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :default-sort="{ prop: 'expiry_date', order: 'ascending' }">
+                    <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" @sort-change="handleTableSortChange">
                         <el-table-column prop="site_name" label="网站名称" min-width="126" fixed sortable><template #default="scope"><button type="button" class="table-inline-text" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></template></el-table-column>
-                        <el-table-column prop="domain" label="域名" min-width="162" fixed sortable><template #default="scope"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a></template></el-table-column>
+                        <el-table-column prop="domain" label="域名" min-width="162" fixed sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
                         <el-table-column label="SEO" width="54"><template #default="scope"><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div></template></el-table-column>
                         <el-table-column prop="industry" label="行业" min-width="96" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable filterable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
-                        <el-table-column label="日点击" min-width="96" sortable><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
+                        <el-table-column prop="daily_clicks" label="日点击" min-width="96" sortable :sort-method="compareDailyClicks"><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
                         <el-table-column prop="platform" label="技术栈" min-width="98" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.platform" @change="value => handleInlineSelect(scope.row, 'platform', value)"><el-option v-for="platform in platformOptions" :key="platform" :label="platformText({ ...scope.row, platform })" :value="platform" /></el-select></template></el-table-column>
-                        <el-table-column label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
-                        <el-table-column label="最近操作" min-width="88" sortable><template #default="scope">{{ scope.row.latest_operation_date || '未记录' }}</template></el-table-column>
+                        <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
+                        <el-table-column prop="latest_operation_date" label="最近操作" min-width="88" sortable><template #default="scope">{{ scope.row.latest_operation_date || '未记录' }}</template></el-table-column>
                         <el-table-column prop="registrar_date" label="注册时间" min-width="92" sortable><template #default="scope">{{ scope.row.registrar_date || '未记录' }}</template></el-table-column>
-                        <el-table-column label="剩余时间" min-width="92" sortable :sort-method="(a, b) => calculateRemainingDays(a.expiry_date) - calculateRemainingDays(b.expiry_date)"><template #default="scope"><span class="expiry-label" :class="expiryClass(scope.row.expiry_date)">{{ formatRemainingDays(scope.row.expiry_date) }}</span></template></el-table-column>
+                        <el-table-column prop="expiry_date" label="剩余时间" min-width="92" sortable :sort-method="(a, b) => calculateRemainingDays(a.expiry_date) - calculateRemainingDays(b.expiry_date)"><template #default="scope"><span class="expiry-label" :class="expiryClass(scope.row.expiry_date)">{{ formatRemainingDays(scope.row.expiry_date) }}</span></template></el-table-column>
                         <el-table-column prop="status" label="状态" min-width="72" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.status" @change="value => handleInlineSelect(scope.row, 'status', value)"><el-option label="在线" value="在线" /><el-option label="离线" value="离线" /></el-select></template></el-table-column>
                         <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" title="详情" aria-label="详情" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" title="修改" aria-label="修改" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" title="删除" aria-label="删除" @click="handleDelete(scope.row)" /></div></template></el-table-column>
                         <template #empty><div class="empty-state" v-if="!loading && !loadError"><p>还没有域名</p><span>新增或导入域名后，会在此显示。</span><button type="button" class="table-action" @click="handleAdd">新增域名</button></div><div v-else class="empty-state"><span>{{ loading ? '正在加载域名…' : '域名列表未能加载，请重试。' }}</span></div></template>
@@ -78,17 +79,17 @@
         <ImportDialog v-model:visible="importVisible" @success="reloadAll" />
         <AdsenseManagerDialog v-model:visible="adsenseManagerVisible" :accounts="adsenseAccounts" @changed="reloadAll" />
         <ResourceManagerDialog v-model:visible="resourceManagerVisible" @changed="reloadAll" />
-        <DomainDetailDrawer v-model:visible="detailVisible" :domain="detailDomain" @changed="loadDomains" />
+        <DomainDetailDrawer v-model:visible="detailVisible" :domain="detailDomain" @changed="loadDomains" @edit="handleDetailEdit" />
         <QuickFieldDialog v-model:visible="quickFieldVisible" :title="quickFieldTitle" :context="quickFieldDomain?.domain" :label="quickFieldLabel" :value="quickFieldValue" :placeholder="quickFieldPlaceholder" :maxlength="quickFieldMode === 'platform_other' ? 100 : 200" @save="saveQuickField" />
         <AdsenseQuickDialog v-model:visible="adsenseQuickVisible" :domain="adsenseQuickDomain?.domain" :accounts="adsenseAccounts" :account-id="adsenseQuickDomain?.adsense_account_id" :opened-date="adsenseQuickDomain?.adsense_opened_date" :registrar-date="adsenseQuickDomain?.registrar_date" @save="saveAdsenseQuick" />
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
-import { Setting, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, Document, Edit, Delete } from '@element-plus/icons-vue';
+import { ElMessage, type TableInstance } from 'element-plus';
+import { Setting, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
 import '../styles/home/home.css';
 import { useAuth } from '../utils/auth';
 import DomainDialog from '../components/DomainDialog.vue';
@@ -103,12 +104,32 @@ import { createDomain, updateDomain, deleteDomain, type DomainData } from '../ap
 import { getWriteQueue } from '../utils/writeQueue';
 import { api, ApiError } from '../utils/request';
 import { confirmAction, isDismissed } from '../utils/feedback';
+import { copyText } from '../utils/clipboard';
 
 interface AlertConfig { tg_token: string; tg_userid: string; days: number; }
+interface DomainSortState { prop: string; order: 'ascending' | 'descending'; }
+
+const defaultTableSort: DomainSortState = { prop: 'expiry_date', order: 'ascending' };
+const tableSortStorageKey = 'domain-manager.table-sort';
+const sortableTableProps = new Set(['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'latest_operation_date', 'registrar_date', 'expiry_date', 'status']);
+const readTableSort = (): DomainSortState => {
+    try {
+        const raw = window.localStorage.getItem(tableSortStorageKey);
+        if (!raw) return { ...defaultTableSort };
+        const parsed = JSON.parse(raw) as Partial<DomainSortState>;
+        if (typeof parsed.prop === 'string' && sortableTableProps.has(parsed.prop) && (parsed.order === 'ascending' || parsed.order === 'descending')) {
+            return { prop: parsed.prop, order: parsed.order };
+        }
+    } catch { /* corrupted localStorage should not prevent the page from loading */ }
+    return { ...defaultTableSort };
+};
 
 const router = useRouter();
 const auth = useAuth();
 const domains = ref<DomainData[]>([]);
+const tableRef = ref<TableInstance>();
+const tableSort = ref<DomainSortState>(readTableSort());
+const applyingTableSort = ref(false);
 const adsenseAccounts = ref<Array<{ id?: number; name: string; owner: string; publisher_id?: string | null; currency: string; status: string; memo: string; linked_domains?: number }>>([]);
 const adsenseManagerVisible = ref(false);
 const resourceManagerVisible = ref(false);
@@ -131,6 +152,7 @@ const storedSidebarState = localStorage.getItem('domain-manager.sidebar-collapse
 const sidebarCollapsed = ref(storedSidebarState === null ? window.innerWidth <= 760 : storedSidebarState === '1');
 const loading = ref(false);
 const loadError = ref('');
+const overviewError = ref('');
 const alertDays = ref(30);
 const alertConfig = ref<AlertConfig>();
 const refreshing = ref(false);
@@ -188,9 +210,19 @@ const handleLogout = () => { auth.clearAuth(); router.push({ name: 'Login' }); }
 const handleAdd = () => { isEdit.value = false; editData.value = undefined; dialogVisible.value = true; };
 const handleEdit = (row: DomainData) => { isEdit.value = true; editData.value = row; dialogVisible.value = true; };
 const openDomainDetail = (row: DomainData) => { detailDomain.value = row; detailVisible.value = true; };
+const handleDetailEdit = (row: DomainData) => { detailVisible.value = false; handleEdit(row); };
 const handleConfig = () => { configVisible.value = true; };
 const handleImport = () => { importVisible.value = true; };
 const clearFilters = () => { searchText.value = ''; ownerFilter.value = ''; accountFilter.value = ''; adsenseFilter.value = ''; seoFilter.value = ''; clicksFilter.value = ''; expiryFilter.value = ''; resourceFilter.value = ''; providerFilter.value = ''; resourceAccountFilter.value = ''; platformFilter.value = ''; industryFilter.value = ''; activeSummaryPreset.value = ''; };
+const saveTableSort = (sort: DomainSortState) => { tableSort.value = { ...sort }; window.localStorage.setItem(tableSortStorageKey, JSON.stringify(tableSort.value)); };
+const applyTableSort = async () => { await nextTick(); if (!tableRef.value) return; applyingTableSort.value = true; tableRef.value.sort(tableSort.value.prop, tableSort.value.order); applyingTableSort.value = false; };
+const handleTableSortChange = ({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) => {
+    if (applyingTableSort.value) return;
+    if (!prop || !sortableTableProps.has(prop) || !order) {
+        saveTableSort({ ...defaultTableSort });
+        void applyTableSort();
+    } else saveTableSort({ prop, order });
+};
 const daysSince = (date: string) => { const [y,m,d] = date.split('-').map(Number); const today = localDate().split('-').map(Number); return Math.max(0, Math.floor((Date.UTC(today[0], today[1] - 1, today[2]) - Date.UTC(y, m - 1, d)) / 86400000)); };
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const toggleSidebar = () => { sidebarCollapsed.value = !sidebarCollapsed.value; localStorage.setItem('domain-manager.sidebar-collapsed', sidebarCollapsed.value ? '1' : '0'); };
@@ -217,9 +249,12 @@ const seoState = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: stri
     return { kind: 'overdue', actionable: true, label: `${days} 天前`, title: `已经 ${days} 天未优化，建议优先处理` };
 };
 const clickRangeFromNumber = (value: number | null | undefined) => value == null ? null : value < 10 ? 'under10' : value < 30 ? '10to29' : value < 50 ? '30to49' : value < 100 ? '50to99' : 'over100';
+const clickRangeRank = (row: DomainData) => ({ under10: 1, '10to29': 2, '30to49': 3, '50to99': 4, over100: 5 } as Record<string, number>)[row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks) || ''] || 0;
+const compareDailyClicks = (a: DomainData, b: DomainData) => clickRangeRank(a) - clickRangeRank(b);
 const matchesClicks = (row: DomainData, filter: string) => { const range = row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks); return filter === 'unknown' ? range == null : filter === 'over30' ? ['30to49', '50to99', 'over100'].includes(range || '') : range === filter; };
-const handleSeoToday = async (row: DomainData) => { if (!row.id || !seoState(row).actionable) return; const date = localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }); queue.enqueue({ type: 'domain_operation_add', domain_id: row.id, operation_date: date, operation_kind: 'SEO' }); row.seo_last_date = date; row.latest_operation_date = date; await queue.flush(); await loadDashboard(); ElMessage.success('已记录今天的 SEO 优化'); } catch(error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 日期已加入待同步队列'); } };
-const handleDailyClicks = async (row: DomainData, value: string | null) => { if (!row.id) return; const previous = row.daily_clicks_range; row.daily_clicks_range = value as DomainData['daily_clicks_range']; row.daily_clicks = null; row.clicks_updated_date = value == null ? null : localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { daily_clicks: null, daily_clicks_range: value, clicks_updated_date: row.clicks_updated_date } }); await queue.flush(); await loadDashboard(); } catch (error) { row.daily_clicks_range = previous; ElMessage.error(error instanceof Error ? error.message : '日点击区间已加入待同步队列'); } };
+const copyDomain = async (domain: string) => { try { await copyText(domain); ElMessage.success(`已复制域名：${domain}`); } catch { ElMessage.error('复制失败，请手动复制'); } };
+const handleSeoToday = async (row: DomainData) => { if (!row.id || !seoState(row).actionable) return; const date = localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }); queue.enqueue({ type: 'domain_operation_add', domain_id: row.id, operation_date: date, operation_kind: 'SEO' }); row.seo_last_date = date; row.latest_operation_date = date; await queue.flush(); await loadDashboard(); await applyTableSort(); ElMessage.success('已记录今天的 SEO 优化'); } catch(error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 日期已加入待同步队列'); } };
+const handleDailyClicks = async (row: DomainData, value: string | null) => { if (!row.id) return; const previous = row.daily_clicks_range; row.daily_clicks_range = value as DomainData['daily_clicks_range']; row.daily_clicks = null; row.clicks_updated_date = value == null ? null : localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { daily_clicks: null, daily_clicks_range: value, clicks_updated_date: row.clicks_updated_date } }); await queue.flush(); await loadDashboard(); await applyTableSort(); } catch (error) { row.daily_clicks_range = previous; ElMessage.error(error instanceof Error ? error.message : '日点击区间已加入待同步队列'); } };
 const markSeoById = (id: number) => { const row = domains.value.find(item => item.id === id); if (row) void handleSeoToday(row); };
 const providerLabel = (value: string) => ({ github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }[value] || value);
 const platformText = (row: DomainData) => row.platform === '其他' ? (row.platform_other || '其他') : row.platform;
@@ -229,7 +264,7 @@ const handleInlineSelect = async (row: DomainData, field: 'status' | 'platform' 
     if (oldValue === value) return;
     if (field === 'platform' && value === '其他') { row.platform_other = null; }
     row[field] = value as never;
-    try { await api.patch(`/api/domains/${row.id}`, { [field]: value || null }); if (field === 'platform' && value !== '其他') row.platform_other = null; if (field === 'platform' && value === '其他') openQuickField(row, 'platform_other'); }
+    try { await api.patch(`/api/domains/${row.id}`, { [field]: value || null }); if (field === 'platform' && value !== '其他') row.platform_other = null; if (field === 'platform' && value === '其他') openQuickField(row, 'platform_other'); await applyTableSort(); }
     catch (error) { row[field] = oldValue as never; ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
 };
 const handleAdsenseSelect = (row: DomainData, value: '未知' | '已开通' | '未开通') => {
@@ -250,6 +285,8 @@ const saveAdsenseStatus = async (row: DomainData, status: '未知' | '已开通'
     try {
         const updated = await api.patch<DomainData>(`/api/domains/${row.id}`, { adsense_connected: status, ...extra });
         Object.assign(row, updated);
+        adsenseQuickVisible.value = false;
+        await applyTableSort();
     } catch (error) {
         Object.assign(row, previous);
         ElMessage.error(error instanceof Error ? error.message : 'AdSense 状态保存失败');
@@ -263,13 +300,14 @@ const openQuickField = (row: DomainData, mode: 'site_name' | 'platform_other') =
 const saveQuickField = async (value: string | null) => {
     const row = quickFieldDomain.value; if (!row?.id) return;
     const field = quickFieldMode.value; const oldValue = row[field]; row[field] = value as never;
-    try { await api.patch(`/api/domains/${row.id}`, { [field]: value }); }
+    try { await api.patch(`/api/domains/${row.id}`, { [field]: value }); quickFieldVisible.value = false; await applyTableSort(); }
     catch (error) { row[field] = oldValue as never; ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
 };
-const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await api.get(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); } catch(error) { console.error('获取 AdSense 账号失败:', error); } };
-const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await api.get(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); } catch (error) { console.error('获取首页概览失败:', error); } };
-const loadResourceLinks = async () => { try { [resourceLinks.value, resourceAccounts.value] = await Promise.all([api.get<ResourceLinkData[]>('/api/resources/links'), api.get<ResourceAccountData[]>('/api/resources/accounts')]); } catch (error) { console.error('获取资源关联失败:', error); } };
-const reloadAll = async () => { await Promise.all([loadDomains(), loadAdsenseAccounts(), loadDashboard(), loadResourceLinks()]); };
+const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await api.get(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); return true; } catch(error) { console.error('获取 AdSense 账号失败:', error); return false; } };
+const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await api.get(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); return true; } catch (error) { console.error('获取首页概览失败:', error); return false; } };
+const loadResourceLinks = async () => { try { [resourceLinks.value, resourceAccounts.value] = await Promise.all([api.get<ResourceLinkData[]>('/api/resources/links'), api.get<ResourceAccountData[]>('/api/resources/accounts')]); return true; } catch (error) { console.error('获取资源关联失败:', error); return false; } };
+const loadOverview = async () => { overviewError.value = ''; const results = await Promise.all([loadAdsenseAccounts(), loadDashboard(), loadResourceLinks()]); if (results.some(result => !result)) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。'; };
+const reloadAll = async () => { await Promise.all([loadDomains(), loadOverview()]); };
 
 const handleDelete = async (row: DomainData) => {
     try {
@@ -298,6 +336,7 @@ const loadDomains = async () => {
     loadError.value = '';
     try {
         domains.value = await api.get<DomainData[]>('/api/domains');
+        await applyTableSort();
     } catch (error: any) {
         loadError.value = error.message || '加载域名列表失败，请重试。';
         if (error instanceof ApiError && error.status === 401) { auth.clearAuth(); router.push({ name: 'Login' }); }
@@ -305,6 +344,8 @@ const loadDomains = async () => {
         loading.value = false;
     }
 };
+
+watch(filteredDomains, () => { void applyTableSort(); });
 
 const calculateRemainingDays = (expiryDate: string) => {
     const [year, month, day] = expiryDate.split('-').map(Number);
@@ -331,6 +372,7 @@ const handleConfigSubmit = async (config: AlertConfig) => {
         ElMessage.success('配置保存成功');
         alertDays.value = config.days;
         alertConfig.value = config;
+        configVisible.value = false;
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : '保存配置失败';
         ElMessage.error(errorMessage);
@@ -434,9 +476,7 @@ onMounted(() => {
     checkLoginStatus();
     void loadDomains();
     void loadAlertConfig();
-    void loadAdsenseAccounts();
-    void loadDashboard();
-    void loadResourceLinks();
+    void loadOverview();
     void queue.flush();
 });
 </script>

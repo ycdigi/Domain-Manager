@@ -145,6 +145,75 @@ test('domain quick editing exposes a narrow PATCH contract and SEO dual write', 
   assert.match(home, /registrar_date.*注册时间/)
 })
 
+test('domain table sorting is persisted and reapplied after data changes', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  assert.match(home, /domain-manager\.table-sort/)
+  assert.match(home, /tableRef = ref<TableInstance>/)
+  assert.match(home, /@sort-change="handleTableSortChange"/)
+  assert.match(home, /tableRef\.value\.sort\(tableSort\.value\.prop, tableSort\.value\.order\)/)
+  assert.match(home, /saveTableSort\(\{ \.\.\.defaultTableSort \}\);\s*void applyTableSort\(\)/)
+  assert.match(home, /watch\(filteredDomains/)
+  assert.doesNotMatch(home, /:default-sort=/)
+  for (const prop of ['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'latest_operation_date', 'registrar_date', 'expiry_date', 'status']) {
+    assert.match(home, new RegExp(`sortableTableProps.*${prop}`))
+  }
+})
+
+test('copy actions share the clipboard fallback and keep domain copy local', () => {
+  const clipboard = fs.readFileSync(path.join(repo, 'src/utils/clipboard.ts'), 'utf8')
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
+  const resources = fs.readFileSync(path.join(repo, 'src/components/ResourceManagerDialog.vue'), 'utf8')
+  assert.match(clipboard, /navigator\.clipboard\?\.writeText/)
+  assert.match(clipboard, /document\.execCommand\('copy'\)/)
+  assert.match(home, /DocumentCopy/)
+  assert.match(home, /@click\.stop="copyDomain\(scope\.row\.domain\)"/)
+  assert.match(home, /已复制域名：\$\{domain\}/)
+  assert.match(detail, /copyText\(content\)/)
+  assert.match(resources, /copyText\(result\.token\)/)
+  assert.doesNotMatch([home, detail, resources].join('\n'), /navigator\.clipboard/)
+})
+
+test('domain detail drawer is compact and reuses the full edit flow', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
+  const style = fs.readFileSync(path.join(repo, 'src/styles/dialogs/domain-detail.css'), 'utf8')
+  assert.match(detail, /detail-drawer-header/)
+  assert.match(detail, /编辑域名信息/)
+  assert.match(detail, /event: 'edit'/)
+  assert.match(home, /@edit="handleDetailEdit"/)
+  assert.match(home, /detailVisible\.value = false; handleEdit\(row\)/)
+  assert.match(style, /el-drawer__body.*padding/)
+  assert.match(style, /detail-grid div.*border-bottom/)
+})
+
+test('form and detail loading states remain recoverable after request failures', () => {
+  const domainDialog = fs.readFileSync(path.join(repo, 'src/components/DomainDialog.vue'), 'utf8')
+  const alertDialog = fs.readFileSync(path.join(repo, 'src/components/AlertConfigDialog.vue'), 'utf8')
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
+  const resources = fs.readFileSync(path.join(repo, 'src/components/ResourceManagerDialog.vue'), 'utf8')
+  const adsense = fs.readFileSync(path.join(repo, 'src/components/AdsenseManagerDialog.vue'), 'utf8')
+  const quickField = fs.readFileSync(path.join(repo, 'src/components/QuickFieldDialog.vue'), 'utf8')
+  const adsenseQuick = fs.readFileSync(path.join(repo, 'src/components/AdsenseQuickDialog.vue'), 'utf8')
+  assert.match(domainDialog, /emit\('submit', payload\)\s*\}\) \}/)
+  assert.doesNotMatch(domainDialog, /emit\('submit', payload\); dialogVisible\.value = false/)
+  assert.doesNotMatch(alertDialog, /emit\('submit', form\.value\)\s*\n\s*dialogVisible\.value = false/)
+  assert.match(home, /configVisible\.value = false/)
+  assert.match(home, /overviewError/)
+  assert.match(home, /loadOverview/)
+  assert.match(detail, /Promise\.allSettled\(\[loadNotes\(\), loadOperations\(\)\]\)/)
+  assert.match(detail, /detail-load-error/)
+  assert.match(resources, /resource-load-error/)
+  assert.match(resources, /loadError\.value = error instanceof Error/)
+  assert.match(adsense, /incomeRows\.value = \[\]/)
+  assert.match(adsense, /incomeError/)
+  assert.doesNotMatch(quickField, /emit\('save'.*dialogVisible\.value = false/)
+  assert.doesNotMatch(adsenseQuick, /emit\('save'.*dialogVisible\.value = false/)
+  assert.match(home, /quickFieldVisible\.value = false; await applyTableSort/)
+  assert.match(home, /adsenseQuickVisible\.value = false;/)
+})
+
 test('dashboard operating metrics use explicit date and click boundaries', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/metrics.db'
   try {

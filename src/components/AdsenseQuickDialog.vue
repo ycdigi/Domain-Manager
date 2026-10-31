@@ -44,6 +44,6 @@ watch(dialogVisible, value => emit('update:visible', value))
 
 const submit = async () => {
   if (!formRef.value) return
-  await formRef.value.validate(valid => { if (valid) { emit('save', { ...form.value }); dialogVisible.value = false } })
+  await formRef.value.validate(valid => { if (valid) emit('save', { ...form.value }) })
 }
 </script>

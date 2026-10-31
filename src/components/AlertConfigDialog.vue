@@ -78,7 +78,6 @@ const handleSubmit = async () => {
     await formRef.value.validate((valid) => {
         if (valid) {
             emit('submit', form.value)
-            dialogVisible.value = false
         }
     })
 }

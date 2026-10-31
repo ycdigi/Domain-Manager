@@ -1,5 +1,6 @@
 <template>
-  <el-dialog v-model="dialogVisible" title="基础设施资源" width="960px" :close-on-click-modal="false" class="resource-manager-dialog">
+  <el-dialog v-model="dialogVisible" title="基础设施资源" width="960px" :close-on-click-modal="false" class="resource-manager-dialog" :aria-busy="loading">
+    <div v-if="loadError" class="resource-load-error" role="alert"><span>{{ loadError }}</span><el-button text size="small" @click="load">重试</el-button></div>
     <el-tabs v-model="activeTab">
       <el-tab-pane v-for="provider in providers" :key="provider.value" :label="provider.label" :name="provider.value">
         <div class="resource-toolbar">
@@ -120,11 +121,14 @@ import { computed, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { api } from '../utils/request'
 import { confirmAction, isDismissed } from '../utils/feedback'
+import { copyText } from '../utils/clipboard'
 import type { ProviderAccount, ProviderCredential, ProviderResource, ProviderType } from '../../functions/types'
 
 const props = defineProps<{ visible: boolean }>()
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'changed'): void }>()
 const dialogVisible = ref(props.visible)
+const loading = ref(false)
+const loadError = ref('')
 const activeTab = ref<ProviderType>('github')
 const providers = [{ value: 'github', label: 'GitHub' }, { value: 'cloudflare', label: 'Cloudflare' }, { value: 'vhost', label: '虚拟主机' }, { value: 'vps', label: 'VPS' }] as const
 const accounts = ref<ProviderAccount[]>([])
@@ -150,7 +154,18 @@ const roles = ['代码仓库', 'DNS/CDN', '部署平台', '虚拟主机', 'VPS',
 const accountsForProvider = computed(() => accounts.value.filter(item => item.provider === activeTab.value))
 const accountResources = computed(() => resources.value.filter(item => item.account_id === selectedAccount.value?.id))
 const unassignedResources = computed(() => resources.value.filter(item => item.provider === 'vps' && !item.account_id))
-const load = async () => { [accounts.value, resources.value, domains.value, links.value] = await Promise.all([api.get<ProviderAccount[]>('/api/resources/accounts'), api.get<ProviderResource[]>('/api/resources'), api.get<Array<{ id?: number; domain: string }>>('/api/domains'), api.get<typeof links.value>('/api/resources/links')]); if (selectedAccount.value) selectedAccount.value = accounts.value.find(item => item.id === selectedAccount.value?.id) }
+const load = async () => {
+  loading.value = true
+  loadError.value = ''
+  try {
+    [accounts.value, resources.value, domains.value, links.value] = await Promise.all([api.get<ProviderAccount[]>('/api/resources/accounts'), api.get<ProviderResource[]>('/api/resources'), api.get<Array<{ id?: number; domain: string }>>('/api/domains'), api.get<typeof links.value>('/api/resources/links')])
+    if (selectedAccount.value) selectedAccount.value = accounts.value.find(item => item.id === selectedAccount.value?.id)
+  } catch (error) {
+    loadError.value = error instanceof Error ? error.message : '资源数据加载失败，请重试。'
+  } finally {
+    loading.value = false
+  }
+}
 const openAccountForm = () => { editingAccount.value = undefined; accountForm.value = { provider: activeTab.value, name: '', login_email: '', memo: '' }; accountFormVisible.value = true }
 const editAccount = (account: ProviderAccount) => { editingAccount.value = account.id; accountForm.value = { provider: account.provider, name: account.name, login_email: account.login_email, status: account.status, memo: account.memo }; accountFormVisible.value = true }
 const saveAccount = async () => { try { const url = editingAccount.value ? `/api/resources/accounts/${editingAccount.value}` : '/api/resources/accounts'; await (editingAccount.value ? api.put(url, accountForm.value) : api.post(url, accountForm.value)); accountFormVisible.value = false; await load(); emit('changed'); ElMessage.success('账号已保存') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败') } }
@@ -165,11 +180,25 @@ const saveLink = async () => { try { if (!linkForm.value.domain_id || !linkResou
 const linksForResource = (resourceId?: number) => links.value.filter(link => link.resource_id === resourceId)
 const domainName = (domainId: number) => domains.value.find(domain => domain.id === domainId)?.domain || `网站 #${domainId}`
 const unlink = async (id?: number) => { if (!id) return; try { await api.delete(`/api/resources/links?id=${id}`); await load(); emit('changed') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '解除关联失败') } }
-const openCredential = async (account: ProviderAccount) => { selectedAccount.value = account; editingCredentialId.value = undefined; credentialForm.value = { label: '', token: '', expires_at: '' }; credentials.value = await api.get(`/api/resources/credentials?account_id=${account.id}`); credentialVisible.value = true }
+const openCredential = async (account: ProviderAccount) => { try { selectedAccount.value = account; editingCredentialId.value = undefined; credentialForm.value = { label: '', token: '', expires_at: '' }; credentials.value = await api.get(`/api/resources/credentials?account_id=${account.id}`); credentialVisible.value = true } catch (error) { ElMessage.error(error instanceof Error ? error.message : '凭据列表读取失败') } }
 const editCredential = (item: ProviderCredential) => { editingCredentialId.value = item.id; credentialForm.value = { label: item.label, token: '', expires_at: item.expires_at || '' } }
 const saveCredential = async () => { try { const id = editingCredentialId.value; const url = id ? `/api/resources/credentials/${id}` : '/api/resources/credentials'; await (id ? api.put(url, { account_id: selectedAccount.value?.id, ...credentialForm.value }) : api.post(url, { account_id: selectedAccount.value?.id, ...credentialForm.value })); credentials.value = await api.get(`/api/resources/credentials?account_id=${selectedAccount.value?.id}`); credentialForm.value = { label: '', token: '', expires_at: '' }; editingCredentialId.value = undefined; ElMessage.success('Token 已保存') } catch (error) { ElMessage.error(error instanceof Error ? error.message : 'Token 保存失败') } }
 const deleteCredential = async (item: ProviderCredential) => { try { await confirmAction(`删除凭据“${item.label}”？`, '删除凭据', { confirmButtonText: '删除' }); await api.delete(`/api/resources/credentials/${item.id}`); credentials.value = await api.get(`/api/resources/credentials?account_id=${selectedAccount.value?.id}`) } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '凭据删除失败') } }
-const revealCredential = async (id?: number) => { if (!id) return; try { const result = await api.post<{ token: string }>(`/api/resources/credentials/${id}`); await ElMessageBox.alert(result.token, '完整 Token', { confirmButtonText: '复制并关闭', callback: () => { void navigator.clipboard?.writeText(result.token) } }) } catch (error) { ElMessage.error(error instanceof Error ? error.message : 'Token 读取失败') } }
+const revealCredential = async (id?: number) => {
+  if (!id) return
+  try {
+    const result = await api.post<{ token: string }>(`/api/resources/credentials/${id}`)
+    await ElMessageBox.alert(result.token, '完整 Token', { confirmButtonText: '复制并关闭' })
+    try {
+      await copyText(result.token)
+      ElMessage.success('Token 已复制')
+    } catch {
+      ElMessage.error('Token 复制失败，请手动复制')
+    }
+  } catch (error) {
+    ElMessage.error(error instanceof Error ? error.message : 'Token 读取失败')
+  }
+}
 watch(() => props.visible, value => { dialogVisible.value = value; if (value) void load() })
 watch(dialogVisible, value => emit('update:visible', value))
 </script>
