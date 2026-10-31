@@ -15,7 +15,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         if (context.request.method === 'OPTIONS') {
             const headers = new Headers({
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization'
             })
             applySecurityHeaders(headers, true)
@@ -50,7 +50,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             // 添加 CORS 头
             const response = await context.next()
             response.headers.set('Access-Control-Allow-Origin', '*')
-            response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')
+            response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS')
             response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization')
             applySecurityHeaders(response.headers, true)
             return response
@@ -60,7 +60,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         if (context.request.method === 'OPTIONS') {
             const headers = new Headers({
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization'
             })
             applySecurityHeaders(headers, true)

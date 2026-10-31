@@ -68,6 +68,7 @@ export const api = {
     get: <T = unknown>(url: string, options: RequestOptions = {}) => request<T>(url, { ...options, method: 'GET' }),
     post: <T = unknown>(url: string, body?: RequestOptions['body'], options: RequestOptions = {}) => request<T>(url, { ...options, method: 'POST', body }),
     put: <T = unknown>(url: string, body?: RequestOptions['body'], options: RequestOptions = {}) => request<T>(url, { ...options, method: 'PUT', body }),
+    patch: <T = unknown>(url: string, body?: RequestOptions['body'], options: RequestOptions = {}) => request<T>(url, { ...options, method: 'PATCH', body }),
     delete: <T = unknown>(url: string, options: RequestOptions = {}) => request<T>(url, { ...options, method: 'DELETE' }),
     upload: <T = unknown>(url: string, formData: FormData, options: RequestOptions = {}) => request<T>(url, { ...options, method: 'POST', body: formData }),
     blob: (url: string, options: RequestOptions = {}) => request<Blob>(url, { ...options, responseType: 'blob' }),

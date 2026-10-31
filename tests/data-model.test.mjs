@@ -130,6 +130,18 @@ test('write queue and batch API share the operation-date contract', () => {
   assert.match(batch, /operation_kind/)
 })
 
+test('domain quick editing exposes a narrow PATCH contract and SEO dual write', () => {
+  const patch = fs.readFileSync(path.join(repo, 'functions/api/domains/[id].ts'), 'utf8')
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const request = fs.readFileSync(path.join(repo, 'src/utils/request.ts'), 'utf8')
+  assert.match(patch, /onRequestPatch/)
+  assert.match(patch, /site_name.*industry.*status.*platform.*platform_other/)
+  assert.match(request, /patch: <T = unknown>/)
+  assert.match(home, /domain_operation_add/)
+  assert.match(home, /seo_last_date: date/)
+  assert.match(home, /sidebar-collapsed/)
+})
+
 test('dashboard income remains one account-month total when it has multiple sites', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/dashboard.db'
   try {

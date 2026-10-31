@@ -102,6 +102,42 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
     }
 }
 
+export const onRequestPatch: PagesFunction<Env> = async context => {
+    const authError = await checkAuth(context)
+    if (authError) return authError
+    try {
+        const id = context.params.id as string
+        const fields = await context.request.json() as Record<string, unknown>
+        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other']
+        const keys = Object.keys(fields)
+        if (!keys.length || keys.some(key => !allowed.includes(key))) return Response.json({ status: 400, message: '局部更新包含不支持的字段', data: null }, { status: 400 })
+
+        const current = await context.env.DB.prepare('SELECT * FROM domains WHERE id = ?').bind(id).first<Domain>()
+        if (!current) return Response.json({ status: 404, message: '域名不存在', data: null }, { status: 404 })
+
+        const merged = { ...current, ...fields }
+        if (fields.platform && fields.platform !== '其他') merged.platform_other = null
+        const validationError = validateDomain(merged)
+        if (validationError) return Response.json({ status: 400, message: validationError, data: null }, { status: 400 })
+
+        const assignments: string[] = []
+        const values: unknown[] = []
+        for (const key of keys) {
+            assignments.push(`${key} = ?`)
+            values.push(fields[key] === '' ? null : fields[key])
+        }
+        if (fields.platform && fields.platform !== '其他' && !keys.includes('platform_other')) {
+            assignments.push('platform_other = ?')
+            values.push(null)
+        }
+        const result = await context.env.DB.prepare(`UPDATE domains SET ${assignments.join(', ')} WHERE id = ? RETURNING *`).bind(...values, id).run<Domain>()
+        return Response.json({ status: 200, message: '更新成功', data: result.results?.[0] || null })
+    } catch (error) {
+        console.error('局部更新域名失败:', error)
+        return Response.json({ status: 500, message: error instanceof Error ? error.message : '局部更新域名失败', data: null }, { status: 500 })
+    }
+}
+
 export const onRequestDelete: PagesFunction<Env> = async (context) => {
     try {
         const authError = await checkAuth(context)

@@ -225,6 +225,14 @@ npm run db:verify:remote
 
 操作日期使用 `/api/domains/:id/operations` 管理，类型固定为 `SEO`、`内容`、`技术`、`其他`，同一网站同一天同一类型只保留一条。`/api/export/snapshot` 返回不含凭据的完整导出数据，首页会据此生成多工作表 Excel。
 
+域名的轻量行内编辑使用：
+
+```text
+PATCH /api/domains/:id
+```
+
+只允许更新 `site_name`、`industry`、`status`、`platform`、`platform_other`；复杂字段仍通过完整域名编辑或详情抽屉维护。SEO 快捷操作会同时更新最近 SEO 日期和当天的 SEO 操作记录，重复日期会自动去重。
+
 ### 3. AI 同步 API
 
 给外部 AI 或自动化脚本使用的接口是：
