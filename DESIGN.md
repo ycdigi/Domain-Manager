@@ -15,7 +15,7 @@
 `src/styles/shared/tokens.css` 是值的单一来源，令牌值沿用已确认样板；Element Plus 映射也保留在同一文件。以下为锁定时的实际声明快照，不是另一套推荐值：
 
 ```css
-:root:is(.dm-ui, .dm-home-route) {
+:root.dm-ui {
   --color-paper: oklch(100% 0 0);
   --color-paper-2: oklch(97.5% 0.003 250);
   --color-paper-3: oklch(94% 0.005 250);
@@ -114,7 +114,7 @@
 ## Motion And Scope
 - 页面不使用入场动画或装饰性持续动画；按钮无渐变过渡，仅保留必要按下反馈。减少动态效果时禁用 transition，动画周期缩为 0.01ms／一次，滚动恢复 auto，行内按下位移取消。
 - 根文档语言设为 `zh-CN`，使中文标签按正确语言朗读；系统字体可按语言选择对应字形，控件宽度仍按实际文字自适应，不另设字体。
-- 根 `index.html` 通过 `html.dm-ui` 显式启用共享 token、页面基础、控件与 teleport 到 body 的弹窗。保留 `dm-home-route` 兼容作用域；Home 挂载／退出时增删该标记，只管理台账局部布局。
+- 根 `index.html` 通过 `html.dm-ui` 显式启用共享 token、页面基础、控件与 teleport 到 body 的弹窗。Home 使用 `.home-container` 作为台账局部布局边界，不再通过生命周期增删额外根类。
 - 已从根 HTML 移除旧宠物、爱心、花瓣、星星脚本、装饰容器与外部展示字体；不再加载后再隐藏，也不再在路由切换中覆盖 `window.onresize`。全站只保留系统字体与现有 DM 资源。
 
 ## Existing Exceptions

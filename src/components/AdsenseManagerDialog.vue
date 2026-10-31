@@ -31,27 +31,23 @@
 </template>
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useAuth } from '../utils/auth'
+import { api } from '../utils/request'
 interface Account { id?: number; name: string; owner: string; publisher_id?: string | null; currency: string; status: string; memo: string; linked_domains?: number; current_income?: number }
 interface Income { id?: number; adsense_account_id: number; income_month: string; amount: number; memo: string }
 const props = defineProps<{ visible: boolean; accounts: Account[] }>()
-const router = useRouter()
 const emit = defineEmits(['update:visible', 'changed'])
 const visibleModel = computed({ get: () => props.visible, set: value => emit('update:visible', value) })
 const emptyAccount = { name: '', owner: '', publisher_id: '', currency: 'USD', status: '未知', memo: '' }
 const accountForm = ref({ ...emptyAccount }); const editing = ref<Account | undefined | null>(null)
 const localMonth = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
 const incomeAccount = ref<Account>(); const incomeRows = ref<Income[]>([]); const incomeMonth = ref(localMonth()); const incomeAmount = ref(0)
-const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${useAuth().getAuthToken()?.token || ''}` })
-const handleResponse = async (response: Response) => { const result = await response.json() as any; if (response.status === 401) { useAuth().clearAuth(); await router.push({ name: 'Login' }); throw new Error('登录状态无效，请重新登录') } if (!response.ok || result.status >= 400) throw new Error(result.message || '请求失败'); return result }
-const exportIncome = async () => { try { const response = await fetch('/api/adsense/income/export', { headers: headers() }); if (response.status === 401) { useAuth().clearAuth(); await router.push({ name: 'Login' }); return } if (!response.ok) throw new Error('收入导出失败'); const blob = await response.blob(); const url = URL.createObjectURL(blob); const link = document.createElement('a'); link.href = url; link.download = response.headers.get('Content-Disposition')?.match(/filename="?([^";]+)"?/)?.[1] || 'adsense-income.json'; link.click(); URL.revokeObjectURL(url) } catch (error) { ElMessage.error(error instanceof Error ? error.message : '收入导出失败') } }
+const exportIncome = async () => { try { const download = await api.download('/api/adsense/income/export'); const url = URL.createObjectURL(download.blob); const link = document.createElement('a'); link.href = url; link.download = download.headers.get('Content-Disposition')?.match(/filename="?([^";]+)"?/)?.[1] || 'adsense-income.json'; link.click(); URL.revokeObjectURL(url) } catch (error) { ElMessage.error(error instanceof Error ? error.message : '收入导出失败') } }
 watch(() => props.visible, value => { if (value) { editing.value = null; incomeAccount.value = undefined } })
 const startEdit = (account: Account) => { editing.value = account; accountForm.value = { name: account.name, owner: account.owner, publisher_id: account.publisher_id || '', currency: account.currency, status: account.status, memo: account.memo || '' } }
-const saveAccount = async () => { try { const id = editing.value?.id; const response = await fetch(id ? `/api/adsense/accounts/${id}` : '/api/adsense/accounts', { method: id ? 'PUT' : 'POST', headers: headers(), body: JSON.stringify(accountForm.value) }); await handleResponse(response); ElMessage.success('账号已保存'); editing.value = null; emit('changed') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '账号保存失败') } }
-const disableAccount = async (account: Account) => { try { await ElMessageBox.confirm(`停用“${account.name}”？停用不会删除网站关联或收入记录。`, '停用账号'); const response = await fetch(`/api/adsense/accounts/${account.id}/disable`, { method: 'POST', headers: headers() }); await handleResponse(response); emit('changed') } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '停用失败') } }
-const openIncome = async (account: Account) => { incomeAccount.value = account; try { const response = await fetch(`/api/adsense/income?account_id=${account.id}`, { headers: headers() }); const result = await handleResponse(response); incomeRows.value = result.data || [] } catch (error) { ElMessage.error(error instanceof Error ? error.message : '收入记录读取失败') } }
-const saveIncome = async () => { if (!incomeAccount.value?.id) return; try { const response = await fetch('/api/adsense/income', { method: 'POST', headers: headers(), body: JSON.stringify({ adsense_account_id: incomeAccount.value.id, income_month: incomeMonth.value, amount: incomeAmount.value, memo: '' }) }); await handleResponse(response); await openIncome(incomeAccount.value); emit('changed'); ElMessage.success('收入已保存') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '收入保存失败') } }
+const saveAccount = async () => { try { const id = editing.value?.id; await (id ? api.put(`/api/adsense/accounts/${id}`, accountForm.value) : api.post('/api/adsense/accounts', accountForm.value)); ElMessage.success('账号已保存'); editing.value = null; emit('changed') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '账号保存失败') } }
+const disableAccount = async (account: Account) => { try { await ElMessageBox.confirm(`停用“${account.name}”？停用不会删除网站关联或收入记录。`, '停用账号'); await api.post(`/api/adsense/accounts/${account.id}/disable`); emit('changed') } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '停用失败') } }
+const openIncome = async (account: Account) => { incomeAccount.value = account; try { incomeRows.value = await api.get<Income[]>(`/api/adsense/income?account_id=${account.id}`) } catch (error) { ElMessage.error(error instanceof Error ? error.message : '收入记录读取失败') } }
+const saveIncome = async () => { if (!incomeAccount.value?.id) return; try { await api.post('/api/adsense/income', { adsense_account_id: incomeAccount.value.id, income_month: incomeMonth.value, amount: incomeAmount.value, memo: '' }); await openIncome(incomeAccount.value); emit('changed'); ElMessage.success('收入已保存') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '收入保存失败') } }
 </script>
 <style scoped src="../styles/dialogs/adsense.css"></style>

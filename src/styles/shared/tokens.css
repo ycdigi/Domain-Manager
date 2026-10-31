@@ -1,6 +1,6 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: project · redesign: full · scope: explicit opt-in · v2.0.0 */
 /* Hallmark · pre-emit critique: reuse the locked tokens unchanged; both page templates share the explicit dm-ui document scope. */
-:root:is(.dm-ui, .dm-home-route) {
+:root.dm-ui {
   --color-paper: oklch(100% 0 0);
   --color-paper-2: oklch(97.5% 0.003 250);
   --color-paper-3: oklch(94% 0.005 250);

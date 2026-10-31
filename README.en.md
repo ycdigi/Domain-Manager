@@ -118,7 +118,7 @@ After deployment is complete, you can access the system via the domain provided 
 ### 1. Domain Check API
 **Endpoint**:`/api/check`
 **Method**: GET or POST
-**Authentication**: Requires `Authorization: Bearer your_api_token`. Do not put the token in the URL because request URLs can be recorded in proxy, analytics, and access logs. `/api/addrec` also requires this Bearer header.
+**Authentication**: Requires `Authorization: Bearer your_api_token`. Do not put the token in the URL because request URLs can be recorded in proxy, analytics, and access logs.
 Response:
 ```json
 {
@@ -134,30 +134,6 @@ Response:
             }
         ]
     }
-}
-```
-### 2. Domain List API
-**Endpoint**: `/api/addrec`
-**Method**: POST
-**Authentication**: Requires a Bearer Token.
-Response:
-```json
-{
-    "status": 200,
-    "message": "Successfully retrieved",
-    "data": [
-        {
-            "id": 1,
-            "domain": "example.com",
-            "registrar": "Cloudflare",
-            "registrar_link": "https://cloudflare.com",
-            "registrar_date": "2023-01-01",
-            "expiry_date": "2024-01-01",
-            "service_type": "Website",
-            "status": "Online",
-            "memo": "Main site"
-        }
-    ]
 }
 ```
 ## Configuration

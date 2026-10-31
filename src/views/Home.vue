@@ -82,7 +82,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, ElMessageBox } from 'element-plus';
 import { Setting, Refresh, Plus, Upload, Download, Search } from '@element-plus/icons-vue';
@@ -96,9 +96,9 @@ import ResourceManagerDialog from '../components/ResourceManagerDialog.vue';
 import DomainDetailDrawer from '../components/DomainDetailDrawer.vue';
 import { createDomain, updateDomain, deleteDomain, type DomainData } from '../api/domains';
 import { getWriteQueue } from '../utils/writeQueue';
+import { api, ApiError } from '../utils/request';
 
 interface AlertConfig { tg_token: string; tg_userid: string; days: number; }
-interface ApiResponse<T = any> { status: number; message: string; data: T; }
 
 const router = useRouter();
 const auth = useAuth();
@@ -178,12 +178,11 @@ const handleSeoToday = async (row: DomainData) => { if (!row.id) return; const d
 const markSeoById = (id: number) => { const row = domains.value.find(item => item.id === id); if (row) void handleSeoToday(row); };
 const providerLabel = (value: string) => ({ github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }[value] || value);
 const platformText = (row: DomainData) => row.platform === '其他' ? (row.platform_other || '其他') : row.platform;
-const handleUnauthorized = (response: Response) => { if (response.status !== 401) return false; auth.clearAuth(); router.push({ name: 'Login' }); return true; };
 const syncNow = async () => { try { if (!auth.getAuthToken()) throw new Error('请先重新登录'); await queue.flush(); if (queue.pending.value.length) throw new Error('部分任务仍未同步，任务已保留在本机'); await reloadAll(); ElMessage.success('待同步数据已写入') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '同步失败，任务仍保留在本机') } };
 const retryFailedWrites = async () => { queue.retryFailed(); await syncNow(); };
-const loadAdsenseAccounts = async () => { try { const authData=auth.getAuthToken(); const month=localDate().slice(0,7); const response=await fetch(`/api/adsense/accounts?month=${month}`,{headers:{'Authorization':`Bearer ${authData?.token || ''}`}}); if (handleUnauthorized(response)) return; const result=await response.json() as any; if (response.ok && result.status === 200) adsenseAccounts.value=result.data || []; else throw new Error(result.message || '获取 AdSense 账号失败'); } catch(error) { console.error('获取 AdSense 账号失败:', error); } };
-const loadDashboard = async () => { try { const authData = auth.getAuthToken(); const today = localDate(); const response = await fetch(`/api/dashboard/summary?today=${today}&month=${today.slice(0,7)}`, { headers: { Authorization: `Bearer ${authData?.token || ''}` } }); if (handleUnauthorized(response)) return; const result = await response.json() as ApiResponse<DashboardData>; if (response.ok && result.status === 200 && result.data) dashboard.value = result.data; else throw new Error(result.message || '获取首页概览失败'); } catch (error) { console.error('获取首页概览失败:', error); } };
-const loadResourceLinks = async () => { try { const authData = auth.getAuthToken(); const [linksResponse, accountsResponse] = await Promise.all([fetch('/api/resources/links', { headers: { Authorization: `Bearer ${authData?.token || ''}` } }), fetch('/api/resources/accounts', { headers: { Authorization: `Bearer ${authData?.token || ''}` } })]); if (handleUnauthorized(linksResponse) || handleUnauthorized(accountsResponse)) return; const linksResult = await linksResponse.json() as ApiResponse<ResourceLinkData[]>; const accountsResult = await accountsResponse.json() as ApiResponse<ResourceAccountData[]>; if (!linksResponse.ok || linksResult.status !== 200 || !accountsResponse.ok || accountsResult.status !== 200) throw new Error(linksResult.message || accountsResult.message || '读取资源关联失败'); resourceLinks.value = linksResult.data || []; resourceAccounts.value = accountsResult.data || []; } catch (error) { console.error('获取资源关联失败:', error); } };
+const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await api.get(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); } catch(error) { console.error('获取 AdSense 账号失败:', error); } };
+const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await api.get(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); } catch (error) { console.error('获取首页概览失败:', error); } };
+const loadResourceLinks = async () => { try { [resourceLinks.value, resourceAccounts.value] = await Promise.all([api.get<ResourceLinkData[]>('/api/resources/links'), api.get<ResourceAccountData[]>('/api/resources/accounts')]); } catch (error) { console.error('获取资源关联失败:', error); } };
 const reloadAll = async () => { await Promise.all([loadDomains(), loadAdsenseAccounts(), loadDashboard(), loadResourceLinks()]); };
 
 const handleDelete = async (row: DomainData) => {
@@ -205,27 +204,17 @@ const handleDialogSubmit = async (formData: Omit<DomainData, 'id' | 'created_at'
         }
         dialogVisible.value = false;
         await loadDomains();
-    } catch (error: any) { ElMessage.error(error.response?.data?.message || '操作失败'); }
+    } catch (error: unknown) { ElMessage.error(error instanceof Error ? error.message : '操作失败'); }
 };
 
 const loadDomains = async () => {
     loading.value = true;
     loadError.value = '';
     try {
-        const authData = auth.getAuthToken();
-        if (!authData) throw new Error('未登录或登录已过期');
-        const response = await fetch('/api/domains', { headers: { 'Authorization': `Bearer ${authData.token}` } });
-        if (!response.ok) {
-            if (handleUnauthorized(response)) throw new Error('登录状态无效，请重新登录');
-            const errorData = await response.json() as { message: string };
-            throw new Error(errorData.message || '请求失败');
-        }
-        const result = await response.json() as ApiResponse<DomainData[]>;
-        if (result.status !== 200) throw new Error(result.message || '请求失败');
-        domains.value = result.data || [];
+        domains.value = await api.get<DomainData[]>('/api/domains');
     } catch (error: any) {
         loadError.value = error.message || '加载域名列表失败，请重试。';
-        if (error.message.includes('授权') || error.message.includes('令牌')) { auth.clearAuth(); router.push({ name: 'Login' }); }
+        if (error instanceof ApiError && error.status === 401) { auth.clearAuth(); router.push({ name: 'Login' }); }
     } finally {
         loading.value = false;
     }
@@ -252,18 +241,14 @@ const expiryClass = (expiryDate: string) => {
 
 const handleConfigSubmit = async (config: AlertConfig) => {
     try {
-        const authData = auth.getAuthToken();
-        if (!authData) throw new Error('未登录或登录已过期');
-        const response = await fetch('/api/alertconfig', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authData.token}` }, body: JSON.stringify(config) });
-        const result = await response.json() as ApiResponse;
-        if (result.status !== 200) throw new Error(result.message || '保存失败');
+        await api.post('/api/alertconfig', config);
         ElMessage.success('配置保存成功');
         alertDays.value = config.days;
         alertConfig.value = config;
     } catch (error: unknown) {
         const errorMessage = error instanceof Error ? error.message : '保存配置失败';
         ElMessage.error(errorMessage);
-        if (errorMessage.includes('授权') || errorMessage.includes('令牌')) { auth.clearAuth(); router.push({ name: 'Login' }); }
+        if (error instanceof ApiError && error.status === 401) { auth.clearAuth(); router.push({ name: 'Login' }); }
     }
 };
 
@@ -273,14 +258,9 @@ const handleRefresh = async () => {
     try {
         const checkDomainStatus = async (domain: string): Promise<string> => {
             try {
-                const authData = auth.getAuthToken();
-                if (!authData) throw new Error('未授权');
-                const response = await fetch('/api/domains/check', { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authData.token}` }, body: JSON.stringify({ domain }) });
-                if (handleUnauthorized(response)) throw new Error('登录状态无效，请重新登录');
-                if (!response.ok) throw new Error(`状态检查 API 失败：${response.status}`);
-                const result = await response.json() as ApiResponse<{ status: string }>;
-                if (result.status !== 200 || !result.data || !['在线', '离线'].includes(result.data.status)) throw new Error(result.message || '状态检查结果无效');
-                return result.data.status;
+                const result = await api.post<{ status: string }>('/api/domains/check', { domain });
+                if (!['在线', '离线'].includes(result.status)) throw new Error('状态检查结果无效');
+                return result.status;
             } catch (error) { throw error; }
         };
         let checkedCount = 0;
@@ -312,13 +292,10 @@ const handleRefresh = async () => {
 
 const loadAlertConfig = async () => {
     try {
-        const authData = auth.getAuthToken();
-        if (!authData) return;
-        const response = await fetch('/api/alertconfig', { headers: { 'Authorization': `Bearer ${authData.token}` } });
-        const result = await response.json() as ApiResponse<AlertConfig>;
-        if (result.status === 200 && result.data) {
-            alertConfig.value = result.data;
-            alertDays.value = result.data.days;
+        const result = await api.get<AlertConfig>('/api/alertconfig');
+        if (result) {
+            alertConfig.value = result;
+            alertDays.value = result.days;
         }
     } catch (error) { console.error('获取告警配置失败:', error); }
 };
@@ -326,13 +303,8 @@ const loadAlertConfig = async () => {
 const handleExport = async () => {
     const loading = ElMessage.info({ message: '正在准备导出数据...', duration: 0 });
     try {
-        const authData = auth.getAuthToken();
-        if (!authData) throw new Error('未登录或登录已过期');
-        const response = await fetch('/api/export/snapshot', { headers: { 'Authorization': `Bearer ${authData.token}` } });
-        const result = await response.json() as ApiResponse<any>;
-        if (!response.ok || result.status !== 200) throw new Error(result.message || '导出失败');
+        const snapshot = await api.get<any>('/api/export/snapshot');
         const XLSX = await import('xlsx');
-        const snapshot = result.data || {};
         const workbook = XLSX.utils.book_new();
         const sensitiveKey = /pass(word)?|token|ciphertext|secret|credential/i;
         const safeRows = (rows: unknown[]) => rows.map(row => Object.fromEntries(Object.entries((row || {}) as Record<string, unknown>).filter(([key]) => !sensitiveKey.test(key))));
@@ -363,12 +335,9 @@ const handleExport = async () => {
 
 const handleJsonExport = async () => {
     try {
-        const authData = auth.getAuthToken();
-        if (!authData) throw new Error('未登录或登录已过期');
-        const response = await fetch('/api/domains/export', { headers: { 'Authorization': `Bearer ${authData.token}` } });
-        if (!response.ok) { const errorData = await response.json() as { message: string }; throw new Error(errorData.message || '导出失败'); }
-        const filename = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `domains-export.json`;
-        const blob = await response.blob();
+        const download = await api.download('/api/domains/export');
+        const filename = download.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `domains-export.json`;
+        const blob = download.blob;
         const url = window.URL.createObjectURL(blob);
         const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); window.URL.revokeObjectURL(url);
         ElMessage.success('JSON 备份已导出');
@@ -376,7 +345,6 @@ const handleJsonExport = async () => {
 };
 
 onMounted(() => {
-    document.documentElement.classList.add('dm-home-route');
     checkLoginStatus();
     void loadDomains();
     void loadAlertConfig();
@@ -384,8 +352,5 @@ onMounted(() => {
     void loadDashboard();
     void loadResourceLinks();
     void queue.flush();
-});
-onBeforeUnmount(() => {
-    document.documentElement.classList.remove('dm-home-route');
 });
 </script>

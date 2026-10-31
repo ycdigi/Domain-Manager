@@ -167,6 +167,8 @@ npm run db:verify:remote
 
 状态写入会按日期去重；SEO 和点击修改使用浏览器本地队列，最多保留 200 项，每批最多 25 项。重复字段变更会合并，断网或 D1 临时失败会保留待同步任务。资源状态由 D1 关联触发器维护。AdSense 月收入按账号和月份保存，不分摊到单个网站。首页“导出”会生成包含域名、操作、AdSense、收入、资源关联和 AI 记录的多工作表 Excel，不包含密码、API Token、Provider Token、凭据密文或加密密钥。
 
+前端清理审计使用 `npm run lint:cleanup`，检查旧接口引用、CSS 类来源、模板内联样式、共享 token 重复定义，以及写入队列与批量 API 的字段一致性。
+
 后端登录令牌现在由 `USER` 和 `PASS` 签名。首次部署此版本后，旧浏览器会话需要重新登录一次；之后仍会在同一浏览器长期保留，直到登出、清除站点数据或轮换 `PASS`。
 
 7. 部署
@@ -183,7 +185,7 @@ npm run db:verify:remote
 **方法**: GET 或 POST
 **认证**: 需要 `Authorization: Bearer your_api_token` Header。不要把 Token 放在 URL 中，URL 可能被记录在代理、分析和请求日志中。
 
-`/api/addrec` 同样使用 Bearer Token Header。旧的 `?token=` 方式已停用，定时任务需要改为发送 `Authorization` 请求头。
+外部定时检查使用 Bearer Token Header。旧的 `?token=` 方式已停用，定时任务需要发送 `Authorization` 请求头。
 
 响应：
 ```json
@@ -200,33 +202,6 @@ npm run db:verify:remote
             }
         ]
     }
-}
-```
-
-### 2. 域名列表 API
-
-**端点**: `/api/addrec`
-**方法**: POST
-**认证**: 需要 Bearer Token
-
-响应：
-```json
-{
-    "status": 200,
-    "message": "获取成功",
-    "data": [
-        {
-            "id": 1,
-            "domain": "example.com",
-            "registrar": "Cloudflare",
-            "registrar_link": "https://cloudflare.com",
-            "registrar_date": "2023-01-01",
-            "expiry_date": "2024-01-01",
-            "service_type": "网站",
-            "status": "在线",
-            "memo": "主站"
-        }
-    ]
 }
 ```
 

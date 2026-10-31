@@ -63,11 +63,9 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { useRouter } from 'vue-router'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile, UploadProps } from 'element-plus'
-import type { ApiResponse } from '../utils/request'
-import { useAuth } from '../utils/auth'
+import { api } from '../utils/request'
 
 // 定义导入结果类型
 interface ImportError {
@@ -92,7 +90,6 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:visible', 'success'])
-const router = useRouter()
 
 const dialogVisible = ref(false)
 const loading = ref(false)
@@ -134,25 +131,11 @@ const clearFile = () => {
 }
 
 const sendImport = async (dryRun: boolean) => {
-    const auth = useAuth()
-    const authData = auth.getAuthToken()
-    if (!authData?.token) throw new Error('未登录或登录已过期')
     const formData = new FormData()
     formData.append('file', selectedFile.value!)
-    const response = await fetch(`/api/domains/import${dryRun ? '?dry_run=1' : ''}`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${authData.token}` },
-        body: formData
-    })
-    const result = await response.json() as ApiResponse<ImportResult>
-    if (response.status === 401) {
-        auth.clearAuth()
-        await router.push({ name: 'Login' })
-        throw new Error('登录状态无效，请重新登录')
-    }
-    if (result.data) importResult.value = result.data
-    if (!response.ok || result.status >= 400) throw new Error(result.message || '导入失败')
-    return result.data
+    const result = await api.upload<ImportResult>(`/api/domains/import${dryRun ? '?dry_run=1' : ''}`, formData)
+    importResult.value = result
+    return result
 }
 
 const handleImport = async () => {

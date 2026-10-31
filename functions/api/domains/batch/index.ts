@@ -5,7 +5,8 @@ import { isValidDate, todayShanghaiDate } from '../../../utils/domain-validation
 type DomainPatch = { type: 'domain_patch'; id: number; fields: Record<string, unknown> }
 type LinkAdd = { type: 'resource_link_add'; domain_id: number; resource_id: number; role: string; is_primary?: number; memo?: string }
 type LinkRemove = { type: 'resource_link_remove'; id: number }
-type Operation = DomainPatch | LinkAdd | LinkRemove
+type DomainOperationAdd = { type: 'domain_operation_add'; domain_id: number; operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他' }
+type Operation = DomainPatch | DomainOperationAdd | LinkAdd | LinkRemove
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const validStatus = (value: unknown) => value === '在线' || value === '离线'
@@ -62,6 +63,12 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     changedValues.push(fields.seo_last_date)
                 }
                 statements.push(context.env.DB.prepare(`UPDATE domains SET ${assignments.join(', ')} WHERE id = ? AND (${changed.join(' OR ')})`).bind(...values, operation.id, ...changedValues))
+            } else if (operation.type === 'domain_operation_add') {
+                if (!Number.isInteger(operation.domain_id) || !isValidDate(operation.operation_date) || !['SEO', '内容', '技术', '其他'].includes(operation.operation_kind)) return json(null, 400, '操作日期格式无效')
+                statements.push(context.env.DB.prepare(`
+                    INSERT OR IGNORE INTO domain_operations (domain_id, operation_date, operation_kind)
+                    SELECT ?, ?, ? WHERE EXISTS (SELECT 1 FROM domains WHERE id = ?)
+                `).bind(operation.domain_id, operation.operation_date, operation.operation_kind, operation.domain_id))
             } else if (operation.type === 'resource_link_add') {
                 if (!Number.isInteger(operation.domain_id) || !Number.isInteger(operation.resource_id) || typeof operation.role !== 'string' || !operation.role.trim()) return json(null, 400, '资源关联格式无效')
                 const valid = await context.env.DB.prepare(`SELECT

@@ -21,7 +21,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, defineProps, defineEmits, watch } from 'vue'
+import { ref, watch } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
 
 interface AlertConfigForm {

@@ -1,2 +1,2 @@
 /* Shared workbench container; product-specific chrome is intentionally omitted. */
-html:is(.dm-ui, .dm-home-route) .workspace { width: 100%; max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
+html.dm-ui .workspace { width: 100%; max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }

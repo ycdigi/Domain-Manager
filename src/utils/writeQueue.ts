@@ -1,9 +1,9 @@
 import { ref } from 'vue'
 import { useAuth } from './auth'
-import router from '../router'
+import { api, ApiError } from './request'
 
 type OperationData = {
-    type: 'domain_patch' | 'resource_link_add' | 'resource_link_remove'
+    type: 'domain_patch' | 'domain_operation_add' | 'resource_link_add' | 'resource_link_remove'
     id?: number
     domain_id?: number
     resource_id?: number
@@ -11,6 +11,8 @@ type OperationData = {
     is_primary?: number
     memo?: string
     fields?: Record<string, unknown>
+    operation_date?: string
+    operation_kind?: 'SEO' | '内容' | '技术' | '其他'
 }
 type QueueItem = { queueId: string; operation: OperationData; blocked?: boolean; error?: string }
 
@@ -33,7 +35,7 @@ const initialize = () => {
             : { queueId: crypto.randomUUID(), operation: entry })
             .map(item => {
                 if (item.operation.type !== 'domain_patch') return item
-                const allowed = Object.fromEntries(Object.entries(item.operation.fields || {}).filter(([key]) => ['status', 'daily_clicks', 'seo_last_date'].includes(key)))
+                const allowed = Object.fromEntries(Object.entries(item.operation.fields || {}).filter(([key]) => ['status', 'last_status_check_at', 'daily_clicks', 'clicks_updated_date', 'seo_last_date'].includes(key)))
                 return { ...item, operation: { ...item.operation, fields: allowed } }
             })
             .filter(item => item.operation.type !== 'domain_patch' || Object.keys(item.operation.fields || {}).length > 0)
@@ -44,6 +46,7 @@ const initialize = () => {
 const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(pending.value))
 const keyOf = (operation: OperationData) => {
     if (operation.type === 'domain_patch') return `domain:${operation.id}`
+    if (operation.type === 'domain_operation_add') return `operation:${operation.domain_id}:${operation.operation_date}:${operation.operation_kind}`
     if (operation.type === 'resource_link_remove') return `link:remove:${operation.id}`
     return `link:add:${operation.domain_id}:${operation.resource_id}:${operation.role}`
 }
@@ -81,27 +84,13 @@ const runFlush = async () => {
             let completed = false
             for (let attempt = 0; attempt <= 4 && !completed; attempt++) {
                 try {
-                    const response = await fetch('/api/domains/batch', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${auth.token}` },
-                        body: JSON.stringify({ operations: chunk.map(item => item.operation) })
-                    })
-                    const result = await response.json() as { status?: number; message?: string }
-                    if (!response.ok || (result.status ?? response.status) >= 400) {
-                        if (response.status === 401) {
-                            useAuth().clearAuth()
-                            void router.push('/login')
-                            throw Object.assign(new Error(result.message || '登录状态无效，请重新登录'), { retryable: false })
-                        }
-                        if (response.status < 500) throw Object.assign(new Error(result.message || `同步失败: ${response.status}`), { retryable: false })
-                        throw new Error(result.message || `同步失败: ${response.status}`)
-                    }
+                    await api.post('/api/domains/batch', { operations: chunk.map(item => item.operation) })
                     const ids = new Set(chunk.map(item => item.queueId))
                     pending.value = pending.value.filter(item => !ids.has(item.queueId))
                     persist()
                     completed = true
                 } catch (error) {
-                    const retryable = (error as { retryable?: boolean }).retryable !== false
+                    const retryable = error instanceof ApiError ? error.status >= 500 || error.status === 0 : true
                     if (!retryable || attempt === 4) {
                         const message = error instanceof Error ? error.message : '同步失败'
                         chunk.forEach(item => {

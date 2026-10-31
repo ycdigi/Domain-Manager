@@ -27,12 +27,7 @@ import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAuth } from '../utils/auth'
 import { User, Lock } from '@element-plus/icons-vue'
-
-interface ApiResponse<T = any> {
-    status: number
-    message: string
-    data: T
-}
+import { publicApi } from '../utils/request'
 
 interface LoginResponse {
     token: string
@@ -60,28 +55,20 @@ const handleLogin = async () => {
     submitting.value = true
     loginError.value = ''
     try {
-        const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
+        const result = await publicApi.post<LoginResponse>('/api/login', {
                 username: loginForm.value.username,
                 password: loginForm.value.password
             })
-        })
 
-        const result = await response.json() as ApiResponse<LoginResponse>
-
-        if (result.status === 200 && result.data?.token) {
-            auth.setAuthToken(result.data.token)
+        if (result?.token) {
+            auth.setAuthToken(result.token)
             await router.push({ name: 'Home' })
         } else {
-            loginError.value = result.message || '用户名或密码错误'
+            loginError.value = '用户名或密码错误'
         }
     } catch (error) {
         console.error('Login error:', error)
-        loginError.value = '登录失败，请重试。'
+        loginError.value = error instanceof Error ? error.message : '登录失败，请重试。'
     } finally {
         submitting.value = false
     }

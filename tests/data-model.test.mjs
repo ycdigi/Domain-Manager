@@ -113,6 +113,21 @@ test('AI sync endpoint only exposes operational fields and does not query creden
   assert.doesNotMatch(source, /provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|TELEGRAM_BOT_TOKEN/)
 })
 
+test('legacy addrec endpoint is removed while supported endpoints remain', () => {
+  assert.equal(fs.existsSync(path.join(repo, 'functions/api/addrec/index.ts')), false)
+  assert.equal(fs.existsSync(path.join(repo, 'functions/api/check/index.ts')), true)
+  assert.equal(fs.existsSync(path.join(repo, 'functions/api/domains/export.ts')), true)
+})
+
+test('write queue and batch API share the operation-date contract', () => {
+  const queue = fs.readFileSync(path.join(repo, 'src/utils/writeQueue.ts'), 'utf8')
+  const batch = fs.readFileSync(path.join(repo, 'functions/api/domains/batch/index.ts'), 'utf8')
+  assert.match(queue, /domain_operation_add/)
+  assert.match(batch, /domain_operation_add/)
+  assert.match(queue, /operation_date/)
+  assert.match(batch, /operation_kind/)
+})
+
 test('dashboard income remains one account-month total when it has multiple sites', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/dashboard.db'
   try {

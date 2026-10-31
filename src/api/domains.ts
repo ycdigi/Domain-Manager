@@ -37,28 +37,22 @@ export interface DomainData {
     created_at?: string
 }
 
-interface ApiResponse<T = any> {
-    status: number
-    message: string
-    data: T
-}
-
 // 获取域名列表
 export const getDomains = () => {
-    return request.get<ApiResponse<DomainData[]>>('/api/domains')
+    return request.get<DomainData[]>('/api/domains')
 }
 
 // 创建域名
 export const createDomain = (data: Omit<DomainData, 'id' | 'created_at'>) => {
-    return request.post<ApiResponse<DomainData>>('/api/domains', data)
+    return request.post<DomainData>('/api/domains', data)
 }
 
 // 更新域名
 export const updateDomain = (id: number, data: Omit<DomainData, 'id' | 'created_at'>) => {
-    return request.put<ApiResponse<DomainData>>(`/api/domains/${id}`, data)
+    return request.put<DomainData>(`/api/domains/${id}`, data)
 }
 
 // 删除域名
 export const deleteDomain = (id: number) => {
-    return request.delete<ApiResponse<void>>(`/api/domains/${id}`)
+    return request.delete<void>(`/api/domains/${id}`)
 }
