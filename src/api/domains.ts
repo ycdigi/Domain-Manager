@@ -12,6 +12,16 @@ export interface DomainData {
     tgsend: number
     st_tgsend: number
     memo: string
+    adsense_account_id: number | null
+    adsense_connected: '未知' | '已开通' | '未开通'
+    adsense_opened_date: string | null
+    seo_last_date: string | null
+    daily_clicks: number | null
+    clicks_updated_date: string | null
+    last_status_check_at: string | null
+    resource_status: string
+    resource_count?: number
+    resource_names?: string | null
     created_at?: string
 }
 
@@ -39,4 +49,4 @@ export const updateDomain = (id: number, data: Omit<DomainData, 'id' | 'created_
 // 删除域名
 export const deleteDomain = (id: number) => {
     return request.delete<ApiResponse<void>>(`/api/domains/${id}`)
-} 
+}

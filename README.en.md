@@ -91,10 +91,18 @@ During import, the system will automatically validate the data format and provid
 6.Initialize the Database
 - In the Cloudflare Dashboard, go to the D1 section.
 - Select your database.
-- Execute the SQL statements from the root `schema.sql` file. It is repeatable and does not drop existing domain data.
+- For a new database, execute the root `schema.sql`. For an existing database, apply versioned migrations in order; do not use the initial schema as an upgrade script.
 - If an older `domains` table does not have the `st_tgsend` column, run `schema-migration-v1.0.2.sql` once.
+- To add the AdSense and SEO fields to an existing database, run `schema-migration-v1.1.0.sql` once. Do not run that migration twice.
+- To add infrastructure accounts, resource links, encrypted credentials, and click fields, run `schema-migration-v1.2.0.sql` once. Do not run that migration twice.
+- Before v1.3.0, check `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`. Resolve any duplicate domain rows manually, then run `schema-migration-v1.3.0.sql` once for status-alert tracking, resource-status triggers, and revised indexes.
+- Add a Pages Secret named `CREDENTIAL_ENCRYPTION_KEY` with at least 32 random characters (for example, generate locally with `openssl rand -hex 32`) to encrypt GitHub tokens. Do not add it as a public text variable.
 
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
+
+`CREDENTIAL_ENCRYPTION_KEY` encrypts stored GitHub tokens. Keep an independent backup. If it is lost or replaced, existing ciphertext cannot be decrypted and those tokens must be entered again.
+
+Server login tokens are now signed with `USER` and `PASS`. Sign in once after deploying this version to replace any older unsigned browser session. The new session remains valid in that browser until logout, site data is cleared, or `PASS` is rotated.
 
 7.Deploy
 - Click "Save and Deploy".
@@ -104,10 +112,7 @@ After deployment is complete, you can access the system via the domain provided 
 ### 1. Domain Check API
 **Endpoint**:`/api/check`
 **Method**: GET or POST
-**Authentication**: Requires an API Token (via URL parameter or Bearer Token).
-Authentication methods (choose one):
-URL Parameter:`/api/check?token=your_token`
-Bearer Token:`Authorization: Bearer your_token`
+**Authentication**: Requires `Authorization: Bearer your_api_token`. Do not put the token in the URL because request URLs can be recorded in proxy, analytics, and access logs. `/api/addrec` also requires this Bearer header.
 Response:
 ```json
 {

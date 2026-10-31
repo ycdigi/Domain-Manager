@@ -62,7 +62,8 @@
 
 <script setup lang="ts">
 import { ref, watch } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useRouter } from 'vue-router'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile, UploadProps } from 'element-plus'
 import type { ApiResponse } from '../utils/request'
@@ -76,6 +77,8 @@ interface ImportError {
 
 interface ImportResult {
     total: number;
+    created?: number;
+    updated?: number;
     success: number;
     failed: number;
     errors: ImportError[];
@@ -89,6 +92,7 @@ const props = defineProps({
 })
 
 const emit = defineEmits(['update:visible', 'success'])
+const router = useRouter()
 
 const dialogVisible = ref(false)
 const loading = ref(false)
@@ -129,6 +133,28 @@ const clearFile = () => {
     fileList.value = []
 }
 
+const sendImport = async (dryRun: boolean) => {
+    const auth = useAuth()
+    const authData = auth.getAuthToken()
+    if (!authData?.token) throw new Error('未登录或登录已过期')
+    const formData = new FormData()
+    formData.append('file', selectedFile.value!)
+    const response = await fetch(`/api/domains/import${dryRun ? '?dry_run=1' : ''}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${authData.token}` },
+        body: formData
+    })
+    const result = await response.json() as ApiResponse<ImportResult>
+    if (response.status === 401) {
+        auth.clearAuth()
+        await router.push({ name: 'Login' })
+        throw new Error('登录状态无效，请重新登录')
+    }
+    if (result.data) importResult.value = result.data
+    if (!response.ok || result.status >= 400) throw new Error(result.message || '导入失败')
+    return result.data
+}
+
 const handleImport = async () => {
     if (!selectedFile.value) {
         ElMessage.warning('请先选择一个文件')
@@ -137,38 +163,19 @@ const handleImport = async () => {
 
     loading.value = true
     try {
-        const formData = new FormData()
-        formData.append('file', selectedFile.value)
-
-        // 获取 token
-        const auth = useAuth()
-        const authData = auth.getAuthToken()
-        if (!authData || !authData.token) {
-            throw new Error('未登录或登录已过期')
+        const preview = await sendImport(true)
+        if (!preview) return
+        if (preview.failed) {
+            ElMessage.warning('预览发现错误，尚未写入数据')
+            return
         }
-
-        const response = await fetch('/api/domains/import', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${authData.token}`
-            },
-            body: formData
-        })
-
-        const result = await response.json() as ApiResponse<ImportResult>
-        if (result.status !== 200) {
-            throw new Error(result.message || '导入失败')
-        }
-
-        importResult.value = result.data
-
-        // 导入成功后通知父组件刷新数据
-        if (result.data.success > 0) {
+        await ElMessageBox.confirm(`将新增 ${preview.created || 0} 个域名、更新 ${preview.updated || 0} 个域名。确认导入？`, '导入预览', { type: 'warning', confirmButtonText: '确认导入' })
+        const result = await sendImport(false)
+        if (result.success > 0) {
             emit('success')
         }
-    } catch (error: any) {
-        ElMessage.error(error.message || '导入失败')
-        console.error('导入失败:', error)
+    } catch (error: unknown) {
+        if (error !== 'cancel' && error !== 'close') ElMessage.error(error instanceof Error ? error.message : '导入失败')
     } finally {
         loading.value = false
     }

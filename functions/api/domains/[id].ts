@@ -1,5 +1,6 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
+import { normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
 
 export const onRequestPut: PagesFunction<Env> = async (context) => {
     try {
@@ -9,16 +10,13 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
         const id = context.params.id as string
         const data = await context.request.json() as Domain
 
-        // 验证必填字段
-        const requiredFields = ['domain', 'registrar', 'registrar_date', 'expiry_date', 'service_type', 'status'] as const
-        for (const field of requiredFields) {
-            if (!data[field]) {
-                return Response.json({
-                    status: 400,
-                    message: `${field} 是必填字段`,
-                    data: null
-                }, { status: 400 })
-            }
+        const validationError = validateDomain(data)
+        if (validationError) return Response.json({ status: 400, message: validationError, data: null }, { status: 400 })
+        const duplicate = await context.env.DB.prepare("SELECT id FROM domains WHERE lower(rtrim(domain, '.')) = ? AND id != ? LIMIT 1").bind(normalizeDomain(data.domain), id).first()
+        if (duplicate) return Response.json({ status: 409, message: '该域名已存在', data: null }, { status: 409 })
+        if (data.adsense_account_id != null) {
+            const account = await context.env.DB.prepare('SELECT id FROM adsense_accounts WHERE id = ?').bind(data.adsense_account_id).first()
+            if (!account) return Response.json({ status: 400, message: 'AdSense 账号不存在', data: null }, { status: 400 })
         }
 
         const result = await context.env.DB.prepare(`
@@ -32,11 +30,17 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
                 status = ?,
                 tgsend = ?,
                 st_tgsend = ?,
-                memo = ?
+                memo = ?,
+                adsense_account_id = ?,
+                adsense_connected = ?,
+                adsense_opened_date = ?,
+                seo_last_date = ?,
+                daily_clicks = ?,
+                clicks_updated_date = CASE WHEN daily_clicks IS NOT ? THEN ? ELSE clicks_updated_date END
             WHERE id = ?
             RETURNING *
         `).bind(
-            data.domain,
+            normalizeDomain(data.domain),
             data.registrar,
             data.registrar_link || '',
             data.registrar_date,
@@ -46,6 +50,13 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
             data.tgsend || 0,
             data.st_tgsend ?? 1,
             data.memo || '',
+            data.adsense_account_id || null,
+            data.adsense_connected || '未知',
+            data.adsense_opened_date || null,
+            data.seo_last_date || null,
+            data.daily_clicks ?? null,
+            data.daily_clicks ?? null,
+            data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate()),
             id
         ).run<Domain>()
 
@@ -104,4 +115,4 @@ export const onRequestDelete: PagesFunction<Env> = async (context) => {
             data: null
         }, { status: 500 })
     }
-} 
+}

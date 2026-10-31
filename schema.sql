@@ -1,5 +1,5 @@
--- Safe initial schema for a new or existing D1 database.
--- This file is intentionally repeatable: it never drops existing domain data.
+-- Initial schema for a new D1 database. Upgrade existing databases with the
+-- versioned migration files instead of applying this file over an older schema.
 
 CREATE TABLE IF NOT EXISTS domains (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -13,6 +13,16 @@ CREATE TABLE IF NOT EXISTS domains (
     tgsend INTEGER DEFAULT 0,
     st_tgsend INTEGER DEFAULT 1,
     memo TEXT,
+    adsense_account_id INTEGER,
+    adsense_connected TEXT NOT NULL DEFAULT '未知',
+    adsense_opened_date TEXT,
+    seo_last_date TEXT,
+    daily_clicks INTEGER,
+    clicks_updated_date TEXT,
+    last_status_check_at DATETIME,
+    last_expiry_alert_date TEXT,
+    last_offline_alert_at DATETIME,
+    resource_status TEXT NOT NULL DEFAULT '未关联',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -23,3 +33,105 @@ CREATE TABLE IF NOT EXISTS alertcfg (
     days INTEGER NOT NULL DEFAULT 30,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS adsense_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    owner TEXT NOT NULL,
+    currency TEXT NOT NULL DEFAULT 'USD',
+    status TEXT NOT NULL DEFAULT '未知',
+    memo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS adsense_income (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    adsense_account_id INTEGER NOT NULL,
+    income_month TEXT NOT NULL,
+    amount REAL NOT NULL DEFAULT 0,
+    memo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (adsense_account_id, income_month),
+    FOREIGN KEY (adsense_account_id) REFERENCES adsense_accounts(id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_domains_adsense_account ON domains(adsense_account_id);
+CREATE INDEX IF NOT EXISTS idx_domains_seo_last_date ON domains(seo_last_date);
+CREATE INDEX IF NOT EXISTS idx_domains_expiry_date ON domains(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_domains_notifications ON domains(domain) WHERE tgsend = 1 OR st_tgsend = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_domains_normalized_name ON domains(lower(rtrim(domain, '.')));
+
+CREATE TABLE IF NOT EXISTS provider_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL CHECK (provider IN ('github', 'cloudflare', 'vhost', 'vps')),
+    name TEXT NOT NULL,
+    login_email TEXT,
+    status TEXT NOT NULL DEFAULT '正常',
+    memo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (provider, name)
+);
+
+CREATE TABLE IF NOT EXISTS provider_resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER,
+    provider TEXT NOT NULL CHECK (provider IN ('github', 'cloudflare', 'vhost', 'vps')),
+    name TEXT NOT NULL,
+    resource_url TEXT,
+    identifier TEXT,
+    ip_address TEXT,
+    port INTEGER,
+    region TEXT,
+    status TEXT NOT NULL DEFAULT '正常',
+    expires_at TEXT,
+    memo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (account_id, name),
+    FOREIGN KEY (account_id) REFERENCES provider_accounts(id) ON DELETE SET NULL
+);
+
+CREATE TABLE IF NOT EXISTS domain_resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain_id INTEGER NOT NULL,
+    resource_id INTEGER NOT NULL,
+    role TEXT NOT NULL DEFAULT '其他',
+    is_primary INTEGER NOT NULL DEFAULT 0,
+    memo TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (domain_id, resource_id, role),
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE,
+    FOREIGN KEY (resource_id) REFERENCES provider_resources(id) ON DELETE RESTRICT
+);
+
+CREATE TABLE IF NOT EXISTS provider_credentials (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id INTEGER NOT NULL,
+    label TEXT NOT NULL,
+    ciphertext TEXT NOT NULL,
+    token_last4 TEXT,
+    expires_at TEXT,
+    status TEXT NOT NULL DEFAULT '有效',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (account_id) REFERENCES provider_accounts(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_provider_resources_provider ON provider_resources(provider);
+CREATE INDEX IF NOT EXISTS idx_domain_resources_resource ON domain_resources(resource_id);
+CREATE INDEX IF NOT EXISTS idx_credentials_account ON provider_credentials(account_id);
+
+CREATE TRIGGER IF NOT EXISTS trg_domain_resource_insert
+AFTER INSERT ON domain_resources
+BEGIN
+    UPDATE domains SET resource_status = '已关联' WHERE id = NEW.domain_id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_domain_resource_delete
+AFTER DELETE ON domain_resources
+BEGIN
+    UPDATE domains
+    SET resource_status = CASE WHEN EXISTS (SELECT 1 FROM domain_resources WHERE domain_id = OLD.domain_id) THEN '已关联' ELSE '未关联' END
+    WHERE id = OLD.domain_id;
+END;

@@ -55,6 +55,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
                 }, { status: 400 })
             }
         }
+        if (!Number.isInteger(data.days) || data.days < 0 || data.days > 365 || typeof data.tg_token !== 'string' || typeof data.tg_userid !== 'string') {
+            return Response.json({ status: 400, message: '通知配置格式无效', data: null }, { status: 400 })
+        }
 
         // 检查是否已存在配置
         const { results } = await context.env.DB.prepare(

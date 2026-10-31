@@ -10,6 +10,7 @@ export interface Env {
     }
     TELEGRAM_BOT_TOKEN: string
     TELEGRAM_CHAT_ID: string
+    CREDENTIAL_ENCRYPTION_KEY?: string
 }
 
 export interface Domain {
@@ -24,5 +25,94 @@ export interface Domain {
     tgsend: number
     st_tgsend: number
     memo: string
+    adsense_account_id?: number | null
+    adsense_connected?: string
+    adsense_opened_date?: string | null
+    seo_last_date?: string | null
+    daily_clicks?: number | null
+    clicks_updated_date?: string | null
+    last_status_check_at?: string | null
+    last_expiry_alert_date?: string | null
+    last_offline_alert_at?: string | null
+    resource_status?: string
+    resource_count?: number
+    resource_names?: string | null
     created_at?: string
-} 
+}
+
+export interface AdsenseAccount {
+    id?: number
+    name: string
+    owner: string
+    currency: string
+    status: string
+    memo: string
+    created_at?: string
+    linked_domains?: number
+    current_income?: number
+}
+
+export interface AdsenseIncome {
+    id?: number
+    adsense_account_id: number
+    income_month: string
+    amount: number
+    memo: string
+    created_at?: string
+}
+
+export type ProviderType = 'github' | 'cloudflare' | 'vhost' | 'vps'
+
+export interface ProviderAccount {
+    id?: number
+    provider: ProviderType
+    name: string
+    login_email?: string | null
+    status: string
+    memo?: string
+    created_at?: string
+    updated_at?: string
+    resource_count?: number
+    linked_domain_count?: number
+    active_resource_count?: number
+}
+
+export interface ProviderResource {
+    id?: number
+    account_id?: number | null
+    provider: ProviderType
+    name: string
+    resource_url?: string | null
+    identifier?: string | null
+    ip_address?: string | null
+    port?: number | null
+    region?: string | null
+    status: string
+    expires_at?: string | null
+    memo?: string | null
+    account_name?: string | null
+    linked_domain_count?: number
+    created_at?: string
+    updated_at?: string
+}
+
+export interface DomainResourceLink {
+    id?: number
+    domain_id: number
+    resource_id: number
+    role: string
+    is_primary: number
+    memo?: string | null
+    resource?: ProviderResource
+}
+
+export interface ProviderCredential {
+    id?: number
+    account_id: number
+    label: string
+    token_last4?: string | null
+    expires_at?: string | null
+    status: string
+    created_at?: string
+    updated_at?: string
+}

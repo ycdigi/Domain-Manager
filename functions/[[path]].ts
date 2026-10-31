@@ -1,31 +1,27 @@
 import { Env } from './types'
+import { checkApiToken } from './utils/auth'
 
 export const onRequest: PagesFunction<Env> = async (context) => {
     try {
         const url = new URL(context.request.url)
 
+        if (context.request.method === 'OPTIONS') {
+            return new Response(null, {
+                headers: {
+                    'Access-Control-Allow-Origin': '*',
+                    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+                    'Access-Control-Allow-Headers': 'Content-Type, Authorization'
+                }
+            })
+        }
+
         // 如果是 API 请求，继续处理
         if (url.pathname.startsWith('/api/')) {
             // 对于 /api/check 和 /api/addrec，只验证 API_TOKEN
             if (url.pathname.startsWith('/api/check') || url.pathname.startsWith('/api/addrec')) {
-                const authHeader = context.request.headers.get('Authorization')
-                const tokenParam = url.searchParams.get('token')
-                const headerToken = authHeader?.replace('Bearer ', '')
-                const token = tokenParam || headerToken
-
-                if (!token || token !== context.env.API_TOKEN) {
-                    return new Response(JSON.stringify({
-                        status: 401,
-                        message: '无效的访问令牌',
-                        data: null
-                    }), {
-                        status: 401,
-                        headers: {
-                            'Content-Type': 'application/json'
-                        }
-                    })
-                }
-            } else {
+                const authError = await checkApiToken(context)
+                if (authError) return authError
+            } else if (url.pathname !== '/api/login') {
                 // 对于其他 API 请求，验证用户登录 token
                 const authHeader = context.request.headers.get('Authorization')
                 if (!authHeader || !authHeader.startsWith('Bearer ')) {
@@ -88,4 +84,4 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             }
         })
     }
-} 
+}

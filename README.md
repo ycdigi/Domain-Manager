@@ -105,10 +105,22 @@
 6. 初始化数据库
    - 在 Cloudflare Dashboard 中进入 D1 页面
    - 选择您的数据库
-   - 执行仓库根目录的 `schema.sql`。该文件可以重复执行，不会删除已有域名数据
+   - 新数据库执行仓库根目录的 `schema.sql`；已有数据库必须按版本顺序执行迁移文件，不要用初始 schema 覆盖旧结构
    - 如果数据库是旧版本且 `domains` 表还没有 `st_tgsend` 列，再单独执行一次 `schema-migration-v1.0.2.sql`
+   - 升级到 AdSense/SEO 字段时，对已有数据库再执行一次 `schema-migration-v1.1.0.sql`；该迁移文件不要重复执行
+   - 升级到基础设施账号、资源关联、Token 凭据和点击字段时，对已有数据库再执行一次 `schema-migration-v1.2.0.sql`；该迁移文件不要重复执行
+   - 先检查 `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`。若有结果，先人工合并重复域名；之后执行 `schema-migration-v1.3.0.sql`，此迁移只执行一次
+   - 在 Pages 项目中新增 Secret `CREDENTIAL_ENCRYPTION_KEY`，用于加密保存 GitHub Token；值需至少 32 个随机字符，例如本地运行 `openssl rand -hex 32` 生成；不要把它放进普通 Text 变量
 
 > `DB` 必须是 D1 database binding，不是 Variables and secrets 里的 Text 变量。绑定名称必须精确为 `DB`，修改绑定或表结构后需要重新部署 Pages 项目。
+
+`CREDENTIAL_ENCRYPTION_KEY` 是 GitHub Token 的加密密钥。请另行备份；丢失或更换后，已有密文无法解密，需要重新录入 Token。
+
+资源账号、资源和网站关联通过 `/api/resources/*` 管理；完整 Token 只在明确点击显示时返回，不包含在域名导出文件中。首页的状态刷新会限制并发，并通过 `/api/domains/batch` 合并变化后写入 D1。
+
+状态写入会按日期去重；SEO 和点击修改使用浏览器本地队列，最多保留 200 项，每批最多 25 项。重复字段变更会合并，断网或 D1 临时失败会保留待同步任务。资源状态由 D1 关联触发器维护。AdSense 月收入使用单独的“导出收入”操作，不会混进域名 JSON。
+
+后端登录令牌现在由 `USER` 和 `PASS` 签名。首次部署此版本后，旧浏览器会话需要重新登录一次；之后仍会在同一浏览器长期保留，直到登出、清除站点数据或轮换 `PASS`。
 
 7. 部署
    - 点击 "Save and Deploy"
@@ -122,11 +134,9 @@
 
 **端点**: `/api/check`
 **方法**: GET 或 POST
-**认证**: 需要 API Token（通过 URL 参数或 Bearer Token）
+**认证**: 需要 `Authorization: Bearer your_api_token` Header。不要把 Token 放在 URL 中，URL 可能被记录在代理、分析和请求日志中。
 
-认证方式（二选一）：
-1. URL 参数：`/api/check?token=your_token`
-2. Bearer Token：`Authorization: Bearer your_token`
+`/api/addrec` 同样使用 Bearer Token Header。旧的 `?token=` 方式已停用，定时任务需要改为发送 `Authorization` 请求头。
 
 响应：
 ```json

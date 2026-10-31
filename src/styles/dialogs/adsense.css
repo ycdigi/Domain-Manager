@@ -1,0 +1,9 @@
+.adsense-manager { min-width: 0; }
+.adsense-manager .manager-actions { display:flex; align-items:center; gap:8px; }
+.manager-toolbar { display:flex; justify-content:space-between; align-items:center; margin-bottom:var(--space-md); font-weight:600; }
+.account-form { padding:var(--space-sm); border:1px solid var(--color-rule); border-radius:var(--radius-control); margin-bottom:var(--space-md); }
+.income-panel { margin-top:var(--space-lg); padding-top:var(--space-md); border-top:1px solid var(--color-rule); }
+.income-panel h3 { margin:0 0 var(--space-sm); font-size:var(--text-md); }
+.income-entry { display:flex; gap:var(--space-xs); margin-bottom:var(--space-sm); }
+.income-entry .el-input, .income-entry .el-input-number { max-width:180px; }
+@media (max-width:600px) { .income-entry { flex-wrap:wrap; } .income-entry .el-input, .income-entry .el-input-number { max-width:none; flex:1 1 140px; } }

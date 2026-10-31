@@ -127,6 +127,9 @@
 - DomainDialog 和 AlertConfigDialog 删除重复 footer CSS，复用公共控件与响应式表单规则；字段、校验、props、事件和提交逻辑不变。
 - ImportDialog 的页面专用样式在 `styles/dialogs/import.css`，结果值来自既有 API，loading 使用 aria-busy，结果通过 status 公布，不重复弹成功 toast。桌面和移动端保留全部错误明细，长文件名／域名可换行。
 - Home 只加载 `styles/home/home.css` 的局部台账规则；原 `home/base.css` 已被公共页面基础替代，旧 `home/tokens.css` 已在第 1 批移动至 shared。
+- 本次数据扩展不改变视觉 token：Home 继续使用同一台账和横向滚动容器；AdSense 管理、筛选和 SEO 日期控件复用既有按钮、表单、表格与弹窗规则。
+- Home 现采用全屏工作台：域名台账作为主区，右侧为收入、SEO、点击分布和基础设施概览；移动端将右侧概览折叠为可滚动区，不新增营销式卡片或暗色主题。
+- 基础设施资源管理复用现有浅色弹窗、表格、按钮和状态语义；账号网站数使用去重统计，凭据完整值只在明确操作后显示。
 
 ## Login Variant
 - 使用相同顶栏、流式页脚、字体、语义色、控件、断点与容器。主内容区弹性占据可用高度，表单面板居中、宽 100%／最大 400px、1px rule 边框、8px 圆角、24px 内边距；600px 及以下内边距 16px。

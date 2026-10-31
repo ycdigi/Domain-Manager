@@ -1,5 +1,6 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
+import { normalizeDomain, todayShanghaiDate } from '../../utils/domain-validation'
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
     try {
@@ -7,15 +8,20 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         if (authError) return authError
 
         const { domain, status } = await context.request.json() as { domain: string, status: string }
+        if (typeof domain !== 'string' || !['在线', '离线'].includes(status)) return Response.json({ status: 400, message: '域名或状态无效', data: null }, { status: 400 })
 
+        const checkedDate = todayShanghaiDate()
         const result = await context.env.DB.prepare(`
-            UPDATE domains 
-            SET status = ? 
-            WHERE domain = ?
+            UPDATE domains
+            SET status = ?, last_status_check_at = ?
+            WHERE lower(rtrim(domain, '.')) = ? AND (status IS NOT ? OR date(last_status_check_at) IS NOT ?)
             RETURNING *
         `).bind(
             status,
-            domain
+            checkedDate,
+            normalizeDomain(domain),
+            status,
+            checkedDate
         ).run<Domain>()
 
         if (!result.success) {
@@ -35,4 +41,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data: null
         }, { status: 500 })
     }
-} 
+}

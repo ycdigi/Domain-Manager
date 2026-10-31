@@ -15,14 +15,43 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
         // 获取所有域名数据，排除 ID 字段
         const { results } = await context.env.DB.prepare(
-            'SELECT domain, registrar, registrar_link, registrar_date, expiry_date, service_type, status, memo, tgsend, st_tgsend FROM domains'
+            `SELECT domains.domain, domains.registrar, domains.registrar_link, domains.registrar_date,
+                    domains.expiry_date, domains.service_type, domains.status, domains.memo,
+                    domains.tgsend, domains.st_tgsend, domains.adsense_connected,
+                    domains.adsense_opened_date, domains.seo_last_date, domains.daily_clicks,
+                    domains.clicks_updated_date,
+                    adsense_accounts.name AS adsense_account,
+                    domains.id AS domain_id
+             FROM domains
+             LEFT JOIN adsense_accounts ON adsense_accounts.id = domains.adsense_account_id`
         ).all()
 
+        const { results: resourceRows } = await context.env.DB.prepare(`
+            SELECT dr.domain_id, r.provider, a.name AS account, r.name AS resource, r.resource_url,
+                   r.identifier, r.ip_address, r.port, r.region, r.status AS resource_status, dr.role
+            FROM domain_resources dr
+            JOIN provider_resources r ON r.id = dr.resource_id
+            LEFT JOIN provider_accounts a ON a.id = r.account_id
+            ORDER BY dr.domain_id, r.provider, r.name
+        `).all()
+        const grouped = new Map<number, unknown[]>()
+        for (const resource of resourceRows || []) {
+            const item = resource as { domain_id: number }
+            const list = grouped.get(item.domain_id) || []
+            const { domain_id, ...link } = item as any
+            list.push(link)
+            grouped.set(domain_id, list)
+        }
+        const enriched = (results || []).map((row: any) => {
+            const { domain_id, ...exportRow } = row
+            return { ...exportRow, resources: grouped.get(domain_id) || [] }
+        })
+
         // 返回 JSON 文件，直接输出 domains 数组
-        return new Response(JSON.stringify(results, null, 2), {
+        return new Response(JSON.stringify(enriched, null, 2), {
             headers: {
                 'Content-Type': 'application/json',
-                'Content-Disposition': `attachment; filename="domains-export-${new Date().toISOString().split('T')[0]}.json"`
+                'Content-Disposition': `attachment; filename="domains-export-${new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())}.json"`
             }
         })
     } catch (error) {
@@ -33,4 +62,4 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             data: null
         }, { status: 500 })
     }
-} 
+}

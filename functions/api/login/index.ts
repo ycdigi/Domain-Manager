@@ -1,4 +1,5 @@
 import { Env } from '../../types'
+import { issueSessionToken } from '../../utils/auth'
 
 interface LoginRequest {
     username: string
@@ -7,21 +8,11 @@ interface LoginRequest {
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
     try {
-        const { username, password } = await context.request.json() as LoginRequest
+        const body = await context.request.json() as Partial<LoginRequest>
+        const username = typeof body.username === 'string' ? body.username : ''
+        const password = typeof body.password === 'string' ? body.password : ''
         const expectedUsername = context.env.USER
         const expectedPassword = context.env.PASS
-
-        console.log('环境变量:', {
-            USER: expectedUsername,
-            PASS: expectedPassword
-        })
-
-        console.log('登录尝试:', {
-            providedUsername: username,
-            providedPassword: password,
-            usernameMatch: username === expectedUsername,
-            passwordMatch: password === expectedPassword
-        })
 
         if (!expectedUsername || !expectedPassword) {
             console.error('环境变量未设置:', {
@@ -36,10 +27,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         }
 
         if (username === expectedUsername && password === expectedPassword) {
-            const token = btoa(JSON.stringify({
-                username,
-                timestamp: new Date().getTime()
-            }))
+            const token = await issueSessionToken(username, expectedPassword)
 
             return Response.json({
                 status: 200,
@@ -61,4 +49,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data: null
         }, { status: 500 })
     }
-} 
+}

@@ -1,4 +1,7 @@
 import type { Env } from '../../types'
+import { checkApiToken } from '../../utils/auth'
+import { todayShanghaiDate } from '../../utils/domain-validation'
+import { checkSiteOnline } from '../../utils/site-check'
 
 interface AlertConfig {
     tg_token: string
@@ -11,26 +14,15 @@ interface Domain {
     expiry_date: string
     tgsend: number
     st_tgsend: number
+    status: string
+    last_expiry_alert_date: string | null
+    last_offline_alert_at: string | null
 }
 
 export const onRequestPost: PagesFunction<Env> = async (context) => {
     try {
-        // 验证 API Token
-        const url = new URL(context.request.url)
-        const tokenParam = url.searchParams.get('token')
-        const authHeader = context.request.headers.get('Authorization')
-        const headerToken = authHeader?.replace('Bearer ', '')
-
-        // 同时支持查询参数和 Bearer Token
-        const token = tokenParam || headerToken
-
-        if (!token || token !== context.env.API_TOKEN) {
-            return Response.json({
-                status: 401,
-                message: '未授权访问',
-                data: null
-            }, { status: 401 })
-        }
+        const authError = await checkApiToken(context)
+        if (authError) return authError
 
         console.log('开始执行域名检查...')
         const { results: configResults } = await context.env.DB.prepare(
@@ -55,80 +47,23 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
         // 获取所有域名
         const { results: domains } = await context.env.DB.prepare(
-            'SELECT domain, expiry_date, tgsend, st_tgsend FROM domains WHERE tgsend = 1 or st_tgsend = 1'
+            'SELECT domain, expiry_date, tgsend, st_tgsend, status, last_expiry_alert_date, last_offline_alert_at FROM domains WHERE tgsend = 1 or st_tgsend = 1'
         ).all<Domain>()
 
         console.log(`找到 ${domains.length} 个启用通知的域名`)
-        const notifiedDomains = []
+        const notifiedDomains: Array<{ domain: string; remainingDays: number; expiry_date: string }> = []
+        const today = todayShanghaiDate()
 
-        for (const domain of domains) {
-            const remainingDays = calculateRemainingDays(domain.expiry_date)
-            console.log(`检查域名 ${domain.domain}: 过期时间 ${domain.expiry_date}, 剩余天数 ${remainingDays}`)
+        const checkDomain = async (domain: Domain) => {
+            const remainingDays = calculateRemainingDays(domain.expiry_date, today)
+            const isOnline = await checkSiteOnline(domain.domain)
 
-            // 检查网站连通性
-            let isOnline = false
-            try {
-                const controller = new AbortController()
-                const timeoutPromise = new Promise<Response>((_, reject) => {
-                    setTimeout(() => {
-                        controller.abort()
-                        reject(new Error('Timeout'))
-                    }, 5000)
-                })
-
-                // 先尝试 HTTP 协议
-                const httpFetchPromise = fetch(`http://${domain.domain}`, {
-                    method: 'GET',
-                    redirect: 'follow',
-                    signal: controller.signal,
-                    headers: {
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept': '*/*'
-                    }
-                })
-
-                try {
-                    const response = await Promise.race([httpFetchPromise, timeoutPromise])
-                    if (response instanceof Response) {
-                        if (response.status >= 200 && response.status < 500) {
-                            isOnline = true
-                        }
-                    }
-                } catch (httpError) {
-                    console.error(`HTTP 检查域名 ${domain.domain} 失败:`, httpError)
-                    // 如果 HTTP 失败，尝试 HTTPS
-                    const httpsFetchPromise = fetch(`https://${domain.domain}`, {
-                        method: 'GET',
-                        redirect: 'follow',
-                        signal: controller.signal,
-                        headers: {
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        }
-                    })
-
-                    try {
-                        const response = await Promise.race([httpsFetchPromise, timeoutPromise])
-                        if (response instanceof Response) {
-                            if (response.status >= 200 && response.status < 500) {
-                                isOnline = true
-                            }
-                        }
-                    } catch (httpsError) {
-                        console.error(`HTTPS 检查域名 ${domain.domain} 失败:`, httpsError)
-                    }
-                }
-            } catch (error) {
-                console.error(`检查域名 ${domain.domain} 失败:`, error)
-            }
-
-            // 更新域名状态
             const newStatus = isOnline ? '在线' : '离线'
-            await context.env.DB.prepare(
-                'UPDATE domains SET status = ? WHERE domain = ?'
-            ).bind(newStatus, domain.domain).run()
+            let expiryAlertSent = false
+            let offlineAlertSent = false
 
             // 如果状态变为离线且启用了通知，发送 Telegram 消息
-            if (newStatus === '离线' && domain.st_tgsend === 1) {
+            if (newStatus === '离线' && domain.st_tgsend === 1 && (domain.status !== '离线' || !domain.last_offline_alert_at)) {
                 const message = `*🔔 Domains-Support 通知*\n\n` +
                     `⚠️ *域名服务离线告警*\n\n` +
                     `🌐 域名：\`${domain.domain}\`\n` +
@@ -138,14 +73,15 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 
                 try {
                     await sendTelegramMessage(config.tg_token, config.tg_userid, message)
+                    offlineAlertSent = true
                     console.log(`成功发送离线通知：${domain.domain}`)
                 } catch (error) {
-                    console.error(`发送离线通知失败:`, error)
+                    console.error(`发送离线通知失败：${domain.domain}`)
                 }
             }
 
             // 检查域名是否即将过期
-            if (remainingDays <= config.days && domain.tgsend === 1) {
+            if (remainingDays <= config.days && domain.tgsend === 1 && domain.last_expiry_alert_date !== today) {
                 console.log(`域名 ${domain.domain} 需要发送过期通知：剩余天数(${remainingDays}) <= 阈值(${config.days})`)
                 const message = `*🔔 Domains-Support通知*\n\n` +
                     `🌐 域名：\`${domain.domain}\`\n` +
@@ -156,6 +92,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
                 try {
                     console.log('准备发送过期通知...')
                     await sendTelegramMessage(config.tg_token, config.tg_userid, message)
+                    expiryAlertSent = true
                     console.log(`成功发送过期通知：${domain.domain}`)
                     notifiedDomains.push({
                         domain: domain.domain,
@@ -163,9 +100,24 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
                         expiry_date: domain.expiry_date
                     })
                 } catch (error) {
-                    console.error(`发送过期通知失败:`, error)
+                    console.error(`发送过期通知失败：${domain.domain}`)
                 }
             }
+
+            return context.env.DB.prepare(`
+                UPDATE domains SET status = ?, last_status_check_at = ?,
+                    last_expiry_alert_date = CASE WHEN ? = 1 THEN ? ELSE last_expiry_alert_date END,
+                    last_offline_alert_at = CASE WHEN ? = 1 THEN CURRENT_TIMESTAMP ELSE last_offline_alert_at END
+                WHERE domain = ? AND (status IS NOT ? OR date(last_status_check_at) IS NOT ? OR ? = 1 OR ? = 1)
+            `).bind(newStatus, today, Number(expiryAlertSent), today, Number(offlineAlertSent), domain.domain, newStatus, today, Number(expiryAlertSent), Number(offlineAlertSent))
+        }
+
+        const statusStatements: D1PreparedStatement[] = []
+        for (let index = 0; index < domains.length; index += 4) {
+            statusStatements.push(...await Promise.all(domains.slice(index, index + 4).map(checkDomain)))
+        }
+        for (let index = 0; index < statusStatements.length; index += 100) {
+            await context.env.DB.batch(statusStatements.slice(index, index + 100))
         }
 
         return Response.json({
@@ -189,13 +141,10 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
 // 添加对 GET 方法的支持
 export const onRequestGet: PagesFunction<Env> = onRequestPost
 
-function calculateRemainingDays(expiryDate: string): number {
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    const expiry = new Date(expiryDate)
-    expiry.setHours(0, 0, 0, 0)
-    const diffTime = expiry.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+function calculateRemainingDays(expiryDate: string, todayDate: string): number {
+    const expiry = Date.parse(`${expiryDate}T00:00:00Z`)
+    const today = Date.parse(`${todayDate}T00:00:00Z`)
+    const diffDays = Math.floor((expiry - today) / 86400000)
     return Math.max(0, diffDays)
 }
 
@@ -205,7 +154,6 @@ async function sendTelegramMessage(token: string, chatId: string, message: strin
     }
 
     const url = `https://api.telegram.org/bot${token}/sendMessage`
-    console.log('发送 Telegram 请求:', { url, chatId, messageLength: message.length })
 
     const response = await fetch(url, {
         method: 'POST',
@@ -219,12 +167,9 @@ async function sendTelegramMessage(token: string, chatId: string, message: strin
         }),
     })
 
-    const responseData = await response.json()
-
     if (!response.ok) {
-        console.error('Telegram API 响应错误:', responseData)
-        throw new Error(`Failed to send Telegram message: ${response.statusText}, Details: ${JSON.stringify(responseData)}`)
+        console.error('Telegram API request failed:', response.status)
+        throw new Error(`Telegram API request failed: ${response.status}`)
     }
 
-    console.log('Telegram API 响应:', responseData)
-} 
+}

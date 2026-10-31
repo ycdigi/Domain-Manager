@@ -19,6 +19,10 @@ const server = await createServer({
     appType: 'custom'
 })
 const { useAuth } = await server.ssrLoadModule('/src/utils/auth.ts')
+const { issueSessionToken, verifyToken, checkAuth, checkApiToken } = await server.ssrLoadModule('/functions/utils/auth.ts')
+const { validateDomain, normalizeDomain, isValidDate, todayShanghaiDate } = await server.ssrLoadModule('/functions/utils/domain-validation.ts')
+const { encryptCredential, decryptCredential } = await server.ssrLoadModule('/functions/utils/credentials.ts')
+const { onRequest: apiMiddleware } = await server.ssrLoadModule('/functions/[[path]].ts')
 
 beforeEach(() => store.clear())
 after(async () => {
@@ -39,7 +43,7 @@ test('a new auth instance reuses the existing browser login', () => {
     assert.deepEqual(useAuth().getAuthToken(), { token: 'test-session' })
 })
 
-test('legacy sessions remain logged in after their old six-hour deadline', () => {
+test('legacy browser storage can still be read until the server rejects its unsigned session', () => {
     store.set('auth_token', btoa(JSON.stringify({ token: 'legacy-session', expiresAt: 1 })))
     const auth = useAuth()
     assert.deepEqual(auth.getAuthToken(), { token: 'legacy-session' })
@@ -72,4 +76,70 @@ test('missing or empty tokens do not bypass the login route', () => {
         assert.equal(useAuth().getAuthToken(), null)
         assert.equal(store.has('auth_token'), false)
     }
+})
+
+test('server session tokens are signed and bound to the configured username', async () => {
+    const token = await issueSessionToken('admin', 'server-secret')
+    const context = { request: new Request('https://example.test/api/domains', { headers: { Authorization: `Bearer ${token}` } }), env: { USER: 'admin', PASS: 'server-secret' } }
+    assert.equal((await verifyToken(context)).success, true)
+    assert.equal((await verifyToken({ ...context, env: { USER: 'other', PASS: 'server-secret' } })).success, false)
+    assert.equal((await verifyToken({ ...context, env: { USER: 'admin', PASS: 'rotated-secret' } })).success, false)
+    const [payload, signature] = token.split('.')
+    const tamperedSignature = `${signature.startsWith('a') ? 'b' : 'a'}${signature.slice(1)}`
+    const tampered = `${payload}.${tamperedSignature}`
+    assert.equal((await verifyToken({ ...context, request: new Request('https://example.test', { headers: { Authorization: `Bearer ${tampered}` } }) })).success, false)
+})
+
+test('API auth rejects a missing or unsigned bearer token', async () => {
+    const response = await checkAuth({ request: new Request('https://example.test/api/domains', { headers: { Authorization: 'Bearer forged' } }), env: { USER: 'admin', PASS: 'server-secret' } })
+    assert.equal(response.status, 401)
+})
+
+test('API_TOKEN is accepted only in the Authorization header, never in the URL', async () => {
+    const env = { API_TOKEN: 'cron-secret' }
+    const header = await checkApiToken({ request: new Request('https://example.test/api/check', { headers: { Authorization: 'Bearer cron-secret' } }), env })
+    const query = await checkApiToken({ request: new Request('https://example.test/api/check?token=cron-secret'), env })
+    assert.equal(header, null)
+    assert.equal(query.status, 401)
+    assert.equal(isValidDate(todayShanghaiDate()), true)
+})
+
+test('anonymous login reaches the login handler while protected APIs require a bearer token', async () => {
+    let reached = false
+    const loginResponse = await apiMiddleware({
+        request: new Request('https://example.test/api/login', { method: 'POST' }),
+        env: {},
+        next: async () => { reached = true; return new Response('login handler') }
+    })
+    assert.equal(reached, true)
+    assert.equal(await loginResponse.text(), 'login handler')
+
+    reached = false
+    const protectedResponse = await apiMiddleware({
+        request: new Request('https://example.test/api/domains'),
+        env: {},
+        next: async () => { reached = true; return new Response('protected handler') }
+    })
+    assert.equal(reached, false)
+    assert.equal(protectedResponse.status, 401)
+})
+
+test('domain validation uses normalized names, real dates, and non-overlapping click values', () => {
+    assert.equal(normalizeDomain(' Example.COM. '), 'example.com')
+    assert.equal(isValidDate('2024-02-29'), true)
+    assert.equal(isValidDate('2025-02-29'), false)
+    const valid = { domain: 'example.com', registrar: 'test', registrar_date: '2025-01-01', expiry_date: '2027-01-01', service_type: '正常网站', status: '在线', daily_clicks: 30 }
+    assert.equal(validateDomain(valid), null)
+    assert.match(validateDomain({ ...valid, daily_clicks: -1 }), /非负整数/)
+    assert.match(validateDomain({ ...valid, adsense_connected: '已开通' }), /开通日期/)
+})
+
+test('credential ciphertext is authenticated and requires a strong configured secret', async () => {
+    const token = 'github-token-value'
+    const secret = '0123456789abcdef0123456789abcdef'
+    const encrypted = await encryptCredential(token, secret)
+    assert.notEqual(encrypted, token)
+    assert.equal(await decryptCredential(encrypted, secret), token)
+    await assert.rejects(() => decryptCredential(encrypted, 'wrong-secret-0123456789abcdef'))
+    await assert.rejects(() => encryptCredential(token, 'short'))
 })
