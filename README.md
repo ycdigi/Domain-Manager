@@ -187,6 +187,18 @@ npm run db:verify:remote
 
 前端清理审计使用 `npm run lint:cleanup`，检查旧接口引用、CSS 类来源、模板内联样式、共享 token 重复定义，以及写入队列与批量 API 的字段一致性。
 
+网站信息抓取使用 `npm run domains:enrich --`。它只读取公开首页的标题、站点名、首个 H1、描述和少量响应特征，输出带证据的 JSON；如果指定 `--sql-output`，会生成只补全空网站名称/行业、并在技术栈仍为“其他”时补充已识别技术栈的 D1 更新语句，不覆盖已有手工值：
+
+```bash
+npm run domains:enrich -- \
+  --input /path/to/domains.csv \
+  --output /tmp/domains-enriched.json \
+  --sql-output /tmp/domains-enriched.sql \
+  --concurrency 8
+```
+
+抓取失败或证据不足的域名会保留空值，不会自动猜测行业。执行生成的 SQL 前先导出 D1 备份并人工查看 JSON 结果。
+
 后端登录令牌现在由 `USER` 和 `PASS` 签名。首次部署此版本后，旧浏览器会话需要重新登录一次；之后仍会在同一浏览器长期保留，直到登出、清除站点数据或轮换 `PASS`。
 
 7. 部署

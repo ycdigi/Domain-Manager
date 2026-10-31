@@ -9,6 +9,7 @@
     "test:auth": "node --test tests/auth.test.mjs",
     "test:data": "node --test tests/data-model.test.mjs",
     "lint:cleanup": "node scripts/lint-cleanup.mjs",
+    "domains:enrich": "node scripts/enrich-domains.mjs",
     "preview": "vite preview",
     "pages:dev": "wrangler pages dev --compatibility-date=2024-01-01 --d1=DB -- npm run dev",
     "db:create": "wrangler d1 create domains-db",
