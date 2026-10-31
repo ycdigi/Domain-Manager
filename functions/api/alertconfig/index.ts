@@ -11,6 +11,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     try {
         const authError = await checkAuth(context)
         if (authError) return authError
+        if (!context.env.DB) {
+            throw new Error('Cloudflare D1 binding "DB" 未配置')
+        }
 
         const { results } = await context.env.DB.prepare(
             'SELECT * FROM alertcfg LIMIT 1'
@@ -25,7 +28,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
         console.error('获取配置失败:', error)
         return Response.json({
             status: 500,
-            message: '获取配置失败',
+            message: error instanceof Error ? error.message : '获取配置失败',
             data: null
         }, { status: 500 })
     }
@@ -35,6 +38,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     try {
         const authError = await checkAuth(context)
         if (authError) return authError
+        if (!context.env.DB) {
+            throw new Error('Cloudflare D1 binding "DB" 未配置')
+        }
 
         const data = await context.request.json() as AlertConfig
 
@@ -100,4 +106,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data: null
         }, { status: 500 })
     }
-} 
+}

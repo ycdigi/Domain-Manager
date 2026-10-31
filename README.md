@@ -105,7 +105,10 @@
 6. 初始化数据库
    - 在 Cloudflare Dashboard 中进入 D1 页面
    - 选择您的数据库
-   - 执行 `schema.sql` 中的 SQL 语句
+   - 执行仓库根目录的 `schema.sql`。该文件可以重复执行，不会删除已有域名数据
+   - 如果数据库是旧版本且 `domains` 表还没有 `st_tgsend` 列，再单独执行一次 `schema-migration-v1.0.2.sql`
+
+> `DB` 必须是 D1 database binding，不是 Variables and secrets 里的 Text 变量。绑定名称必须精确为 `DB`，修改绑定或表结构后需要重新部署 Pages 项目。
 
 7. 部署
    - 点击 "Save and Deploy"

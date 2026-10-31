@@ -7,9 +7,7 @@ html.dm-ui ::selection { background: var(--color-paper-3); color: var(--color-in
 html.dm-ui body { margin: 0; overflow-x: clip; background: var(--color-paper); color: var(--color-ink); font-family: var(--font-body); font-size: var(--text-md); line-height: 1.5; scrollbar-color: var(--color-field-edge) var(--color-paper-2); }
 html.dm-ui #app { min-height: 100dvh; }
 
-
 html:is(.dm-ui, .dm-home-route) :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
-html:is(.dm-ui, .dm-home-route) .el-button:focus-visible { outline: 2px solid var(--color-focus); outline-offset: 3px; }
 html:is(.dm-ui, .dm-home-route) .el-input__inner:focus-visible,
 html:is(.dm-ui, .dm-home-route) .el-textarea__inner:focus-visible { outline-offset: -2px; }
 html:is(.dm-ui, .dm-home-route) .el-input__wrapper.is-focus,
@@ -21,7 +19,6 @@ html:is(.dm-ui, .dm-home-route) .el-button.is-disabled { opacity: 0.55; cursor: 
 html:is(.dm-ui, .dm-home-route) .el-button--primary { --el-button-text-color: var(--color-accent-ink); --el-button-bg-color: var(--color-accent); --el-button-border-color: var(--color-accent); --el-button-hover-text-color: var(--color-accent-ink); --el-button-hover-bg-color: var(--color-accent-hover); --el-button-hover-border-color: var(--color-accent-hover); --el-button-active-bg-color: var(--color-accent-hover); --el-button-active-border-color: var(--color-accent-hover); --el-button-disabled-text-color: var(--color-accent-ink); --el-button-disabled-bg-color: var(--color-accent); --el-button-disabled-border-color: var(--color-accent); }
 html:is(.dm-ui, .dm-home-route) .el-dialog { max-width: calc(100% - 32px); margin: 5dvh auto; border-radius: var(--radius-panel); padding: var(--space-lg); }
 html:is(.dm-ui, .dm-home-route) .el-dialog__body { max-height: 70dvh; overflow-y: auto; padding-inline: var(--space-2xs); }
-html:is(.dm-ui, .dm-home-route) .el-dialog__footer,
 html:is(.dm-ui, .dm-home-route) .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-xs); }
 html:is(.dm-ui, .dm-home-route) .el-dialog .el-input,
 html:is(.dm-ui, .dm-home-route) .el-dialog .el-select,

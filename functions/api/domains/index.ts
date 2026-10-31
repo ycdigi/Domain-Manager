@@ -5,6 +5,9 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
     try {
         const authError = await checkAuth(context)
         if (authError) return authError
+        if (!context.env.DB) {
+            throw new Error('Cloudflare D1 binding "DB" 未配置')
+        }
 
         console.log('开始查询域名列表')
         const result = await context.env.DB.prepare(
@@ -39,6 +42,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
     try {
         const authError = await checkAuth(context)
         if (authError) return authError
+        if (!context.env.DB) {
+            throw new Error('Cloudflare D1 binding "DB" 未配置')
+        }
 
         const data = await context.request.json() as Domain
         console.log('接收到的数据:', data)
@@ -93,4 +99,4 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data: null
         }, { status: 500 })
     }
-} 
+}

@@ -2,7 +2,7 @@
 /* Hallmark · pre-emit critique: reuse locked tokens for file selection, actual server results and errors; no new dashboard cards. */
 /* Hallmark · finish-review: subagent · 1 finding · 1 resolved; persistent import results replace the duplicate success toast. */
 .import-container { display: flex; flex-direction: column; gap: var(--space-md); min-width: 0; }
-.upload-area, :deep(.el-upload), :deep(.el-upload-dragger), :deep(.el-upload-list) { width: 100%; }
+:deep(.el-upload), :deep(.el-upload-dragger), :deep(.el-upload-list) { width: 100%; }
 :deep(.el-upload-dragger) { border-color: var(--color-field-edge); border-radius: var(--radius-control); background: var(--color-paper-2); padding: var(--space-xl) var(--space-md); }
 :deep(.el-upload-dragger:hover), :deep(.el-upload-dragger.is-dragover) { border-color: var(--color-link); background: var(--color-paper-3); }
 :deep(.el-upload-dragger:focus-visible) { outline: 2px solid var(--color-focus); outline-offset: -3px; }
@@ -13,7 +13,8 @@
 .selected-file > span { min-width: 0; overflow-wrap: anywhere; }
 .selected-file .el-button { flex-shrink: 0; }
 .import-result { border-top: 1px solid var(--color-rule); padding-top: var(--space-md); }
-.import-result h3, .error-details h4 { margin: 0 0 var(--space-sm); color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-lg); font-weight: 600; min-width: 0; overflow-wrap: break-word; }
+.import-result h3, .error-details h4 { margin: 0 0 var(--space-sm); color: var(--color-ink); font-family: var(--font-display); font-weight: 600; min-width: 0; overflow-wrap: break-word; }
+.import-result h3 { font-size: var(--text-lg); }
 .result-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--space-xs); }
 .result-item { padding: var(--space-xs); background: var(--color-paper-2); border-radius: var(--radius-control); text-align: center; color: var(--color-ink-2); }
 .result-item.success { color: var(--color-success); background: var(--color-success-paper); }

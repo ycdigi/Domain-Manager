@@ -91,7 +91,10 @@ During import, the system will automatically validate the data format and provid
 6.Initialize the Database
 - In the Cloudflare Dashboard, go to the D1 section.
 - Select your database.
-- Execute the SQL statements from the`schema.sql` file.
+- Execute the SQL statements from the root `schema.sql` file. It is repeatable and does not drop existing domain data.
+- If an older `domains` table does not have the `st_tgsend` column, run `schema-migration-v1.0.2.sql` once.
+
+> `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 
 7.Deploy
 - Click "Save and Deploy".
