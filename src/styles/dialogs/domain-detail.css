@@ -6,6 +6,19 @@
 .detail-grid small { color: var(--color-muted); font-weight: 400; }
 .detail-line { margin-top: var(--space-md); }
 .detail-line p, .detail-empty { margin: 0; color: var(--color-muted); font-size: var(--text-sm); white-space: pre-wrap; overflow-wrap: anywhere; }
+.detail-resource-list, .operation-list { display: grid; gap: var(--space-xs); margin-top: var(--space-md); }
+.detail-resource { display: grid; gap: 3px; padding: var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-paper-2); font-size: var(--text-xs); }
+.detail-resource strong { font-size: var(--text-sm); }
+.detail-resource small { margin-left: var(--space-xs); color: var(--color-link); font-weight: 500; }
+.detail-resource span { color: var(--color-muted); overflow-wrap: anywhere; }
+.detail-muted { color: var(--color-muted); font-size: var(--text-xs); }
+.operation-form { display: grid; grid-template-columns: 1fr 1fr auto; gap: var(--space-xs); margin-top: var(--space-sm); }
+.operation-quick { display: flex; flex-wrap: wrap; gap: var(--space-xs); margin-top: var(--space-xs); }
+.operation-filter { width: 150px; margin-top: var(--space-sm); }
+.operation-row { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); padding: var(--space-xs) 0; border-bottom: 1px solid var(--color-rule); color: var(--color-muted); font-size: var(--text-sm); }
+.operation-row:last-child { border-bottom: 0; }
+.quality-section { background: var(--color-paper-2); padding: var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-control); }
+.quality-section ul { margin: var(--space-sm) 0 0; padding-left: 18px; color: var(--color-muted); font-size: var(--text-sm); }
 .section-heading, .note-meta, .note-actions, .note-form-actions, .history-item > div { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
 .section-heading h3 { margin: 0; font-size: var(--text-md); }
 .note-list, .history-list { display: grid; gap: var(--space-sm); }
@@ -18,4 +31,4 @@
 .note-form-actions { justify-content: flex-end; }
 .history-item { padding-bottom: var(--space-sm); border-bottom: 1px solid var(--color-rule); }
 .history-item:last-child { border-bottom: 0; }
-@media (max-width: 480px) { .detail-grid { grid-template-columns: 1fr; } }
+@media (max-width: 480px) { .detail-grid { grid-template-columns: 1fr; } .operation-form { grid-template-columns: 1fr; } }

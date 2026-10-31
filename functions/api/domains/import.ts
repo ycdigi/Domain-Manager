@@ -4,6 +4,7 @@ import { isValidDate, normalizeDomain } from '../../utils/domain-validation'
 
 interface ResourceImport { provider: ProviderType; account?: string | null; resource: string; role: string }
 interface AiNoteImport { kind: 'AI提示词' | '想法说明'; content: string }
+interface OperationImport { operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他' }
 interface DomainImport {
     domain: string
     registrar?: string
@@ -21,12 +22,18 @@ interface DomainImport {
     seo_last_date?: string | null
     daily_clicks?: number | null
     clicks_updated_date?: string | null
+    platform?: 'WordPress' | 'Astro' | 'Next.js' | '其他'
+    platform_other?: string | null
+    wp_calculator_count?: number | null
+    wp_article_count?: number | null
+    content_stats_updated_date?: string | null
     resources?: ResourceImport[]
     ai_notes?: AiNoteImport[]
+    operations?: OperationImport[]
 }
 
 const providers = new Set<ProviderType>(['github', 'cloudflare', 'vhost', 'vps'])
-const allowedFields = ['registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks'] as const
+const allowedFields = ['registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
 const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const todayShanghai = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -75,17 +82,31 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (item.status !== undefined && !['在线', '离线'].includes(item.status)) return '网站状态无效'
             if (item.adsense_connected !== undefined && !['未知', '已开通', '未开通'].includes(item.adsense_connected)) return 'AdSense 状态无效'
             if (item.adsense_connected === '已开通' && !isValidDate(item.adsense_opened_date)) return '已开通时必须填写有效开通日期'
+            if (item.adsense_connected === '已开通' && !item.adsense_account?.trim()) return '已开通时必须填写 AdSense 账号名称'
             if (item.registrar_link) {
                 try { if (!['http:', 'https:'].includes(new URL(item.registrar_link).protocol)) return '域名商链接必须使用 HTTP 或 HTTPS' }
                 catch { return '域名商链接格式无效' }
             }
             if (item.daily_clicks !== undefined && item.daily_clicks !== null && (!Number.isInteger(item.daily_clicks) || item.daily_clicks < 0)) return '日点击次数必须是非负整数'
+            if (item.platform !== undefined && !['WordPress', 'Astro', 'Next.js', '其他'].includes(item.platform)) return '网站技术栈无效'
+            if (item.platform_other != null && typeof item.platform_other !== 'string') return '其他技术栈名称格式无效'
+            for (const field of ['wp_calculator_count', 'wp_article_count'] as const) {
+                const value = item[field]
+                if (value != null && (!Number.isInteger(value) || value < 0)) return 'WordPress 内容数量必须是非负整数'
+                if (value != null && item.platform !== 'WordPress') return '只有 WordPress 网站可以填写内容数量'
+            }
+            if (item.content_stats_updated_date != null && item.content_stats_updated_date !== '' && !isValidDate(item.content_stats_updated_date)) return '内容统计日期格式无效'
+            if ((item.wp_calculator_count != null || item.wp_article_count != null) && !isValidDate(item.content_stats_updated_date)) return '填写 WordPress 内容数量时必须填写统计日期'
             if (item.tgsend !== undefined && ![0, 1].includes(item.tgsend)) return '域名通知选项无效'
             if (item.st_tgsend !== undefined && ![0, 1].includes(item.st_tgsend)) return '状态通知选项无效'
             if (item.resources !== undefined && (!Array.isArray(item.resources) || item.resources.length > 20)) return '每个网站最多导入 20 个资源关联'
             if (item.ai_notes !== undefined && (!Array.isArray(item.ai_notes) || item.ai_notes.length > 50)) return '每个网站最多导入 50 条 AI 记录'
+            if (item.operations !== undefined && (!Array.isArray(item.operations) || item.operations.length > 500)) return '每个网站最多导入 500 条操作记录'
             for (const note of item.ai_notes || []) {
                 if (!note || !['AI提示词', '想法说明'].includes(note.kind) || typeof note.content !== 'string' || !note.content.trim() || note.content.length > 20000) return 'AI 记录格式无效或内容过长'
+            }
+            for (const operation of item.operations || []) {
+                if (!operation || !isValidDate(operation.operation_date) || !['SEO', '内容', '技术', '其他'].includes(operation.operation_kind)) return '操作记录格式无效'
             }
             const linkKeys = new Set<string>()
             for (const link of item.resources || []) {
@@ -156,6 +177,11 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 const id = existingIds.get(domain)
                 const fields: Record<string, unknown> = { domain }
                 for (const key of allowedFields) if (has(item, key)) fields[key] = item[key] === '' ? null : item[key]
+                if (has(item, 'platform') && item.platform !== 'WordPress') {
+                    fields.wp_calculator_count = null
+                    fields.wp_article_count = null
+                    fields.content_stats_updated_date = null
+                }
                 if (has(item, 'daily_clicks')) fields.clicks_updated_date = item.daily_clicks == null ? null : (item.clicks_updated_date || importDate)
                 if (has(item, 'adsense_account')) fields.adsense_account_id = item.adsense_account?.trim() ? accountIds.get(item.adsense_account.trim()) : null
 
@@ -199,6 +225,12 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                           AND n.kind = ? AND n.content = ?
                           AND NOT EXISTS (SELECT 1 FROM domain_ai_note_versions v WHERE v.note_id = n.id)
                     `).bind(domain, note.kind, note.content.trim()))
+                }
+                for (const operation of item.operations || []) {
+                    statements.push(db.prepare(`
+                        INSERT OR IGNORE INTO domain_operations (domain_id, operation_date, operation_kind)
+                        SELECT id, ?, ? FROM domains WHERE lower(rtrim(domain, '.')) = ?
+                    `).bind(operation.operation_date, operation.operation_kind, domain))
                 }
                 success++
             }

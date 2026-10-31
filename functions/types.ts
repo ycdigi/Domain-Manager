@@ -26,11 +26,19 @@ export interface Domain {
     st_tgsend: number
     memo: string
     adsense_account_id?: number | null
+    adsense_account_name?: string | null
+    adsense_owner?: string | null
+    adsense_publisher_id?: string | null
     adsense_connected?: string
     adsense_opened_date?: string | null
     seo_last_date?: string | null
     daily_clicks?: number | null
     clicks_updated_date?: string | null
+    platform?: DomainPlatform
+    platform_other?: string | null
+    wp_calculator_count?: number | null
+    wp_article_count?: number | null
+    content_stats_updated_date?: string | null
     last_status_check_at?: string | null
     last_expiry_alert_date?: string | null
     last_offline_alert_at?: string | null
@@ -38,6 +46,20 @@ export interface Domain {
     resource_count?: number
     resource_names?: string | null
     ai_note_count?: number
+    latest_operation_date?: string | null
+    operation_count?: number
+    adsense_open_days?: number | null
+    created_at?: string
+}
+
+export type DomainPlatform = 'WordPress' | 'Astro' | 'Next.js' | '其他'
+export type DomainOperationKind = 'SEO' | '内容' | '技术' | '其他'
+
+export interface DomainOperation {
+    id?: number
+    domain_id: number
+    operation_date: string
+    operation_kind: DomainOperationKind
     created_at?: string
 }
 
@@ -69,6 +91,7 @@ export interface AdsenseAccount {
     owner: string
     currency: string
     status: string
+    publisher_id?: string | null
     memo: string
     created_at?: string
     linked_domains?: number

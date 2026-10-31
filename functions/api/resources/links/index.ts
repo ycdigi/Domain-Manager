@@ -7,7 +7,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
         const domainId = new URL(context.request.url).searchParams.get('domain_id')
-        const sql = `SELECT dr.*, r.provider, r.name AS resource_name, r.resource_url, r.ip_address, r.status AS resource_status, a.id AS account_id, a.name AS account_name
+        const sql = `SELECT dr.*, r.provider, r.name AS resource_name, r.resource_url, r.identifier, r.ip_address, r.port, r.region, r.status AS resource_status, a.id AS account_id, a.name AS account_name, a.login_email
                      FROM domain_resources dr
                      JOIN provider_resources r ON r.id = dr.resource_id
                      LEFT JOIN provider_accounts a ON a.id = r.account_id
@@ -27,6 +27,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             context.env.DB.prepare('SELECT id FROM provider_resources WHERE id = ?').bind(data.resource_id).first()
         ])
         if (!domain || !resource) return json(null, 400, '网站或资源不存在')
+        if (data.is_primary) await context.env.DB.prepare('UPDATE domain_resources SET is_primary = 0 WHERE domain_id = ?').bind(data.domain_id).run()
         const result = await context.env.DB.prepare(`
             INSERT INTO domain_resources (domain_id, resource_id, role, is_primary, memo)
             VALUES (?, ?, ?, ?, ?)

@@ -13,16 +13,27 @@ export interface DomainData {
     st_tgsend: number
     memo: string
     adsense_account_id: number | null
+    adsense_account_name?: string | null
+    adsense_owner?: string | null
+    adsense_publisher_id?: string | null
     adsense_connected: '未知' | '已开通' | '未开通'
     adsense_opened_date: string | null
     seo_last_date: string | null
     daily_clicks: number | null
     clicks_updated_date: string | null
+    platform: 'WordPress' | 'Astro' | 'Next.js' | '其他'
+    platform_other: string | null
+    wp_calculator_count: number | null
+    wp_article_count: number | null
+    content_stats_updated_date: string | null
     last_status_check_at: string | null
     resource_status: string
     resource_count?: number
     resource_names?: string | null
     ai_note_count?: number
+    latest_operation_date?: string | null
+    operation_count?: number
+    adsense_open_days?: number | null
     created_at?: string
 }
 

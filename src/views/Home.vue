@@ -6,6 +6,7 @@
                 <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>资源待补全</span><strong>{{ dashboard.totals.incomplete_resources || 0 }}</strong></div>
                 <div class="summary-card"><span>有 AI 记录的网站</span><strong>{{ aiNotesDomainCount }}</strong></div>
+                <div class="summary-card"><span>信息待补全</span><strong>{{ dataQualityCount }}</strong></div>
                 <div class="summary-card sync-summary"><span>待同步任务</span><strong>{{ queue.pending.value.length }}</strong><span v-if="failedQueueCount" class="sync-failure">{{ failedQueueCount }} 项失败</span><button v-if="queue.pending.value.length" type="button" class="sidebar-link" @click="syncNow">立即同步</button><button v-if="failedQueueCount" type="button" class="sidebar-link" @click="retryFailedWrites">重试失败项</button></div>
             </section>
 
@@ -23,7 +24,7 @@
                             <el-button :icon="Setting" @click="handleConfig">通知配置</el-button>
                             <el-dropdown>
                                 <el-button class="more-button">更多</el-button>
-                                <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
+                                <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleJsonExport">导出 JSON 备份</el-dropdown-item><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
                             </el-dropdown>
                         </div>
                     </div>
@@ -37,6 +38,7 @@
                         <el-select v-model="resourceFilter" placeholder="资源状态" clearable><el-option label="已关联" value="linked" /><el-option label="未关联" value="unlinked" /></el-select>
                         <el-select v-model="providerFilter" placeholder="服务商" clearable><el-option v-for="provider in providerOptions" :key="provider" :label="providerLabel(provider)" :value="provider" /></el-select>
                         <el-select v-model="resourceAccountFilter" placeholder="服务商账号" clearable><el-option v-for="option in resourceAccountOptions" :key="option.value" :label="`${providerLabel(option.provider)} · ${option.account}`" :value="option.value" /></el-select>
+                        <el-select v-model="platformFilter" placeholder="技术栈" clearable><el-option v-for="platform in platformOptions" :key="platform" :label="platform" :value="platform" /></el-select>
                         <el-button @click="clearFilters">清除筛选</el-button>
                     </div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
@@ -44,8 +46,10 @@
                         <el-table-column prop="domain" label="域名" min-width="200" fixed sortable><template #default="scope"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a></template></el-table-column>
                         <el-table-column label="剩余时间" min-width="128" sortable :sort-method="(a, b) => calculateRemainingDays(a.expiry_date) - calculateRemainingDays(b.expiry_date)"><template #default="scope"><span class="expiry-label" :class="expiryClass(scope.row.expiry_date)">{{ formatRemainingDays(scope.row.expiry_date) }}</span></template></el-table-column>
                         <el-table-column prop="status" label="状态" min-width="88" sortable><template #default="scope"><span class="status-label" :class="scope.row.status === '在线' ? 'status-online' : 'status-offline'">{{ scope.row.status }}</span></template></el-table-column>
-                        <el-table-column prop="adsense_connected" label="AdSense" min-width="112" sortable />
+                        <el-table-column label="AdSense" min-width="180" sortable><template #default="scope"><span>{{ scope.row.adsense_connected }}<small v-if="scope.row.adsense_account_name"> · {{ scope.row.adsense_account_name }} / {{ scope.row.adsense_owner }}</small></span></template></el-table-column>
+                        <el-table-column prop="platform" label="技术栈" min-width="108" sortable><template #default="scope">{{ platformText(scope.row) }}</template></el-table-column>
                         <el-table-column label="最近 SEO" min-width="112" sortable><template #default="scope">{{ scope.row.seo_last_date || '未记录' }}</template></el-table-column>
+                        <el-table-column label="最近操作" min-width="112" sortable><template #default="scope">{{ scope.row.latest_operation_date || '未记录' }}</template></el-table-column>
                         <el-table-column label="日点击" min-width="100"><template #default="scope">{{ clickBucket(scope.row.daily_clicks) }}</template></el-table-column>
                         <el-table-column label="部署位置" min-width="180" show-overflow-tooltip><template #default="scope">{{ scope.row.resource_names || '未关联' }}</template></el-table-column>
                         <el-table-column prop="expiry_date" label="过期时间" min-width="128" sortable />
@@ -99,7 +103,7 @@ interface ApiResponse<T = any> { status: number; message: string; data: T; }
 const router = useRouter();
 const auth = useAuth();
 const domains = ref<DomainData[]>([]);
-const adsenseAccounts = ref<Array<{ id?: number; name: string; owner: string; currency: string; status: string; memo: string; linked_domains?: number }>>([]);
+const adsenseAccounts = ref<Array<{ id?: number; name: string; owner: string; publisher_id?: string | null; currency: string; status: string; memo: string; linked_domains?: number }>>([]);
 const adsenseManagerVisible = ref(false);
 const resourceManagerVisible = ref(false);
 const queue = getWriteQueue();
@@ -113,6 +117,7 @@ const clicksFilter = ref('');
 const resourceFilter = ref('');
 const providerFilter = ref('');
 const resourceAccountFilter = ref('');
+const platformFilter = ref('');
 const loading = ref(false);
 const loadError = ref('');
 const alertDays = ref(30);
@@ -125,10 +130,10 @@ const editData = ref<DomainData>();
 const importVisible = ref(false);
 const detailVisible = ref(false);
 const detailDomain = ref<DomainData>();
-interface DashboardData { totals: Record<string, number>; seo: Array<{ id: number; domain: string; seo_last_date: string | null; days_since: number | null }>; clicks: Record<string, number>; providers: Array<{ provider: string; account_count: number; resource_count: number; linked_domain_count: number }>; owner_income: Array<{ owner: string; currency: string; account_count: number; current_income: number }> }
+interface DashboardData { totals: Record<string, number>; seo: Array<{ id: number; domain: string; seo_last_date: string | null; days_since: number | null }>; clicks: Record<string, number>; providers: Array<{ provider: string; account_count: number; resource_count: number; linked_domain_count: number }>; owner_income: Array<{ owner: string; currency: string; account_count: number; current_income: number }>; platforms: Array<{ platform: string; count: number }>; quality: Record<string, number> }
 interface ResourceLinkData { id: number; domain_id: number; resource_id: number; role: string; provider: string; account_id: number | null; account_name: string | null; resource_name: string }
 interface ResourceAccountData { id: number; provider: string; name: string; status: string; linked_domain_count: number }
-const dashboard = ref<DashboardData>({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [] });
+const dashboard = ref<DashboardData>({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [], platforms: [], quality: {} });
 const resourceLinks = ref<ResourceLinkData[]>([]);
 const resourceAccounts = ref<ResourceAccountData[]>([]);
 const accountById = computed(() => new Map(adsenseAccounts.value.map(account => [account.id, account])));
@@ -136,6 +141,8 @@ const ownerOptions = computed(() => [...new Set(adsenseAccounts.value.map(accoun
 const providerOptions = ['github', 'cloudflare', 'vhost', 'vps'];
 const resourceAccountOptions = computed(() => resourceAccounts.value.filter(account => account.status === '正常').map(account => ({ provider: account.provider, account: account.name, value: String(account.id) })));
 const aiNotesDomainCount = computed(() => domains.value.filter(domain => (domain.ai_note_count || 0) > 0).length);
+const dataQualityCount = computed(() => Object.values(dashboard.value.quality || {}).reduce((sum, value) => sum + Number(value || 0), 0));
+const platformOptions = ['WordPress', 'Astro', 'Next.js', '其他'];
 const filteredDomains = computed(() => domains.value.filter(row => {
     const account = accountById.value.get(row.adsense_account_id || undefined);
     const haystack = `${row.domain} ${row.registrar} ${row.memo}`.toLowerCase();
@@ -150,6 +157,7 @@ const filteredDomains = computed(() => domains.value.filter(row => {
     const links = resourceLinks.value.filter(link => link.domain_id === row.id);
     if (providerFilter.value && !links.some(link => link.provider === providerFilter.value)) return false;
     if (resourceAccountFilter.value && !links.some(link => String(link.account_id || '') === resourceAccountFilter.value)) return false;
+    if (platformFilter.value && row.platform !== platformFilter.value) return false;
     return true;
 }));
 
@@ -160,7 +168,7 @@ const handleEdit = (row: DomainData) => { isEdit.value = true; editData.value = 
 const openDomainDetail = (row: DomainData) => { detailDomain.value = row; detailVisible.value = true; };
 const handleConfig = () => { configVisible.value = true; };
 const handleImport = () => { importVisible.value = true; };
-const clearFilters = () => { searchText.value = ''; ownerFilter.value = ''; accountFilter.value = ''; adsenseFilter.value = ''; seoFilter.value = ''; clicksFilter.value = ''; resourceFilter.value = ''; providerFilter.value = ''; resourceAccountFilter.value = ''; };
+const clearFilters = () => { searchText.value = ''; ownerFilter.value = ''; accountFilter.value = ''; adsenseFilter.value = ''; seoFilter.value = ''; clicksFilter.value = ''; resourceFilter.value = ''; providerFilter.value = ''; resourceAccountFilter.value = ''; platformFilter.value = ''; };
 const daysSince = (date: string) => { const [y,m,d] = date.split('-').map(Number); const today = localDate().split('-').map(Number); return Math.max(0, Math.floor((Date.UTC(today[0], today[1] - 1, today[2]) - Date.UTC(y, m - 1, d)) / 86400000)); };
 const formatSeoAge = (date: string | null) => date ? `${daysSince(date)} 天前` : '未记录';
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
@@ -169,6 +177,7 @@ const matchesClicks = (value: number | null, filter: string) => filter === 'unkn
 const handleSeoToday = async (row: DomainData) => { if (!row.id) return; const date = localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }); row.seo_last_date = date; await queue.flush(); await loadDashboard(); ElMessage.success('已记录今天的 SEO 优化'); } catch(error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 日期已加入待同步队列'); } };
 const markSeoById = (id: number) => { const row = domains.value.find(item => item.id === id); if (row) void handleSeoToday(row); };
 const providerLabel = (value: string) => ({ github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }[value] || value);
+const platformText = (row: DomainData) => row.platform === '其他' ? (row.platform_other || '其他') : row.platform;
 const handleUnauthorized = (response: Response) => { if (response.status !== 401) return false; auth.clearAuth(); router.push({ name: 'Login' }); return true; };
 const syncNow = async () => { try { if (!auth.getAuthToken()) throw new Error('请先重新登录'); await queue.flush(); if (queue.pending.value.length) throw new Error('部分任务仍未同步，任务已保留在本机'); await reloadAll(); ElMessage.success('待同步数据已写入') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '同步失败，任务仍保留在本机') } };
 const retryFailedWrites = async () => { queue.retryFailed(); await syncNow(); };
@@ -319,25 +328,51 @@ const handleExport = async () => {
     try {
         const authData = auth.getAuthToken();
         if (!authData) throw new Error('未登录或登录已过期');
-        const response = await fetch('/api/domains/export', { headers: { 'Authorization': `Bearer ${authData.token}` } });
-        if (!response.ok) {
-            const errorData = await response.json() as { message: string };
-            throw new Error(errorData.message || '导出失败');
+        const response = await fetch('/api/export/snapshot', { headers: { 'Authorization': `Bearer ${authData.token}` } });
+        const result = await response.json() as ApiResponse<any>;
+        if (!response.ok || result.status !== 200) throw new Error(result.message || '导出失败');
+        const XLSX = await import('xlsx');
+        const snapshot = result.data || {};
+        const workbook = XLSX.utils.book_new();
+        const sensitiveKey = /pass(word)?|token|ciphertext|secret|credential/i;
+        const safeRows = (rows: unknown[]) => rows.map(row => Object.fromEntries(Object.entries((row || {}) as Record<string, unknown>).filter(([key]) => !sensitiveKey.test(key))));
+        const sheets: Array<[string, unknown[]]> = [
+            ['域名总表', safeRows(snapshot.domains || [])],
+            ['操作记录', safeRows(snapshot.operations || [])],
+            ['AdSense账号', safeRows(snapshot.adsense_accounts || [])],
+            ['AdSense月收入', safeRows(snapshot.adsense_income || [])],
+            ['基础设施账号', safeRows(snapshot.provider_accounts || [])],
+            ['基础设施资源', safeRows(snapshot.provider_resources || [])],
+            ['网站资源关联', safeRows(snapshot.domain_resources || [])],
+            ['AI提示词与想法', safeRows(snapshot.ai_notes || [])]
+        ];
+        for (const [name, rows] of sheets) {
+            const sheet = XLSX.utils.json_to_sheet(rows);
+            const columns = rows.length ? Object.keys(rows[0] as Record<string, unknown>) : [];
+            sheet['!cols'] = columns.map(column => ({ wch: Math.min(42, Math.max(12, ...rows.map(row => String((row as Record<string, unknown>)[column] ?? '').length + 2))) }));
+            XLSX.utils.book_append_sheet(workbook, sheet, name);
         }
-        const filename = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `domains-export.json`;
-        const blob = await response.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        a.click();
-        window.URL.revokeObjectURL(url);
+        XLSX.writeFile(workbook, `domain-manager-${localDate()}.xlsx`);
         ElMessage.success('导出成功');
     } catch (error) {
         ElMessage.error(error instanceof Error ? error.message : '导出失败');
     } finally {
         loading.close();
     }
+};
+
+const handleJsonExport = async () => {
+    try {
+        const authData = auth.getAuthToken();
+        if (!authData) throw new Error('未登录或登录已过期');
+        const response = await fetch('/api/domains/export', { headers: { 'Authorization': `Bearer ${authData.token}` } });
+        if (!response.ok) { const errorData = await response.json() as { message: string }; throw new Error(errorData.message || '导出失败'); }
+        const filename = response.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `domains-export.json`;
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); window.URL.revokeObjectURL(url);
+        ElMessage.success('JSON 备份已导出');
+    } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败'); }
 };
 
 onMounted(() => {

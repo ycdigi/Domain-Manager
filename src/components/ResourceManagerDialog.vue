@@ -106,6 +106,7 @@
         <el-form-item label="资源"><span>{{ linkResource?.name }}</span></el-form-item>
         <el-form-item label="网站"><el-select v-model="linkForm.domain_id" filterable style="width:100%"><el-option v-for="domain in domains" :key="domain.id" :label="domain.domain" :value="domain.id || 0" /></el-select></el-form-item>
         <el-form-item label="角色"><el-select v-model="linkForm.role" style="width:100%"><el-option v-for="role in roles" :key="role" :label="role" :value="role" /></el-select></el-form-item>
+        <el-form-item label="主资源"><el-switch v-model="linkForm.is_primary" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="linkVisible = false">取消</el-button><el-button type="primary" @click="saveLink">保存</el-button></template>
     </el-dialog>
@@ -140,11 +141,11 @@ const credentialForm = ref({ label: '', token: '', expires_at: '' })
 const credentials = ref<ProviderCredential[]>([])
 const editingCredentialId = ref<number>()
 const domains = ref<Array<{ id?: number; domain: string }>>([])
-const links = ref<Array<{ id: number; domain_id: number; resource_id: number; role: string }>>([])
+const links = ref<Array<{ id: number; domain_id: number; resource_id: number; role: string; is_primary?: number }>>([])
 const linkResource = ref<ProviderResource>()
 const editingAccount = ref<number>()
 const editingResourceId = ref<number>()
-const linkForm = ref({ domain_id: undefined as number | undefined, role: '其他' })
+const linkForm = ref({ domain_id: undefined as number | undefined, role: '其他', is_primary: false })
 const roles = ['代码仓库', 'DNS/CDN', '部署平台', '虚拟主机', 'VPS', '其他']
 
 const accountsForProvider = computed(() => accounts.value.filter(item => item.provider === activeTab.value))
@@ -162,8 +163,8 @@ const editResource = (resource: ProviderResource) => { editingResourceId.value =
 const saveResource = async () => { try { const payload = { ...resourceForm.value, account_id: resourceForm.value.account_id || null }; const url = editingResourceId.value ? `/api/resources/resources/${editingResourceId.value}` : '/api/resources'; await api(url, { method: editingResourceId.value ? 'PUT' : 'POST', body: JSON.stringify(payload) }); resourceFormVisible.value = false; await load(); emit('changed'); ElMessage.success('资源已保存') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存失败') } }
 const disableAccount = async (account: ProviderAccount) => { try { await ElMessageBox.confirm(`停用“${account.name}”？关联记录会保留。`, '确认'); await api(`/api/resources/accounts/${account.id}`, { method: 'POST' }); await load(); emit('changed') } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '停用失败') } }
 const disableResource = async (resource: ProviderResource) => { try { await api(`/api/resources/resources/${resource.id}`, { method: 'POST' }); await load(); emit('changed') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '停用失败') } }
-const openLinkForm = (resource: ProviderResource) => { linkResource.value = resource; linkForm.value = { domain_id: undefined, role: resource.provider === 'github' ? '代码仓库' : resource.provider === 'cloudflare' ? '部署平台' : resource.provider === 'vhost' ? '虚拟主机' : 'VPS' }; linkVisible.value = true }
-const saveLink = async () => { try { if (!linkForm.value.domain_id || !linkResource.value?.id) throw new Error('请选择网站'); await api('/api/resources/links', { method: 'POST', body: JSON.stringify({ domain_id: linkForm.value.domain_id, resource_id: linkResource.value.id, role: linkForm.value.role }) }); linkVisible.value = false; await load(); emit('changed'); ElMessage.success('资源已关联') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '关联失败') } }
+const openLinkForm = (resource: ProviderResource) => { linkResource.value = resource; linkForm.value = { domain_id: undefined, role: resource.provider === 'github' ? '代码仓库' : resource.provider === 'cloudflare' ? '部署平台' : resource.provider === 'vhost' ? '虚拟主机' : 'VPS', is_primary: false }; linkVisible.value = true }
+const saveLink = async () => { try { if (!linkForm.value.domain_id || !linkResource.value?.id) throw new Error('请选择网站'); await api('/api/resources/links', { method: 'POST', body: JSON.stringify({ domain_id: linkForm.value.domain_id, resource_id: linkResource.value.id, role: linkForm.value.role, is_primary: linkForm.value.is_primary }) }); linkVisible.value = false; await load(); emit('changed'); ElMessage.success('资源已关联') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '关联失败') } }
 const linksForResource = (resourceId?: number) => links.value.filter(link => link.resource_id === resourceId)
 const domainName = (domainId: number) => domains.value.find(domain => domain.id === domainId)?.domain || `网站 #${domainId}`
 const unlink = async (id?: number) => { if (!id) return; try { await api(`/api/resources/links?id=${id}`, { method: 'DELETE' }); await load(); emit('changed') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '解除关联失败') } }

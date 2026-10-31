@@ -13,7 +13,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         const today = todayParam && isValidDate(todayParam) ? todayParam : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
         const monthParam = params.get('month')
         const month = monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam) ? monthParam : today.slice(0, 7)
-        const [{ results: totals }, { results: seo }, { results: clicks }, { results: providers }, { results: ownerIncome }] = await Promise.all([
+        const [{ results: totals }, { results: seo }, { results: clicks }, { results: providers }, { results: ownerIncome }, { results: platforms }, { results: quality }] = await Promise.all([
             db.prepare(`SELECT COUNT(*) AS total_domains,
                 SUM(CASE WHEN expiry_date <= date(?, '+30 day') THEN 1 ELSE 0 END) AS expiring_domains,
                 SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM domain_resources dr WHERE dr.domain_id = domains.id) THEN 1 ELSE 0 END) AS incomplete_resources
@@ -44,7 +44,18 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 FROM adsense_accounts a
                 LEFT JOIN adsense_income i ON i.adsense_account_id = a.id AND i.income_month = ?
                 GROUP BY a.owner, a.currency ORDER BY current_income DESC, a.owner COLLATE NOCASE`).bind(month).all()
+            ,db.prepare(`SELECT platform, COUNT(*) AS count FROM domains GROUP BY platform ORDER BY platform`).all(),
+            db.prepare(`SELECT
+                SUM(CASE WHEN d.adsense_connected = '已开通' AND d.adsense_account_id IS NULL THEN 1 ELSE 0 END) AS adsense_missing_account,
+                SUM(CASE WHEN d.adsense_connected = '已开通' AND (d.adsense_opened_date IS NULL OR d.adsense_opened_date = '') THEN 1 ELSE 0 END) AS adsense_missing_date,
+                SUM(CASE WHEN d.platform = 'WordPress' AND (d.wp_calculator_count IS NULL OR d.wp_article_count IS NULL OR d.content_stats_updated_date IS NULL) THEN 1 ELSE 0 END) AS wordpress_stats_incomplete,
+                SUM(CASE WHEN d.platform IS NULL OR d.platform = '' THEN 1 ELSE 0 END) AS platform_missing,
+                SUM(CASE WHEN d.daily_clicks IS NOT NULL AND (d.clicks_updated_date IS NULL OR julianday(?) - julianday(d.clicks_updated_date) > 30) THEN 1 ELSE 0 END) AS clicks_stale,
+                SUM(CASE WHEN d.last_status_check_at IS NULL OR julianday(?) - julianday(substr(d.last_status_check_at, 1, 10)) > 7 THEN 1 ELSE 0 END) AS status_stale,
+                SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM domain_operations o WHERE o.domain_id = d.id) OR julianday(?) - julianday((SELECT MAX(o.operation_date) FROM domain_operations o WHERE o.domain_id = d.id)) > 30 THEN 1 ELSE 0 END) AS operation_stale,
+                (SELECT COUNT(*) FROM adsense_accounts a WHERE a.publisher_id IS NULL OR a.publisher_id = '') AS adsense_publisher_missing
+                FROM domains d`).bind(today, today, today).all()
         ])
-        return json({ totals: totals?.[0] || {}, seo: seo || [], clicks: clicks?.[0] || {}, providers: providers || [], owner_income: ownerIncome || [] })
+        return json({ totals: totals?.[0] || {}, seo: seo || [], clicks: clicks?.[0] || {}, providers: providers || [], owner_income: ownerIncome || [], platforms: platforms || [], quality: quality?.[0] || {} })
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取首页概览失败') }
 }

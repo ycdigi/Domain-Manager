@@ -11,9 +11,28 @@
           <div><span>点击数据</span><strong>{{ domain.daily_clicks ?? '未填写' }}<small v-if="domain.clicks_updated_date"> · {{ domain.clicks_updated_date }}</small></strong></div>
           <div><span>状态检查</span><strong>{{ datePart(domain.last_status_check_at) }}</strong></div>
           <div><span>AdSense</span><strong>{{ domain.adsense_connected || '未知' }}<small v-if="domain.adsense_opened_date"> · {{ domain.adsense_opened_date }}</small></strong></div>
+          <div><span>开通耗时</span><strong>{{ domain.adsense_open_days == null ? '未计算' : `${domain.adsense_open_days} 天` }}</strong></div>
+          <div><span>技术栈</span><strong>{{ domain.platform === '其他' ? (domain.platform_other || '其他') : domain.platform }}</strong></div>
         </div>
+        <div class="detail-line"><span>AdSense账号</span><p>{{ domain.adsense_account_name || '未关联' }} · {{ domain.adsense_owner || '未记录' }} · {{ domain.adsense_publisher_id || '未记录 Publisher ID' }}</p></div>
+        <div class="detail-line"><span>WordPress统计</span><p v-if="domain.platform === 'WordPress'">计算器 {{ domain.wp_calculator_count ?? '未记录' }} 个 · 文章 {{ domain.wp_article_count ?? '未记录' }} 篇 · {{ domain.content_stats_updated_date || '未记录统计日期' }}</p><p v-else>不适用</p></div>
         <div class="detail-line"><span>部署资源</span><p>{{ domain.resource_names || '未关联' }}</p></div>
+        <div v-if="resources.length" class="detail-resource-list"><div v-for="resource in resources" :key="resource.id" class="detail-resource"><strong>{{ resource.provider }} · {{ resource.resource_name }}<small v-if="resource.is_primary">主资源</small></strong><span>{{ resource.account_name || '未关联账号' }} · {{ resource.login_email || '未记录邮箱' }}</span><span>{{ resource.resource_url || resource.ip_address || '未记录地址' }}<template v-if="resource.port">:{{ resource.port }}</template></span></div></div>
         <div class="detail-line"><span>备注</span><p>{{ domain.memo || '未记录' }}</p></div>
+      </section>
+
+      <section v-if="qualityIssues.length" class="detail-section quality-section">
+        <div class="section-heading"><h3>信息待补全</h3><span class="detail-muted">{{ qualityIssues.length }} 项</span></div>
+        <ul><li v-for="issue in qualityIssues" :key="issue">{{ issue }}</li></ul>
+      </section>
+
+      <section class="detail-section">
+        <div class="section-heading"><h3>操作日期</h3><span class="detail-muted">最近：{{ domain.latest_operation_date || '未记录' }}</span></div>
+        <div class="operation-form"><el-date-picker v-model="operationForm.operation_date" type="date" value-format="YYYY-MM-DD" /><el-select v-model="operationForm.operation_kind"><el-option v-for="kind in operationKinds" :key="kind" :label="kind" :value="kind" /></el-select><el-button type="primary" @click="saveOperation">记录</el-button></div>
+        <div class="operation-quick"><el-button v-for="kind in operationKinds" :key="kind" text size="small" @click="recordToday(kind)">今天 {{ kind }}</el-button></div>
+        <el-select v-model="operationFilter" class="operation-filter"><el-option label="全部类型" value="全部" /><el-option v-for="kind in operationKinds" :key="`filter-${kind}`" :label="kind" :value="kind" /></el-select>
+        <div v-if="filteredOperations.length" class="operation-list"><div v-for="operation in filteredOperations" :key="operation.id" class="operation-row"><span>{{ operation.operation_date }} · {{ operation.operation_kind }}</span><el-button text size="small" type="danger" @click="removeOperation(operation.id)">删除</el-button></div></div>
+        <p v-else class="detail-empty">还没有操作日期。</p>
       </section>
 
       <section class="detail-section">
@@ -59,6 +78,8 @@ import type { DomainData } from '../api/domains'
 type NoteKind = 'AI提示词' | '想法说明'
 interface Note { id: number; domain_id: number; kind: NoteKind; content: string; updated_at?: string; version_count?: number }
 interface Version { id: number; note_id: number; kind: NoteKind; content: string; version_no: number; created_at?: string }
+interface Operation { id: number; domain_id: number; operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他'; created_at?: string }
+interface ResourceLink { id: number; provider: string; resource_name: string; resource_url?: string | null; ip_address?: string | null; port?: number | null; account_name?: string | null; login_email?: string | null; role: string; is_primary: number }
 const props = defineProps<{ visible: boolean; domain?: DomainData }>()
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'changed'): void }>()
 const router = useRouter()
@@ -69,6 +90,25 @@ const saving = ref(false)
 const noteForm = ref<{ id?: number; kind: NoteKind; content: string }>({ kind: 'AI提示词', content: '' })
 const historyVisible = ref(false)
 const history = ref<Version[]>([])
+const operations = ref<Operation[]>([])
+const resources = ref<ResourceLink[]>([])
+const operationKinds = ['SEO', '内容', '技术', '其他'] as const
+const operationForm = ref<{ operation_date: string; operation_kind: Operation['operation_kind'] }>({ operation_date: '', operation_kind: 'SEO' })
+const operationFilter = ref<'全部' | Operation['operation_kind']>('全部')
+const filteredOperations = computed(() => operationFilter.value === '全部' ? operations.value : operations.value.filter(operation => operation.operation_kind === operationFilter.value))
+const qualityIssues = computed(() => {
+  if (!props.domain) return []
+  const issues: string[] = []
+  if (props.domain.adsense_connected === '已开通' && !props.domain.adsense_account_id) issues.push('已开通 AdSense，但没有关联账号')
+  if (props.domain.adsense_connected === '已开通' && !props.domain.adsense_opened_date) issues.push('已开通 AdSense，但没有开通日期')
+  if (props.domain.adsense_account_id && !props.domain.adsense_publisher_id) issues.push('关联账号还没有 Publisher ID')
+  if (props.domain.platform === 'WordPress' && (props.domain.wp_calculator_count == null || props.domain.wp_article_count == null || !props.domain.content_stats_updated_date)) issues.push('WordPress 内容数量或统计日期未完整记录')
+  if (!props.domain.resource_count) issues.push('还没有关联部署资源')
+  if (resources.value.length && !resources.value.some(resource => resource.is_primary)) issues.push('尚未设置主部署资源')
+  if (props.domain.daily_clicks != null && !props.domain.clicks_updated_date) issues.push('日点击量缺少更新时间')
+  if (!props.domain.latest_operation_date) issues.push('还没有操作日期记录')
+  return issues
+})
 const headers = () => ({ 'Content-Type': 'application/json', Authorization: `Bearer ${useAuth().getAuthToken()?.token || ''}` })
 const datePart = (value?: string | null) => value ? value.slice(0, 16).replace('T', ' ') : '未记录'
 const api = async (url: string, options: RequestInit = {}) => {
@@ -79,6 +119,11 @@ const api = async (url: string, options: RequestInit = {}) => {
   return result.data
 }
 const loadNotes = async () => { if (!props.domain?.id) return; notes.value = await api(`/api/domains/${props.domain.id}/ai-notes`) }
+const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+const loadOperations = async () => { if (!props.domain?.id) return; [operations.value, resources.value] = await Promise.all([api(`/api/domains/${props.domain.id}/operations`), api(`/api/resources/links?domain_id=${props.domain.id}`)]) }
+const saveOperation = async () => { if (!props.domain?.id || !operationForm.value.operation_date) { ElMessage.warning('请选择操作日期'); return }; try { await api(`/api/domains/${props.domain.id}/operations`, { method: 'POST', body: JSON.stringify(operationForm.value) }); await loadOperations(); emit('changed'); ElMessage.success('操作日期已记录') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '保存操作日期失败') } }
+const recordToday = (kind: Operation['operation_kind']) => { operationForm.value = { operation_date: localDate(), operation_kind: kind }; void saveOperation() }
+const removeOperation = async (id: number) => { try { await ElMessageBox.confirm('删除这条操作日期记录？', '确认'); await api(`/api/domains/${props.domain?.id}/operations/${id}`, { method: 'DELETE' }); await loadOperations(); emit('changed') } catch (error) { if (error !== 'cancel') ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }
 const startCreate = () => { noteForm.value = { kind: 'AI提示词', content: '' }; editing.value = true }
 const startEdit = (note: Note) => { noteForm.value = { id: note.id, kind: note.kind, content: note.content }; editing.value = true }
 const saveNote = async () => {
@@ -96,7 +141,7 @@ const archiveNote = async (note: Note) => {
 }
 const showHistory = async (note: Note) => { if (!props.domain?.id || !note.id) return; try { history.value = await api(`/api/domains/${props.domain.id}/ai-notes/${note.id}/history`); historyVisible.value = true } catch (error) { ElMessage.error(error instanceof Error ? error.message : '历史读取失败') } }
 const copyNote = async (content: string) => { try { await navigator.clipboard.writeText(content); ElMessage.success('已复制') } catch { ElMessage.error('复制失败，请手动选择文本') } }
-watch(() => [props.visible, props.domain?.id], ([visible]) => { if (visible) { editing.value = false; void loadNotes() } })
+watch(() => [props.visible, props.domain?.id], ([visible]) => { if (visible) { editing.value = false; operationFilter.value = '全部'; operationForm.value = { operation_date: localDate(), operation_kind: 'SEO' }; void Promise.all([loadNotes(), loadOperations()]) } })
 </script>
 
 <style scoped src="../styles/dialogs/domain-detail.css"></style>

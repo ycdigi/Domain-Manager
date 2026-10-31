@@ -36,7 +36,12 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
                 adsense_opened_date = ?,
                 seo_last_date = ?,
                 daily_clicks = ?,
-                clicks_updated_date = CASE WHEN daily_clicks IS NOT ? THEN ? ELSE clicks_updated_date END
+                clicks_updated_date = CASE WHEN daily_clicks IS NOT ? THEN ? ELSE clicks_updated_date END,
+                platform = ?,
+                platform_other = ?,
+                wp_calculator_count = ?,
+                wp_article_count = ?,
+                content_stats_updated_date = ?
             WHERE id = ?
             RETURNING *
         `).bind(
@@ -57,6 +62,11 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
             data.daily_clicks ?? null,
             data.daily_clicks ?? null,
             data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate()),
+            data.platform || '其他',
+            data.platform === '其他' ? (data.platform_other || null) : null,
+            data.platform === 'WordPress' ? (data.wp_calculator_count ?? null) : null,
+            data.platform === 'WordPress' ? (data.wp_article_count ?? null) : null,
+            data.platform === 'WordPress' ? (data.content_stats_updated_date || null) : null,
             id
         ).run<Domain>()
 

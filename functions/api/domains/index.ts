@@ -12,6 +12,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
 
         const result = await context.env.DB.prepare(`
             SELECT d.*,
+                   a.name AS adsense_account_name,
+                   a.owner AS adsense_owner,
+                   a.publisher_id AS adsense_publisher_id,
+                   CASE WHEN d.adsense_opened_date IS NOT NULL AND d.registrar_date IS NOT NULL AND d.adsense_opened_date >= d.registrar_date
+                        THEN CAST(julianday(d.adsense_opened_date) - julianday(d.registrar_date) AS INTEGER)
+                        ELSE NULL END AS adsense_open_days,
                    (SELECT COUNT(*) FROM domain_resources dr WHERE dr.domain_id = d.id) AS resource_count,
                    (SELECT GROUP_CONCAT(label, ', ') FROM (
                        SELECT DISTINCT r.provider || ': ' || COALESCE(a.name || ' / ', '') || r.name AS label
@@ -19,8 +25,12 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
                        LEFT JOIN provider_accounts a ON a.id = r.account_id WHERE dr.domain_id = d.id
                    )) AS resource_names,
                    (SELECT COUNT(*) FROM domain_ai_notes n WHERE n.domain_id = d.id AND n.archived_at IS NULL) AS ai_note_count,
+                   (SELECT MAX(o.operation_date) FROM domain_operations o WHERE o.domain_id = d.id) AS latest_operation_date,
+                   (SELECT COUNT(*) FROM domain_operations o WHERE o.domain_id = d.id) AS operation_count,
                    CASE WHEN EXISTS (SELECT 1 FROM domain_resources dr WHERE dr.domain_id = d.id) THEN '已关联' ELSE '未关联' END AS resource_status
-            FROM domains d ORDER BY d.created_at DESC
+            FROM domains d
+            LEFT JOIN adsense_accounts a ON a.id = d.adsense_account_id
+            ORDER BY d.created_at DESC
         `).all<Domain>()
 
         if (!result.success) {
@@ -68,8 +78,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
                 domain, registrar, registrar_link, registrar_date,
                 expiry_date, service_type, status, tgsend, st_tgsend, memo,
                 adsense_account_id, adsense_connected, adsense_opened_date, seo_last_date,
-                daily_clicks, clicks_updated_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                daily_clicks, clicks_updated_date, platform, platform_other,
+                wp_calculator_count, wp_article_count, content_stats_updated_date
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
         `).bind(
             normalizedDomain,
@@ -87,7 +98,12 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data.adsense_opened_date || null,
             data.seo_last_date || null,
             data.daily_clicks ?? null,
-            data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate())
+            data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate()),
+            data.platform || '其他',
+            data.platform === '其他' ? (data.platform_other || null) : null,
+            data.platform === 'WordPress' ? (data.wp_calculator_count ?? null) : null,
+            data.platform === 'WordPress' ? (data.wp_article_count ?? null) : null,
+            data.platform === 'WordPress' ? (data.content_stats_updated_date || null) : null
         ).run<Domain>()
 
         if (result.success) {

@@ -132,6 +132,10 @@ test('domain validation uses normalized names, real dates, and non-overlapping c
     assert.equal(validateDomain(valid), null)
     assert.match(validateDomain({ ...valid, daily_clicks: -1 }), /非负整数/)
     assert.match(validateDomain({ ...valid, adsense_connected: '已开通' }), /开通日期/)
+    assert.equal(validateDomain({ ...valid, platform: 'WordPress', wp_calculator_count: 12, wp_article_count: 40, content_stats_updated_date: '2026-10-31' }), null)
+    assert.match(validateDomain({ ...valid, platform: 'WordPress', wp_article_count: 40 }), /统计日期/)
+    assert.match(validateDomain({ ...valid, platform: 'Astro', wp_article_count: 1, content_stats_updated_date: '2026-10-31' }), /只有 WordPress/)
+    assert.match(validateDomain({ ...valid, adsense_connected: '已开通', adsense_opened_date: '2026-10-31' }), /账号/)
 })
 
 test('credential ciphertext is authenticated and requires a strong configured secret', async () => {

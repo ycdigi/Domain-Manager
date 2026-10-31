@@ -22,6 +22,9 @@ test('schema is repeatable and includes resource tables', () => {
     assert.ok(tables.includes('provider_credentials'))
     assert.ok(tables.includes('domain_ai_notes'))
     assert.ok(tables.includes('domain_ai_note_versions'))
+    assert.ok(tables.includes('domain_operations'))
+    assert.match(runSql(db, 'PRAGMA table_info(domains);'), /platform/)
+    assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }
@@ -34,9 +37,11 @@ test('dashboard and domain lookups use their supporting indexes', () => {
     const seoPlan = runSql(db, 'EXPLAIN QUERY PLAN SELECT id, domain, seo_last_date FROM domains ORDER BY seo_last_date ASC LIMIT 5;')
     const linksPlan = runSql(db, 'EXPLAIN QUERY PLAN SELECT COUNT(*) FROM domain_resources WHERE domain_id=1;')
     const domainPlan = runSql(db, "EXPLAIN QUERY PLAN SELECT id FROM domains WHERE lower(rtrim(domain, '.'))='example.com';")
+    const operationsPlan = runSql(db, "EXPLAIN QUERY PLAN SELECT operation_date FROM domain_operations WHERE domain_id=1 ORDER BY operation_date DESC;")
     assert.match(seoPlan, /idx_domains_seo_last_date/)
     assert.match(linksPlan, /sqlite_autoindex_domain_resources_1/)
     assert.match(domainPlan, /uq_domains_normalized_name/)
+    assert.match(operationsPlan, /idx_domain_operations_domain_date/)
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }
@@ -84,6 +89,22 @@ test('income is unique per AdSense account and month', () => {
   }
 })
 
+test('AdSense Publisher IDs are unique when present', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/publisher.db'
+  try {
+    runSql(db, fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8'))
+    runSql(db, `INSERT INTO adsense_accounts(name, owner, publisher_id) VALUES ('main', 'self', 'pub-12345678'); INSERT OR IGNORE INTO adsense_accounts(name, owner, publisher_id) VALUES ('duplicate', 'self', 'pub-12345678');`)
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM adsense_accounts;').trim(), '1')
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
+test('export snapshot source does not query credential storage', () => {
+  const source = fs.readFileSync(path.join(repo, 'functions/api/export/snapshot/index.ts'), 'utf8')
+  assert.doesNotMatch(source, /provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|TELEGRAM_BOT_TOKEN|API_TOKEN/)
+})
+
 test('dashboard income remains one account-month total when it has multiple sites', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/dashboard.db'
   try {
@@ -103,6 +124,36 @@ test('income can be totaled by owner and currency across multiple accounts', () 
     runSql(db, `INSERT INTO adsense_accounts(name, owner, currency) VALUES ('main', 'self', 'USD'), ('second', 'self', 'USD'), ('euro', 'self', 'EUR'); INSERT INTO adsense_income(adsense_account_id, income_month, amount) VALUES (1, '2026-10', 12.5), (2, '2026-10', 7.5), (3, '2026-10', 3);`)
     const result = runSql(db, `SELECT owner || '|' || currency || '|' || SUM(i.amount) FROM adsense_accounts a LEFT JOIN adsense_income i ON i.adsense_account_id=a.id AND i.income_month='2026-10' GROUP BY owner, currency ORDER BY currency;`).trim().split('\n')
     assert.deepEqual(result, ['self|EUR|3.0', 'self|USD|20.0'])
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
+test('operation dates are unique per domain, date and kind, and cascade on deletion', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/operations.db'
+  try {
+    runSql(db, 'PRAGMA foreign_keys=ON;')
+    runSql(db, fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8'))
+    runSql(db, `INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type) VALUES ('example.com', 'test', '2025-01-01', '2027-01-01', '正常网站'); INSERT INTO domain_operations(domain_id, operation_date, operation_kind) VALUES (1, '2026-10-31', 'SEO'); INSERT OR IGNORE INTO domain_operations(domain_id, operation_date, operation_kind) VALUES (1, '2026-10-31', 'SEO'); INSERT INTO domain_operations(domain_id, operation_date, operation_kind) VALUES (1, '2026-10-31', '内容');`)
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_operations;').trim(), '2')
+    runSql(db, 'DELETE FROM domains WHERE id=1;')
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_operations;').trim(), '0')
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
+test('v1.5 migration preserves legacy domains and adds operations and publisher data', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/migration-v15.db'
+  try {
+    runSql(db, `CREATE TABLE domains (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, registrar TEXT NOT NULL, registrar_link TEXT, registrar_date TEXT NOT NULL, expiry_date TEXT NOT NULL, service_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT '离线', tgsend INTEGER DEFAULT 0, st_tgsend INTEGER DEFAULT 1, memo TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP); INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type) VALUES ('legacy.example.com', 'test', '2025-01-01', '2026-12-31', '正常网站');`)
+    for (const version of ['v1.1.0', 'v1.2.0', 'v1.3.0', 'v1.4.0', 'v1.5.0']) runSql(db, fs.readFileSync(path.join(repo, `schema-migration-${version}.sql`), 'utf8'))
+    const row = runSql(db, "SELECT domain || '|' || platform FROM domains;").trim()
+    assert.equal(row, 'legacy.example.com|其他')
+    assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
+    assert.match(runSql(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='domain_operations';"), /domain_operations/)
+    runSql(db, "INSERT INTO domain_operations(domain_id, operation_date, operation_kind) VALUES (1, '2026-10-31', '技术');")
+    assert.equal(runSql(db, 'SELECT COUNT(*) FROM domain_operations;').trim(), '1')
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }

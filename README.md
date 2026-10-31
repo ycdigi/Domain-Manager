@@ -114,6 +114,7 @@
    - 先检查 `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`。若有结果，先人工合并重复域名；之后执行 `schema-migration-v1.3.0.sql`，此迁移只执行一次
    - 在 Pages 项目中新增 Secret `CREDENTIAL_ENCRYPTION_KEY`，用于加密保存 GitHub Token；值需至少 32 个随机字符，例如本地运行 `openssl rand -hex 32` 生成；不要把它放进普通 Text 变量
    - 已有数据库升级到 AI 提示词和想法记录时，再执行一次 `schema-migration-v1.4.0.sql`
+   - 已有数据库升级到 Publisher ID、网站技术栈、WordPress 内容统计和操作日期时，再执行一次 `schema-migration-v1.5.0.sql`
 
 ### D1 命令行管理
 
@@ -152,6 +153,7 @@ npm run db:migrate:v1.2.0
 npx wrangler d1 execute domains-db --remote --command "SELECT lower(rtrim(domain, '.')) AS domain_key, COUNT(*) AS count FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;"
 npm run db:migrate:v1.3.0
 npm run db:migrate:v1.4.0
+npm run db:migrate:v1.5.0
 npm run db:verify:remote
 ```
 
@@ -161,9 +163,9 @@ npm run db:verify:remote
 
 `CREDENTIAL_ENCRYPTION_KEY` 是 GitHub Token 的加密密钥。请另行备份；丢失或更换后，已有密文无法解密，需要重新录入 Token。
 
-资源账号、资源和网站关联通过 `/api/resources/*` 管理；完整 Token 只在明确点击显示时返回，不包含在域名导出文件中。首页的状态刷新会限制并发，并通过 `/api/domains/batch` 合并变化后写入 D1。
+资源账号、资源和网站关联通过 `/api/resources/*` 管理；完整 Token 只在明确点击显示时返回，不包含在域名导出文件或 Excel 快照中。网站详情可以维护技术栈、WordPress 计算器页数、文章数、统计日期和操作日期历史。
 
-状态写入会按日期去重；SEO 和点击修改使用浏览器本地队列，最多保留 200 项，每批最多 25 项。重复字段变更会合并，断网或 D1 临时失败会保留待同步任务。资源状态由 D1 关联触发器维护。AdSense 月收入使用单独的“导出收入”操作，不会混进域名 JSON。
+状态写入会按日期去重；SEO 和点击修改使用浏览器本地队列，最多保留 200 项，每批最多 25 项。重复字段变更会合并，断网或 D1 临时失败会保留待同步任务。资源状态由 D1 关联触发器维护。AdSense 月收入按账号和月份保存，不分摊到单个网站。首页“导出”会生成包含域名、操作、AdSense、收入、资源关联和 AI 记录的多工作表 Excel，不包含密码、API Token、Provider Token、凭据密文或加密密钥。
 
 后端登录令牌现在由 `USER` 和 `PASS` 签名。首次部署此版本后，旧浏览器会话需要重新登录一次；之后仍会在同一浏览器长期保留，直到登出、清除站点数据或轮换 `PASS`。
 
@@ -227,6 +229,8 @@ npm run db:verify:remote
     ]
 }
 ```
+
+操作日期使用 `/api/domains/:id/operations` 管理，类型固定为 `SEO`、`内容`、`技术`、`其他`，同一网站同一天同一类型只保留一条。`/api/export/snapshot` 返回不含凭据的完整导出数据，首页会据此生成多工作表 Excel。
 
 ## 配置说明
 

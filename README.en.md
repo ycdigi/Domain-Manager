@@ -100,10 +100,13 @@ Domain JSON may also include an `ai_notes` array with `kind` (`AI提示词` or `
 - Before v1.3.0, check `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`. Resolve any duplicate domain rows manually, then run `schema-migration-v1.3.0.sql` once for status-alert tracking, resource-status triggers, and revised indexes.
 - Add a Pages Secret named `CREDENTIAL_ENCRYPTION_KEY` with at least 32 random characters (for example, generate locally with `openssl rand -hex 32`) to encrypt GitHub tokens. Do not add it as a public text variable.
 - For existing databases, run `schema-migration-v1.4.0.sql` once to add per-domain AI prompts and idea notes.
+- For existing databases, run `schema-migration-v1.5.0.sql` once to add Publisher IDs, platform/content snapshots, and operation-date history.
 
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 
 `CREDENTIAL_ENCRYPTION_KEY` encrypts stored GitHub tokens. Keep an independent backup. If it is lost or replaced, existing ciphertext cannot be decrypted and those tokens must be entered again.
+
+The home-page export creates one multi-sheet Excel workbook for domains, operations, AdSense accounts and income, infrastructure, resource links, and AI notes. It excludes passwords, API tokens, provider credentials, ciphertext, and encryption keys.
 
 Server login tokens are now signed with `USER` and `PASS`. Sign in once after deploying this version to replace any older unsigned browser session. The new session remains valid in that browser until logout, site data is cleared, or `PASS` is rotated.
 
