@@ -107,13 +107,19 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
     if (authError) return authError
     try {
         const id = context.params.id as string
-        const fields = await context.request.json() as Record<string, unknown>
-        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other']
+        const input = await context.request.json() as Record<string, unknown>
+        const fields = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === '' ? null : value]))
+        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other', 'adsense_connected', 'adsense_account_id', 'adsense_opened_date']
         const keys = Object.keys(fields)
         if (!keys.length || keys.some(key => !allowed.includes(key))) return Response.json({ status: 400, message: '局部更新包含不支持的字段', data: null }, { status: 400 })
 
         const current = await context.env.DB.prepare('SELECT * FROM domains WHERE id = ?').bind(id).first<Domain>()
         if (!current) return Response.json({ status: 404, message: '域名不存在', data: null }, { status: 404 })
+
+        if ('adsense_account_id' in fields && fields.adsense_account_id != null) {
+            const account = await context.env.DB.prepare('SELECT id FROM adsense_accounts WHERE id = ?').bind(fields.adsense_account_id).first()
+            if (!account) return Response.json({ status: 400, message: 'AdSense 账号不存在', data: null }, { status: 400 })
+        }
 
         const merged = { ...current, ...fields }
         if (fields.platform && fields.platform !== '其他') merged.platform_other = null

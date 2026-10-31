@@ -15,9 +15,13 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         const month = monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam) ? monthParam : today.slice(0, 7)
         const [{ results: totals }, { results: seo }, { results: clicks }, { results: providers }, { results: ownerIncome }, { results: platforms }, { results: quality }] = await Promise.all([
             db.prepare(`SELECT COUNT(*) AS total_domains,
-                SUM(CASE WHEN expiry_date <= date(?, '+30 day') THEN 1 ELSE 0 END) AS expiring_domains,
+                SUM(CASE WHEN expiry_date >= ? AND expiry_date <= date(?, '+30 day') THEN 1 ELSE 0 END) AS expiring_domains,
+                SUM(CASE WHEN seo_last_date IS NULL OR julianday(?) - julianday(seo_last_date) > 30 THEN 1 ELSE 0 END) AS seo_stale_domains,
+                SUM(CASE WHEN platform = 'WordPress' AND daily_clicks >= 30 THEN 1 ELSE 0 END) AS excellent_wordpress,
+                SUM(CASE WHEN platform = 'Astro' AND daily_clicks >= 30 THEN 1 ELSE 0 END) AS excellent_astro,
+                SUM(CASE WHEN platform = 'Next.js' AND daily_clicks >= 30 THEN 1 ELSE 0 END) AS excellent_nextjs,
                 SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM domain_resources dr WHERE dr.domain_id = domains.id) THEN 1 ELSE 0 END) AS incomplete_resources
-                FROM domains`).bind(today).all(),
+                FROM domains`).bind(today, today, today).all(),
             db.prepare(`SELECT id, domain, seo_last_date,
                 CAST(julianday(?) - julianday(seo_last_date) AS INTEGER) AS days_since
                 FROM domains

@@ -135,11 +135,39 @@ test('domain quick editing exposes a narrow PATCH contract and SEO dual write', 
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
   const request = fs.readFileSync(path.join(repo, 'src/utils/request.ts'), 'utf8')
   assert.match(patch, /onRequestPatch/)
-  assert.match(patch, /site_name.*industry.*status.*platform.*platform_other/)
+  assert.match(patch, /site_name.*industry.*status.*platform.*platform_other.*adsense_connected.*adsense_account_id.*adsense_opened_date/)
   assert.match(request, /patch: <T = unknown>/)
   assert.match(home, /domain_operation_add/)
   assert.match(home, /seo_last_date: date/)
   assert.match(home, /sidebar-collapsed/)
+  assert.match(home, /handleAdsenseSelect/)
+  assert.match(home, /registrar_date.*注册时间/)
+})
+
+test('dashboard operating metrics use explicit date and click boundaries', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/metrics.db'
+  try {
+    runSql(db, fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8'))
+    runSql(db, `INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type, platform, daily_clicks, seo_last_date) VALUES
+      ('today.example', 'r', '2025-01-01', '2026-10-31', '正常网站', 'WordPress', 30, '2026-10-01'),
+      ('thirty.example', 'r', '2025-01-01', '2026-11-30', '正常网站', 'Astro', 29, '2026-09-30'),
+      ('later.example', 'r', '2025-01-01', '2026-12-01', '正常网站', 'Next.js', 31, '2026-09-29'),
+      ('expired.example', 'r', '2025-01-01', '2026-10-30', '正常网站', 'WordPress', NULL, NULL);`)
+    const row = runSql(db, `SELECT
+      SUM(CASE WHEN expiry_date >= '2026-10-31' AND expiry_date <= date('2026-10-31', '+30 day') THEN 1 ELSE 0 END),
+      SUM(CASE WHEN seo_last_date IS NULL OR julianday('2026-10-31') - julianday(seo_last_date) > 30 THEN 1 ELSE 0 END),
+      SUM(CASE WHEN platform = 'WordPress' AND daily_clicks >= 30 THEN 1 ELSE 0 END),
+      SUM(CASE WHEN platform = 'Astro' AND daily_clicks >= 30 THEN 1 ELSE 0 END),
+      SUM(CASE WHEN platform = 'Next.js' AND daily_clicks >= 30 THEN 1 ELSE 0 END)
+      FROM domains;`).trim()
+    assert.equal(row, '2|3|1|0|1')
+    const summary = fs.readFileSync(path.join(repo, 'functions/api/dashboard/summary/index.ts'), 'utf8')
+    assert.match(summary, /seo_stale_domains/)
+    assert.match(summary, /excellent_wordpress/)
+    assert.match(summary, /expiry_date >= \?/)
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
 })
 
 test('dashboard income remains one account-month total when it has multiple sites', () => {
