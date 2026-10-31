@@ -8,7 +8,7 @@
 - Genre：modern-minimal；页面类型：app screen；用途：自用后台域名管理。
 - Theme：现有项目设计；调性：technical、utilitarian、专业、克制、清晰；浅色背景／系统无衬线／绿色主操作，Restrained posture。
 - GitHub 仅作为工具界面层级参考；使用项目自己的 DM 标识，不声称复制 GitHub 品牌配色。
-- 页面由产品顶栏、页面标题及主操作、域名台账、流式页脚组成；不设置营销 Hero、统计卡片、背景摄影或装饰动画。
+- 页面由统计摘要、域名台账、右侧管理概览和工作区操作组成；不设置产品品牌头、页面宣传标题、页脚链接、营销 Hero、背景摄影或装饰动画。
 - 实装来源：[`Home.vue`](src/views/Home.vue)、[`Login.vue`](src/views/Login.vue)、[`shared/tokens.css`](src/styles/shared/tokens.css)、[`shared/base.css`](src/styles/shared/base.css)、[`shared/layout.css`](src/styles/shared/layout.css)、[`home.css`](src/styles/home/home.css)、[`login.css`](src/styles/login/login.css)、[`import.css`](src/styles/dialogs/import.css)。规则冲突时先核对这些源码，不能靠主题印象补值。
 
 ## Tokens
@@ -67,23 +67,22 @@
 ## Typography
 - 正文和标题共用上述系统字体链，不新增展示字体、字体下载或等宽标签体系。页面主体的实装字重使用 400、500、600。
 - 页面标题 24px／600／行高 1.35；760px 及以下改为 20px。正文与表格数据 14px，正文行高 1.5；表格单元内容行高 1.6。
-- 工具按钮与计数 13px；表头、状态标签、滚动提示、页脚 12px。产品名称 16px／600；表头 500。
+- 工具按钮与计数 13px；表头、状态标签、滚动提示 12px；表头 500。
 - 标题可换行、`min-width: 0`、`overflow-wrap: break-word`、`text-wrap: balance`；可比较的日期、剩余天数和记录数使用 tabular numerals。
 
 ## Layout And Responsive
-- 顶栏内容和工作区同为 100% 宽、居中、最大宽度 1440px，内部水平留白 `clamp(16px, 3vw, 40px)`；1440px 容器的可用内容宽度为 1360px，不在大屏无限扩张。
+- 工作区为 100% 宽、居中、最大宽度 1440px，内部水平留白 `clamp(16px, 3vw, 40px)`；1440px 容器的可用内容宽度为 1360px，不在大屏无限扩张。
 - 间距使用实际 2／4／8／12／16／24／32／40px token。桌面工作区上下 32px，标题区与台账相隔 24px；工具条内边距为上下 12px、左右 16px。
 - 容器／台账圆角 8px，控件圆角 6px，结构分隔为 1px；页面面板不叠加阴影。没有另设阴影、动效时长或 z-index token。
 
 | 实际断点 | 已实现行为 |
 | --- | --- |
-| `max-width: 760px` | 工作区上下留白 24px，标题 20px，辅助文字 13px；工具条操作换行，显示表格滚动提示；页脚链接及表格行操作至少 44px 高 |
+| `max-width: 760px` | 工作区上下留白 24px；工具条操作换行，显示表格滚动提示；表格行操作至少 44px 高 |
 | `max-width: 600px` | Element Plus 按钮至少 44px 高；弹窗内边距 16px；表单标签改为上置，移除表单内容的左侧占位；弹窗关闭按钮至少 44×44px |
 | `max-width: 380px` | 主操作独占一行并占满可用宽度；工具条操作排成两列 |
 
 ## Navigation And Footer
-- 顶栏最小高度 64px，使用 `paper-2` 与 1px 下边界；左侧使用已有 `public/vite.svg` 中的 DM 标识，32×32px，配产品名称；右侧为低强调“登出”。不引入侧栏、营销导航或额外目的地。
-- 页脚放在文档流内，距台账 24px，允许换行；保留现有版本／版权文字、作者链接和 YouTube 链接。不得改成固定遮挡内容的底栏或补造其他链接。
+- 不渲染产品品牌头或页脚；登出放在域名工作区的“更多”菜单中，不占用独立导航空间。
 
 ## Buttons And Forms
 - Home 页面唯一填充主操作是“新增域名”：绿色底、反白文字、6px 圆角，桌面至少 36px 高；hover 变为 `accent-hover`。弹窗单独保留一个提交主操作；Login 使用同款绿色“登录”按钮。
@@ -123,7 +122,7 @@
 
 ## Shared Implementation
 - CSS 入口只在 `src/main.ts`：依次加载 Element Plus、`shared/base.css`、`shared/layout.css`；base 导入唯一共享 token 源。`App.vue` 只提供 router-view，不再重复导入组件库 CSS 或维护另一套字体。
-- 共用 [`AppHeader.vue`](src/components/AppHeader.vue) 提供品牌和操作插槽，Home 放置登出按钮；Login 不增加额外导航。共用 [`AppFooter.vue`](src/components/AppFooter.vue) 保留原有版本、版权、作者及 YouTube 链接。
+- Home 和 Login 直接使用工作区，不渲染产品品牌头、页脚和外部作者链接。
 - DomainDialog 和 AlertConfigDialog 删除重复 footer CSS，复用公共控件与响应式表单规则；字段、校验、props、事件和提交逻辑不变。
 - ImportDialog 的页面专用样式在 `styles/dialogs/import.css`，结果值来自既有 API，loading 使用 aria-busy，结果通过 status 公布，不重复弹成功 toast。桌面和移动端保留全部错误明细，长文件名／域名可换行。
 - Home 只加载 `styles/home/home.css` 的局部台账规则；原 `home/base.css` 已被公共页面基础替代，旧 `home/tokens.css` 已在第 1 批移动至 shared。
@@ -132,7 +131,7 @@
 - 基础设施资源管理复用现有浅色弹窗、表格、按钮和状态语义；账号网站数使用去重统计，凭据完整值只在明确操作后显示。
 
 ## Login Variant
-- 使用相同顶栏、流式页脚、字体、语义色、控件、断点与容器。主内容区弹性占据可用高度，表单面板居中、宽 100%／最大 400px、1px rule 边框、8px 圆角、24px 内边距；600px 及以下内边距 16px。
+- 使用相同字体、语义色、控件、断点与容器。主内容区弹性占据可用高度，表单面板居中、宽 100%／最大 400px、1px rule 边框、8px 圆角、24px 内边距；600px 及以下内边距 16px。
 - 标题“登录”沿用 24px／600／1.35（760px 及以下 20px），说明为既有“域名管理系统”；用户名与密码使用可见标签、现有图标、username／current-password autocomplete。
 - 空字段使用 Element Plus 必填校验；仅请求进行时禁用提交并保留“登录”文字和 spinner。API 错误持久显示于表单内，保留输入供重试；键盘 Enter 通过原生表单统一提交。
 - 成功继续调用 `/api/login`，在当前浏览器 localStorage 长期保留 token 并进入 Home；不保存密码、不重复弹成功 toast。已登录时访问 `/` 或 `/login` 会直接进入 Home；主动登出、清除站点数据或使用另一浏览器／配置文件后需重新登录。兼容旧格式中的 expiresAt 字段，取消原先六小时的客户端期限；后端 API 与数据库不变。
@@ -141,10 +140,10 @@
 - 第 1 批公共基础控件：共享 token／base 与单一 CSS 入口。
 - 第 2 批普通编辑表单：DomainDialog、AlertConfigDialog；验证见 `.hallmark/batch-2/verification.json`。
 - 第 3 批文件导入弹窗：ImportDialog；验证见 `.hallmark/batch-3/verification.json`。
-- 公共页头／页脚抽离完成后，第 4 批 Login 接入；验证见 `.hallmark/batch-4/verification.json`。
+- 第 4 批 Login 接入；验证见 `.hallmark/batch-4/verification.json`。
 - 第 5 批 Home 集成及全站收口：移除已替代的局部基础规则和装饰处理，保留已确认台账；最终验收见 `.hallmark/site-rollout/`。
 
 ## Exports
-- 可执行导出是 [`src/styles/shared/tokens.css`](src/styles/shared/tokens.css)；通用按钮、焦点、表单、弹窗和减少动态效果规则在 [`src/styles/shared/base.css`](src/styles/shared/base.css)。共用容器和品牌页头／页脚在 shared/layout.css；Home、Login 和导入结果只持有各自局部布局，不复制另一套 token。
+- 可执行导出是 [`src/styles/shared/tokens.css`](src/styles/shared/tokens.css)；通用按钮、焦点、表单、弹窗和减少动态效果规则在 [`src/styles/shared/base.css`](src/styles/shared/base.css)。共用容器在 shared/layout.css；Home、Login 和导入结果只持有各自局部布局，不复制另一套 token。
 - 当前没有 Tailwind、DTCG、shadcn 导出，不为锁定系统引入新依赖或第二份 token 源。修改设计时同步更新本文件及实际 CSS，不能只改文档快照。
 - 本地验收产物不随源代码推送。参考验收：`.hallmark/home-after-lint.json`、`.hallmark/home-redesign/verification.json`、`.hallmark/home-redesign/handoff.md`。预览的 `.example` 记录是本地测试夹具，未写入应用或数据库，不能作为真实业务素材复用。

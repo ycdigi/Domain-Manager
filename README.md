@@ -112,6 +112,47 @@
    - 先检查 `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`。若有结果，先人工合并重复域名；之后执行 `schema-migration-v1.3.0.sql`，此迁移只执行一次
    - 在 Pages 项目中新增 Secret `CREDENTIAL_ENCRYPTION_KEY`，用于加密保存 GitHub Token；值需至少 32 个随机字符，例如本地运行 `openssl rand -hex 32` 生成；不要把它放进普通 Text 变量
 
+### D1 命令行管理
+
+仓库脚本默认使用数据库名 `domains-db`。`--local` 只操作本地开发数据库，生产库必须显式使用 `--remote`。
+
+```bash
+# 先确认远程数据库和表，不会写入数据
+npx wrangler d1 list
+npm run db:inspect:remote
+
+# 生产操作前导出备份
+npm run db:backup:remote
+```
+
+新建空数据库时：
+
+```bash
+npx wrangler d1 create domains-db
+npm run db:init:remote
+npm run db:verify:remote
+```
+
+已有数据库时，不要重新执行 `schema.sql` 覆盖旧结构。按实际缺失的版本顺序执行：
+
+```bash
+# 仅当 domains 缺少 st_tgsend 时执行
+npm run db:migrate:v1.0.2
+
+# 仅当缺少 AdSense/SEO 字段时执行
+npm run db:migrate:v1.1.0
+
+# 当前出现 “no such table: domain_resources” 时，通常需要执行这一批
+npm run db:migrate:v1.2.0
+
+# v1.3.0 会创建规范化域名唯一索引；执行前先确认没有重复域名
+npx wrangler d1 execute domains-db --remote --command "SELECT lower(rtrim(domain, '.')) AS domain_key, COUNT(*) AS count FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;"
+npm run db:migrate:v1.3.0
+npm run db:verify:remote
+```
+
+如果某个迁移提示列或表已存在，先停止，不要重复执行同一迁移；先用 `npm run db:inspect:remote` 和 Cloudflare D1 控制台确认当前结构。迁移完成后重新部署 Pages，使生产函数使用新表。
+
 > `DB` 必须是 D1 database binding，不是 Variables and secrets 里的 Text 变量。绑定名称必须精确为 `DB`，修改绑定或表结构后需要重新部署 Pages 项目。
 
 `CREDENTIAL_ENCRYPTION_KEY` 是 GitHub Token 的加密密钥。请另行备份；丢失或更换后，已有密文无法解密，需要重新录入 Token。

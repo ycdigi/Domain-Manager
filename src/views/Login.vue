@@ -1,6 +1,5 @@
 <template>
     <div class="login-container">
-        <AppHeader />
         <main class="workspace login-workspace">
             <section class="login-panel" aria-labelledby="login-title">
                 <div class="login-heading">
@@ -19,7 +18,6 @@
                 </el-form>
             </section>
         </main>
-        <AppFooter class="workspace login-footer" />
     </div>
 </template>
 
@@ -29,8 +27,6 @@ import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { useAuth } from '../utils/auth'
 import { User, Lock } from '@element-plus/icons-vue'
-import AppHeader from '../components/AppHeader.vue'
-import AppFooter from '../components/AppFooter.vue'
 
 interface ApiResponse<T = any> {
     status: number

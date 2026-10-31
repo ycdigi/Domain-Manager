@@ -1,17 +1,6 @@
 <template>
     <div class="home-container">
-        <AppHeader>
-            <el-dropdown>
-                <el-button class="more-button">更多</el-button>
-                <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
-            </el-dropdown>
-        </AppHeader>
-
         <main class="workspace">
-            <div class="page-heading">
-                <div><h1>域名管理系统</h1><p>域名、收入、SEO 和部署资源的统一台账。</p></div>
-            </div>
-
             <section class="summary-grid" aria-label="概览">
                 <div class="summary-card"><span>域名总数</span><strong>{{ dashboard.totals.total_domains || domains.length }}</strong></div>
                 <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
@@ -29,6 +18,10 @@
                             <el-button :icon="Upload" @click="handleImport">导入</el-button>
                             <el-button :icon="Download" @click="handleExport">导出</el-button>
                             <el-button :icon="Setting" @click="handleConfig">通知配置</el-button>
+                            <el-dropdown>
+                                <el-button class="more-button">更多</el-button>
+                                <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
+                            </el-dropdown>
                             <el-button @click="resourceManagerVisible = true">资源管理</el-button>
                             <el-button @click="adsenseManagerVisible = true">AdSense 管理</el-button>
                         </div>
@@ -72,7 +65,6 @@
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>基础设施</h2><button class="sidebar-link" @click="resourceManagerVisible = true">管理</button></div><div class="provider-summary"><div v-for="item in dashboard.providers" :key="item.provider"><span>{{ providerLabel(item.provider) }}</span><strong>{{ item.account_count }} 账号 · {{ item.resource_count }} 资源 · {{ item.linked_domain_count }} 网站</strong></div></div></section>
                 </aside>
             </div>
-            <AppFooter />
         </main>
 
         <DomainDialog v-model:visible="dialogVisible" :is-edit="isEdit" :edit-data="editData" :accounts="adsenseAccounts" @submit="handleDialogSubmit" />
@@ -90,8 +82,6 @@ import { ElMessage, ElMessageBox } from 'element-plus';
 import { Setting, Refresh, Plus, Upload, Download, Search } from '@element-plus/icons-vue';
 import '../styles/home/home.css';
 import { useAuth } from '../utils/auth';
-import AppHeader from '../components/AppHeader.vue';
-import AppFooter from '../components/AppFooter.vue';
 import DomainDialog from '../components/DomainDialog.vue';
 import AlertConfigDialog from '../components/AlertConfigDialog.vue';
 import ImportDialog from '../components/ImportDialog.vue';
