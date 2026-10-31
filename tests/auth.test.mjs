@@ -124,6 +124,25 @@ test('anonymous login reaches the login handler while protected APIs require a b
     assert.equal(protectedResponse.status, 401)
 })
 
+test('AI sync endpoint uses API_TOKEN instead of browser session auth', async () => {
+    let reached = false
+    const missing = await apiMiddleware({
+        request: new Request('https://example.test/api/ai/sync', { method: 'POST' }),
+        env: { API_TOKEN: 'ai-secret' },
+        next: async () => { reached = true; return new Response('sync handler') }
+    })
+    assert.equal(missing.status, 401)
+    assert.equal(reached, false)
+
+    const valid = await apiMiddleware({
+        request: new Request('https://example.test/api/ai/sync', { method: 'POST', headers: { Authorization: 'Bearer ai-secret' } }),
+        env: { API_TOKEN: 'ai-secret' },
+        next: async () => { reached = true; return new Response('sync handler') }
+    })
+    assert.equal(await valid.text(), 'sync handler')
+    assert.equal(reached, true)
+})
+
 test('domain validation uses normalized names, real dates, and non-overlapping click values', () => {
     assert.equal(normalizeDomain(' Example.COM. '), 'example.com')
     assert.equal(isValidDate('2024-02-29'), true)

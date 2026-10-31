@@ -105,6 +105,14 @@ test('export snapshot source does not query credential storage', () => {
   assert.doesNotMatch(source, /provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|TELEGRAM_BOT_TOKEN|API_TOKEN/)
 })
 
+test('AI sync endpoint only exposes operational fields and does not query credentials', () => {
+  const source = fs.readFileSync(path.join(repo, 'functions/api/ai/sync/index.ts'), 'utf8')
+  assert.match(source, /checkApiToken/)
+  assert.match(source, /domain_ai_notes/)
+  assert.match(source, /domain_operations/)
+  assert.doesNotMatch(source, /provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|TELEGRAM_BOT_TOKEN/)
+})
+
 test('dashboard income remains one account-month total when it has multiple sites', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/dashboard.db'
   try {

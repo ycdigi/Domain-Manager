@@ -232,6 +232,47 @@ npm run db:verify:remote
 
 操作日期使用 `/api/domains/:id/operations` 管理，类型固定为 `SEO`、`内容`、`技术`、`其他`，同一网站同一天同一类型只保留一条。`/api/export/snapshot` 返回不含凭据的完整导出数据，首页会据此生成多工作表 Excel。
 
+### 3. AI 同步 API
+
+给外部 AI 或自动化脚本使用的接口是：
+
+```text
+POST /api/ai/sync
+Authorization: Bearer ${API_TOKEN}
+Content-Type: application/json
+```
+
+它只更新已经存在的域名，不会因为域名拼写错误自动创建网站。支持同步状态、SEO 日期、日点击、技术栈、WordPress 数量、AdSense 网站状态、操作日期和 AI 提示词/想法。
+
+示例：
+
+```json
+{
+  "domain": "example.com",
+  "fields": {
+    "daily_clicks": 24,
+    "clicks_updated_date": "2026-10-31",
+    "seo_last_date": "2026-10-31",
+    "platform": "WordPress",
+    "wp_calculator_count": 12,
+    "wp_article_count": 48,
+    "content_stats_updated_date": "2026-10-31"
+  },
+  "operation": {
+    "operation_kind": "SEO",
+    "operation_date": "2026-10-31"
+  },
+  "ai_notes": [
+    {
+      "kind": "AI提示词",
+      "content": "检查首页入口结构和内链，找出影响收录的主要问题。"
+    }
+  ]
+}
+```
+
+重复发送相同操作日期、同类型或相同 AI 记录不会产生重复数据。`API_TOKEN` 只能放在 Authorization Header，不要放进 URL、提示词、JSON 导出或日志。
+
 ## 配置说明
 
 ### 环境变量
