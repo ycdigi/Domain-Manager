@@ -1,6 +1,6 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
 
 export const onRequestPut: PagesFunction<Env> = async (context) => {
     try {
@@ -38,6 +38,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
                 adsense_opened_date = ?,
                 seo_last_date = ?,
                 daily_clicks = ?,
+                daily_clicks_range = ?,
                 clicks_updated_date = CASE WHEN daily_clicks IS NOT ? THEN ? ELSE clicks_updated_date END,
                 platform = ?,
                 platform_other = ?,
@@ -64,6 +65,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
             data.adsense_opened_date || null,
             data.seo_last_date || null,
             data.daily_clicks ?? null,
+            data.daily_clicks_range || dailyClicksRangeFromNumber(data.daily_clicks),
             data.daily_clicks ?? null,
             data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate()),
             data.platform || '其他',

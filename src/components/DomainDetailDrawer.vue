@@ -10,7 +10,7 @@
           <div><span>注册日期</span><strong>{{ domain.registrar_date || '未记录' }}</strong></div>
           <div><span>到期日期</span><strong>{{ domain.expiry_date || '未记录' }}</strong></div>
           <div><span>最近 SEO</span><strong>{{ domain.seo_last_date || '未记录' }}</strong></div>
-          <div><span>点击数据</span><strong>{{ domain.daily_clicks ?? '未填写' }}<small v-if="domain.clicks_updated_date"> · {{ domain.clicks_updated_date }}</small></strong></div>
+          <div><span>点击数据</span><strong>{{ clickRangeLabel(domain.daily_clicks_range, domain.daily_clicks) }}<small v-if="domain.clicks_updated_date"> · {{ domain.clicks_updated_date }}</small></strong></div>
           <div><span>状态检查</span><strong>{{ datePart(domain.last_status_check_at) }}</strong></div>
           <div><span>AdSense</span><strong>{{ domain.adsense_connected || '未知' }}<small v-if="domain.adsense_opened_date"> · {{ domain.adsense_opened_date }}</small></strong></div>
           <div><span>开通耗时</span><strong>{{ domain.adsense_open_days == null ? '未计算' : `${domain.adsense_open_days} 天` }}</strong></div>
@@ -108,11 +108,12 @@ const qualityIssues = computed(() => {
   if (props.domain.platform === 'WordPress' && (props.domain.wp_calculator_count == null || props.domain.wp_article_count == null || !props.domain.content_stats_updated_date)) issues.push('WordPress 内容数量或统计日期未完整记录')
   if (!props.domain.resource_count) issues.push('还没有关联部署资源')
   if (resources.value.length && !resources.value.some(resource => resource.is_primary)) issues.push('尚未设置主部署资源')
-  if (props.domain.daily_clicks != null && !props.domain.clicks_updated_date) issues.push('日点击量缺少更新时间')
+  if ((props.domain.daily_clicks != null || props.domain.daily_clicks_range) && !props.domain.clicks_updated_date) issues.push('日点击量缺少更新时间')
   if (!props.domain.latest_operation_date) issues.push('还没有操作日期记录')
   return issues
 })
 const datePart = (value?: string | null) => value ? value.slice(0, 16).replace('T', ' ') : '未记录'
+const clickRangeLabel = (range?: string | null, value?: number | null) => ({ under10: '10 次以下', '10to29': '10–29 次', '30to49': '30–49 次', '50to99': '50–99 次', over100: '100 次以上' }[range || ''] || (value == null ? '未填写' : `${value} 次`))
 const loadNotes = async () => { if (!props.domain?.id) return; notes.value = await api.get(`/api/domains/${props.domain.id}/ai-notes`) }
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 const loadOperations = async () => { if (!props.domain?.id) return; [operations.value, resources.value] = await Promise.all([api.get<Operation[]>(`/api/domains/${props.domain.id}/operations`), api.get<ResourceLink[]>(`/api/resources/links?domain_id=${props.domain.id}`)]) }

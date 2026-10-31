@@ -1,6 +1,6 @@
 import type { Env, ProviderType } from '../../types'
 import { verifyToken } from '../../utils/auth'
-import { isValidDate, normalizeDomain } from '../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, isValidDailyClicksRange, isValidDate, normalizeDomain } from '../../utils/domain-validation'
 
 interface ResourceImport { provider: ProviderType; account?: string | null; resource: string; role: string }
 interface AiNoteImport { kind: 'AI提示词' | '想法说明'; content: string }
@@ -23,6 +23,7 @@ interface DomainImport {
     adsense_opened_date?: string | null
     seo_last_date?: string | null
     daily_clicks?: number | null
+    daily_clicks_range?: 'under10' | '10to29' | '30to49' | '50to99' | 'over100' | null
     clicks_updated_date?: string | null
     platform?: 'WordPress' | 'Astro' | 'Next.js' | '其他'
     platform_other?: string | null
@@ -35,7 +36,7 @@ interface DomainImport {
 }
 
 const providers = new Set<ProviderType>(['github', 'cloudflare', 'vhost', 'vps'])
-const allowedFields = ['registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
+const allowedFields = ['registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
 const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const todayShanghai = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -92,6 +93,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 catch { return '域名商链接格式无效' }
             }
             if (item.daily_clicks !== undefined && item.daily_clicks !== null && (!Number.isInteger(item.daily_clicks) || item.daily_clicks < 0)) return '日点击次数必须是非负整数'
+            if (item.daily_clicks_range !== undefined && item.daily_clicks_range !== null && !isValidDailyClicksRange(item.daily_clicks_range)) return '日点击区间无效'
             if (item.platform !== undefined && !['WordPress', 'Astro', 'Next.js', '其他'].includes(item.platform)) return '网站技术栈无效'
             if (item.platform_other != null && typeof item.platform_other !== 'string') return '其他技术栈名称格式无效'
             for (const field of ['wp_calculator_count', 'wp_article_count'] as const) {
@@ -187,6 +189,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     fields.content_stats_updated_date = null
                 }
                 if (has(item, 'daily_clicks')) fields.clicks_updated_date = item.daily_clicks == null ? null : (item.clicks_updated_date || importDate)
+                if (has(item, 'daily_clicks')) fields.daily_clicks_range = item.daily_clicks == null ? null : (item.daily_clicks_range || dailyClicksRangeFromNumber(item.daily_clicks))
                 if (has(item, 'adsense_account')) fields.adsense_account_id = item.adsense_account?.trim() ? accountIds.get(item.adsense_account.trim()) : null
 
                 if (id) {

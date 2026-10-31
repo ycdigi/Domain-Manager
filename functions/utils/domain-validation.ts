@@ -1,6 +1,14 @@
 import type { Domain, DomainPlatform } from '../types'
 
 const platforms: DomainPlatform[] = ['WordPress', 'Astro', 'Next.js', '其他']
+export const dailyClicksRanges = ['under10', '10to29', '30to49', '50to99', 'over100'] as const
+export type DailyClicksRange = typeof dailyClicksRanges[number]
+export const isValidDailyClicksRange = (value: unknown): value is DailyClicksRange => typeof value === 'string' && dailyClicksRanges.includes(value as DailyClicksRange)
+export const dailyClicksRangeFromNumber = (value: unknown): DailyClicksRange | null => {
+    if (!Number.isInteger(value) || Number(value) < 0) return null
+    const count = Number(value)
+    return count < 10 ? 'under10' : count < 30 ? '10to29' : count < 50 ? '30to49' : count < 100 ? '50to99' : 'over100'
+}
 
 export const isValidDate = (value: unknown): value is string => {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -35,6 +43,7 @@ export const validateDomain = (data: Partial<Domain>) => {
     if (data.adsense_opened_date != null && data.adsense_opened_date !== '' && !isValidDate(data.adsense_opened_date)) return 'AdSense 开通日期无效'
     if (data.seo_last_date != null && data.seo_last_date !== '' && !isValidDate(data.seo_last_date)) return 'SEO 日期无效'
     if (data.daily_clicks != null && (!Number.isInteger(data.daily_clicks) || data.daily_clicks < 0)) return '日点击次数必须是非负整数'
+    if (data.daily_clicks_range != null && !isValidDailyClicksRange(data.daily_clicks_range)) return '日点击区间无效'
     if (data.clicks_updated_date != null && data.clicks_updated_date !== '' && !isValidDate(data.clicks_updated_date)) return '点击数据日期无效'
     if (data.adsense_account_id != null && (!Number.isInteger(data.adsense_account_id) || data.adsense_account_id <= 0)) return 'AdSense 账号编号无效'
     if (data.adsense_connected === '已开通' && (data.adsense_account_id == null || data.adsense_account_id <= 0)) return '已开通时必须选择 AdSense 账号'

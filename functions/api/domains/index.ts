@@ -1,6 +1,6 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
     try {
@@ -79,9 +79,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
                 expiry_date, service_type, status, tgsend, st_tgsend, memo,
                 site_name, industry,
                 adsense_account_id, adsense_connected, adsense_opened_date, seo_last_date,
-                daily_clicks, clicks_updated_date, platform, platform_other,
+                daily_clicks, daily_clicks_range, clicks_updated_date, platform, platform_other,
                 wp_calculator_count, wp_article_count, content_stats_updated_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
         `).bind(
             normalizedDomain,
@@ -101,7 +101,8 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data.adsense_opened_date || null,
             data.seo_last_date || null,
             data.daily_clicks ?? null,
-            data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate()),
+            data.daily_clicks_range || dailyClicksRangeFromNumber(data.daily_clicks),
+            data.daily_clicks_range || data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate()),
             data.platform || '其他',
             data.platform === '其他' ? (data.platform_other || null) : null,
             data.platform === 'WordPress' ? (data.wp_calculator_count ?? null) : null,

@@ -116,6 +116,7 @@
    - 已有数据库升级到 AI 提示词和想法记录时，再执行一次 `schema-migration-v1.4.0.sql`
    - 已有数据库升级到 Publisher ID、网站技术栈、WordPress 内容统计和操作日期时，再执行一次 `schema-migration-v1.5.0.sql`
    - 已有数据库升级到网站名称和行业字段时，再执行一次 `schema-migration-v1.6.0.sql`
+   - 已有数据库升级到日点击区间选择时，再执行一次 `schema-migration-v1.7.0.sql`
 
 ### D1 命令行管理
 
@@ -156,6 +157,7 @@ npm run db:migrate:v1.3.0
 npm run db:migrate:v1.4.0
 npm run db:migrate:v1.5.0
 npm run db:migrate:v1.6.0
+npm run db:migrate:v1.7.0
 npm run db:verify:remote
 ```
 

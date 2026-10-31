@@ -35,7 +35,7 @@ const initialize = () => {
             : { queueId: crypto.randomUUID(), operation: entry })
             .map(item => {
                 if (item.operation.type !== 'domain_patch') return item
-                const allowed = Object.fromEntries(Object.entries(item.operation.fields || {}).filter(([key]) => ['status', 'last_status_check_at', 'daily_clicks', 'clicks_updated_date', 'seo_last_date'].includes(key)))
+                const allowed = Object.fromEntries(Object.entries(item.operation.fields || {}).filter(([key]) => ['status', 'last_status_check_at', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'seo_last_date'].includes(key)))
                 return { ...item, operation: { ...item.operation, fields: allowed } }
             })
             .filter(item => item.operation.type !== 'domain_patch' || Object.keys(item.operation.fields || {}).length > 0)

@@ -1,6 +1,6 @@
 import type { Env } from '../../../types'
 import { checkAuth } from '../../../utils/auth'
-import { isValidDate, todayShanghaiDate } from '../../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, isValidDate, isValidDailyClicksRange, todayShanghaiDate } from '../../../utils/domain-validation'
 
 type DomainPatch = { type: 'domain_patch'; id: number; fields: Record<string, unknown> }
 type LinkAdd = { type: 'resource_link_add'; domain_id: number; resource_id: number; role: string; is_primary?: number; memo?: string }
@@ -26,10 +26,11 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 if (!Number.isInteger(operation.id) || !operation.fields || typeof operation.fields !== 'object') return json(null, 400, '域名更新格式无效')
                 const fields = operation.fields
                 const keys = Object.keys(fields)
-                if (!keys.length || keys.some(key => !['status', 'last_status_check_at', 'daily_clicks', 'clicks_updated_date', 'seo_last_date'].includes(key))) return json(null, 400, '域名更新包含不支持的字段')
+                if (!keys.length || keys.some(key => !['status', 'last_status_check_at', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'seo_last_date'].includes(key))) return json(null, 400, '域名更新包含不支持的字段')
                 if ('status' in fields && !validStatus(fields.status)) return json(null, 400, '网站状态无效')
                 if ('last_status_check_at' in fields && !isValidDate(fields.last_status_check_at)) return json(null, 400, '检查日期无效')
                 if ('daily_clicks' in fields && fields.daily_clicks !== null && (!Number.isInteger(fields.daily_clicks) || Number(fields.daily_clicks) < 0)) return json(null, 400, '日点击必须是非负整数或空值')
+                if ('daily_clicks_range' in fields && fields.daily_clicks_range !== null && !isValidDailyClicksRange(fields.daily_clicks_range)) return json(null, 400, '日点击区间无效')
                 if ('seo_last_date' in fields && fields.seo_last_date !== null && !isValidDate(fields.seo_last_date)) return json(null, 400, 'SEO 日期格式无效')
 
                 const assignments: string[] = []
@@ -49,12 +50,13 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     changed.push('date(last_status_check_at) IS NOT ?')
                     changedValues.push(fields.last_status_check_at)
                 }
-                if ('daily_clicks' in fields) {
-                    if (fields.daily_clicks !== null && !isValidDate(fields.clicks_updated_date)) return json(null, 400, '点击数据日期无效')
-                    assignments.push('daily_clicks = ?', 'clicks_updated_date = ?')
-                    values.push(fields.daily_clicks, fields.daily_clicks === null ? null : fields.clicks_updated_date)
-                    changed.push('(daily_clicks IS NOT ? OR clicks_updated_date IS NOT ?)')
-                    changedValues.push(fields.daily_clicks, fields.daily_clicks === null ? null : fields.clicks_updated_date)
+                if ('daily_clicks' in fields || 'daily_clicks_range' in fields) {
+                    const clickDate = fields.daily_clicks == null && fields.daily_clicks_range == null ? null : (fields.clicks_updated_date || todayShanghaiDate())
+                    if (clickDate !== null && !isValidDate(clickDate)) return json(null, 400, '点击数据日期无效')
+                    assignments.push('daily_clicks = ?', 'daily_clicks_range = ?', 'clicks_updated_date = ?')
+                    values.push(fields.daily_clicks ?? null, fields.daily_clicks_range ?? dailyClicksRangeFromNumber(fields.daily_clicks), clickDate)
+                    changed.push('(daily_clicks IS NOT ? OR daily_clicks_range IS NOT ? OR clicks_updated_date IS NOT ?)')
+                    changedValues.push(fields.daily_clicks ?? null, fields.daily_clicks_range ?? dailyClicksRangeFromNumber(fields.daily_clicks), clickDate)
                 }
                 if ('seo_last_date' in fields) {
                     assignments.push('seo_last_date = ?')

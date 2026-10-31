@@ -17,9 +17,9 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             db.prepare(`SELECT COUNT(*) AS total_domains,
                 SUM(CASE WHEN expiry_date >= ? AND expiry_date <= date(?, '+30 day') THEN 1 ELSE 0 END) AS expiring_domains,
                 SUM(CASE WHEN seo_last_date IS NULL OR julianday(?) - julianday(seo_last_date) > 30 THEN 1 ELSE 0 END) AS seo_stale_domains,
-                SUM(CASE WHEN platform = 'WordPress' AND daily_clicks >= 30 THEN 1 ELSE 0 END) AS excellent_wordpress,
-                SUM(CASE WHEN platform = 'Astro' AND daily_clicks >= 30 THEN 1 ELSE 0 END) AS excellent_astro,
-                SUM(CASE WHEN platform = 'Next.js' AND daily_clicks >= 30 THEN 1 ELSE 0 END) AS excellent_nextjs,
+                SUM(CASE WHEN platform = 'WordPress' AND (daily_clicks_range IN ('30to49', '50to99', 'over100') OR (daily_clicks_range IS NULL AND daily_clicks >= 30)) THEN 1 ELSE 0 END) AS excellent_wordpress,
+                SUM(CASE WHEN platform = 'Astro' AND (daily_clicks_range IN ('30to49', '50to99', 'over100') OR (daily_clicks_range IS NULL AND daily_clicks >= 30)) THEN 1 ELSE 0 END) AS excellent_astro,
+                SUM(CASE WHEN platform = 'Next.js' AND (daily_clicks_range IN ('30to49', '50to99', 'over100') OR (daily_clicks_range IS NULL AND daily_clicks >= 30)) THEN 1 ELSE 0 END) AS excellent_nextjs,
                 SUM(CASE WHEN NOT EXISTS (SELECT 1 FROM domain_resources dr WHERE dr.domain_id = domains.id) THEN 1 ELSE 0 END) AS incomplete_resources
                 FROM domains`).bind(today, today, today).all(),
             db.prepare(`SELECT id, domain, seo_last_date,
@@ -27,12 +27,12 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 FROM domains
                 ORDER BY seo_last_date ASC LIMIT 5`).bind(today).all(),
             db.prepare(`SELECT
-                SUM(CASE WHEN daily_clicks IS NULL THEN 1 ELSE 0 END) AS unknown,
-                SUM(CASE WHEN daily_clicks < 10 THEN 1 ELSE 0 END) AS under_10,
-                SUM(CASE WHEN daily_clicks BETWEEN 10 AND 29 THEN 1 ELSE 0 END) AS from_10_to_29,
-                SUM(CASE WHEN daily_clicks BETWEEN 30 AND 49 THEN 1 ELSE 0 END) AS from_30_to_49,
-                SUM(CASE WHEN daily_clicks BETWEEN 50 AND 99 THEN 1 ELSE 0 END) AS from_50_to_99,
-                SUM(CASE WHEN daily_clicks >= 100 THEN 1 ELSE 0 END) AS over_100
+                SUM(CASE WHEN daily_clicks_range IS NULL AND daily_clicks IS NULL THEN 1 ELSE 0 END) AS unknown,
+                SUM(CASE WHEN daily_clicks_range = 'under10' OR (daily_clicks_range IS NULL AND daily_clicks < 10) THEN 1 ELSE 0 END) AS under_10,
+                SUM(CASE WHEN daily_clicks_range = '10to29' OR (daily_clicks_range IS NULL AND daily_clicks BETWEEN 10 AND 29) THEN 1 ELSE 0 END) AS from_10_to_29,
+                SUM(CASE WHEN daily_clicks_range = '30to49' OR (daily_clicks_range IS NULL AND daily_clicks BETWEEN 30 AND 49) THEN 1 ELSE 0 END) AS from_30_to_49,
+                SUM(CASE WHEN daily_clicks_range = '50to99' OR (daily_clicks_range IS NULL AND daily_clicks BETWEEN 50 AND 99) THEN 1 ELSE 0 END) AS from_50_to_99,
+                SUM(CASE WHEN daily_clicks_range = 'over100' OR (daily_clicks_range IS NULL AND daily_clicks >= 100) THEN 1 ELSE 0 END) AS over_100
                 FROM domains`).all(),
             db.prepare(`WITH providers(provider) AS (VALUES ('github'), ('cloudflare'), ('vhost'), ('vps')),
                 account_counts AS (SELECT provider, COUNT(*) AS account_count FROM provider_accounts GROUP BY provider),

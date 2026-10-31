@@ -35,6 +35,7 @@ export interface Domain {
     adsense_opened_date?: string | null
     seo_last_date?: string | null
     daily_clicks?: number | null
+    daily_clicks_range?: 'under10' | '10to29' | '30to49' | '50to99' | 'over100' | null
     clicks_updated_date?: string | null
     platform?: DomainPlatform
     platform_other?: string | null

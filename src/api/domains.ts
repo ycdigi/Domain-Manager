@@ -22,6 +22,7 @@ export interface DomainData {
     adsense_opened_date: string | null
     seo_last_date: string | null
     daily_clicks: number | null
+    daily_clicks_range: 'under10' | '10to29' | '30to49' | '50to99' | 'over100' | null
     clicks_updated_date: string | null
     platform: 'WordPress' | 'Astro' | 'Next.js' | '其他'
     platform_other: string | null

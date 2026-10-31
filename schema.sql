@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS domains (
     adsense_opened_date TEXT,
     seo_last_date TEXT,
     daily_clicks INTEGER,
+    daily_clicks_range TEXT,
     clicks_updated_date TEXT,
     platform TEXT NOT NULL DEFAULT '其他',
     platform_other TEXT,
@@ -70,6 +71,7 @@ CREATE INDEX IF NOT EXISTS idx_domains_platform ON domains(platform);
 CREATE INDEX IF NOT EXISTS idx_domains_content_stats_date ON domains(content_stats_updated_date);
 CREATE INDEX IF NOT EXISTS idx_domains_industry ON domains(industry);
 CREATE INDEX IF NOT EXISTS idx_domains_site_name ON domains(site_name);
+CREATE INDEX IF NOT EXISTS idx_domains_clicks_range ON domains(daily_clicks_range);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_adsense_accounts_publisher_id
     ON adsense_accounts(publisher_id)
     WHERE publisher_id IS NOT NULL AND publisher_id <> '';
