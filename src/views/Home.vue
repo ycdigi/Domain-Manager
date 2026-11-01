@@ -46,7 +46,7 @@
                         <el-button @click="clearFilters">清除筛选</el-button>
                     </div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
-                    <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" @sort-change="handleTableSortChange">
+                    <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :row-class-name="tableRowClassName" @sort-change="handleTableSortChange">
                         <el-table-column prop="site_name" label="网站名称" min-width="142" fixed sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
                         <el-table-column prop="domain" label="域名" min-width="162" fixed sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
                         <el-table-column label="SEO" width="54"><template #default="scope"><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div></template></el-table-column>
@@ -56,7 +56,7 @@
                         <el-table-column label="文章数" min-width="86"><template #default="scope"><el-input-number v-if="scope.row.platform === 'WordPress'" class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /><span v-else class="not-applicable">不适用</span></template></el-table-column>
                         <el-table-column prop="platform" label="技术栈" min-width="98" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.platform" @change="value => handleInlineSelect(scope.row, 'platform', value)"><el-option v-for="platform in platformOptions" :key="platform" :label="platformText({ ...scope.row, platform })" :value="platform" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
-                        <el-table-column prop="latest_operation_date" label="最近操作" min-width="88" sortable><template #default="scope">{{ scope.row.latest_operation_date || '未记录' }}</template></el-table-column>
+                        <el-table-column prop="latest_operation_date" label="最近操作" min-width="88" sortable :sort-method="compareOperationDates"><template #default="scope">{{ scope.row.latest_operation_date || '未记录' }}</template></el-table-column>
                         <el-table-column prop="registrar_date" label="注册时间" min-width="92" sortable><template #default="scope">{{ scope.row.registrar_date || '未记录' }}</template></el-table-column>
                         <el-table-column prop="expiry_date" label="剩余时间" min-width="92" sortable :sort-method="(a, b) => calculateRemainingDays(a.expiry_date) - calculateRemainingDays(b.expiry_date)"><template #default="scope"><span class="expiry-label" :class="expiryClass(scope.row.expiry_date)">{{ formatRemainingDays(scope.row.expiry_date) }}</span></template></el-table-column>
                         <el-table-column prop="status" label="状态" min-width="72" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.status" @change="value => handleInlineSelect(scope.row, 'status', value)"><el-option label="在线" value="在线" /><el-option label="离线" value="离线" /></el-select></template></el-table-column>
@@ -252,6 +252,20 @@ const seoState = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: stri
 };
 const seoNeedsAttention = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: string | null }) => ['never', 'overdue'].includes(seoState(row).kind);
 const hasRecentOperation = (row: Pick<DomainData, 'latest_operation_date'>) => Boolean(row.latest_operation_date && row.latest_operation_date <= localDate() && daysSince(row.latest_operation_date) <= 7);
+const tableRowClassName = ({ row }: { row: DomainData }) => {
+    const classes: string[] = [];
+    if (seoNeedsAttention(row)) classes.push('row-seo-attention');
+    if (hasRecentOperation(row)) classes.push('row-recent-operation');
+    return classes.join(' ');
+};
+const compareOperationDates = (a: DomainData, b: DomainData) => {
+    const aDate = a.latest_operation_date || '';
+    const bDate = b.latest_operation_date || '';
+    if (!aDate && !bDate) return 0;
+    if (!aDate) return 1;
+    if (!bDate) return -1;
+    return aDate.localeCompare(bDate);
+};
 const clickRangeFromNumber = (value: number | null | undefined) => value == null ? null : value < 10 ? 'under10' : value < 30 ? '10to29' : value < 50 ? '30to49' : value < 100 ? '50to99' : 'over100';
 const clickRangeRank = (row: DomainData) => ({ under10: 1, '10to29': 2, '30to49': 3, '50to99': 4, over100: 5 } as Record<string, number>)[row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks) || ''] || 0;
 const compareDailyClicks = (a: DomainData, b: DomainData) => clickRangeRank(a) - clickRangeRank(b);

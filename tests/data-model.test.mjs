@@ -179,6 +179,8 @@ test('site name displays a warning marker for never-optimized and over-30-day SE
   assert.match(home, /seoNeedsAttention\(scope\.row\)/)
   assert.match(home, /\['never', 'overdue'\]\.includes\(seoState\(row\)\.kind\)/)
   assert.match(css, /\.site-seo-alert[^}]*color:var\(--color-error\)/)
+  assert.match(home, /:row-class-name="tableRowClassName"/)
+  assert.match(css, /row-seo-attention[^}]*background: var\(--color-paper-2\)/)
 })
 
 test('site name star marks an operation in the last seven days', () => {
@@ -187,7 +189,17 @@ test('site name star marks an operation in the last seven days', () => {
   assert.match(home, /StarFilled/)
   assert.match(home, /hasRecentOperation\(scope\.row\)/)
   assert.match(home, /latest_operation_date <= localDate\(\) && daysSince\(row\.latest_operation_date\) <= 7/)
-  assert.match(css, /\.site-recent-star[^}]*color:var\(--color-warning\)/)
+  assert.match(css, /\.site-recent-star[^}]*color:var\(--color-link\)/)
+  assert.match(css, /row-recent-operation[^}]*background: var\(--color-success-paper\)/)
+})
+
+test('table keeps the header visible and sorts recent operations as dates', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const css = fs.readFileSync(path.join(repo, 'src/styles/home/home.css'), 'utf8')
+  assert.match(home, /label="最近操作"[\s\S]*?:sort-method="compareOperationDates"/)
+  assert.match(home, /const compareOperationDates = \(a: DomainData, b: DomainData\)/)
+  assert.match(home, /if \(!aDate\) return 1/)
+  assert.match(css, /\.custom-table \.el-table__header-wrapper \{ position: sticky; top: 0;/)
 })
 
 test('copy actions share the clipboard fallback and keep domain copy local', () => {
