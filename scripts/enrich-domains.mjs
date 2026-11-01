@@ -50,13 +50,8 @@ function parseCsv(text) {
 }
 
 const industryRules = [
-  ['电气/工程', ['electr', 'electrotech', 'voltage', 'resistor', 'ohm', 'watt', 'amp', 'circuit', 'lighting', 'wire', 'cable', 'engineering', 'solar', 'battery', 'transistor', 'vde', 'nec']],
-  ['工业/制造', ['welding', 'cnc', 'cement', 'manufactur', 'machin', 'industrial', 'steel', 'laser', 'factory', 'packaging']],
-  ['酒店/旅游', ['hotel', 'travel', 'tourism', 'booking', 'hostel', 'resort']],
-  ['家居/装修', ['home', 'house', 'kitchen', 'bathroom', 'interior', 'furniture', 'wall', 'roof', 'lock']],
-  ['软件/工具', ['software', 'app', 'toolkit', 'api', 'developer', 'code', 'convert', 'generator']],
-  ['健康/医疗', ['health', 'medical', 'clinic', 'doctor', 'hospital', 'fitness', 'calorie', 'diet']],
-  ['教育', ['school', 'course', 'learn', 'education', 'university', 'study']]
+  ['计算器', ['calculator', 'calc', 'converter', 'convert', 'equation', 'formula', 'ohm', 'voltage', 'watt', 'amp', 'resistor']],
+  ['资讯站', ['news', 'magazine', 'journal', 'blog', 'guide', 'review', 'tutorial', 'articles', 'updates']]
 ]
 const cleanText = value => String(value || '').replace(/\s+/g, ' ').replace(/[|•·]+/g, ' ').trim()
 const decodeEntities = value => value.replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
@@ -69,7 +64,7 @@ const infer = (domain, html, responseHeaders) => {
   const text = `${title} ${ogSite} ${h1} ${description} ${Object.entries(responseHeaders).join(' ')}`.toLowerCase()
   const scores = industryRules.map(([industry, words]) => [industry, words.reduce((score, word) => score + (text.includes(word) ? 1 : 0), 0)]).sort((a, b) => b[1] - a[1])
   const top = scores[0]
-  const industry = top?.[1] >= 2 ? top[0] : null
+  const industry = top?.[1] >= 1 ? top[0] : null
   const candidate = ogSite || title || h1
   const normalizedCandidate = cleanText(candidate).toLowerCase().replace(/[^a-z0-9]+/g, '')
   const normalizedDomain = domain.toLowerCase().replace(/[^a-z0-9]+/g, '')

@@ -15,6 +15,8 @@
 
 一个基于 Cloudflare Pages/EdgeOne Pages  的域名管理系统，帮助您轻松管理和监控多个域名的状态、到期时间等信息。
 
+AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PROMPT.md)。提示词按“首次补全、后续只发送变化字段”设计，不会重复覆盖域名注册商导入的数据。
+
 ## 功能特点
 
 - 域名管理：添加、编辑、删除、导入、导出域名信息
@@ -93,6 +95,7 @@
      PASS=your_password
      API_TOKEN=your_api_token
      ```
+   - 生产环境必须在 Pages 的 Production 环境配置变量；Preview 环境变量不会自动用于正式域名。
 
 4. 创建 D1 数据库
    - 在 Cloudflare Dashboard 中进入 D1 页面
@@ -189,7 +192,7 @@ npm run db:verify:remote
 
 前端清理审计使用 `npm run lint:cleanup`，检查旧接口引用、CSS 类来源、模板内联样式、共享 token 重复定义，以及写入队列与批量 API 的字段一致性。
 
-网站信息抓取使用 `npm run domains:enrich --`。它只读取公开首页的标题、站点名、首个 H1、描述和少量响应特征，输出带证据的 JSON；如果指定 `--sql-output`，会生成只补全空网站名称/行业、并在技术栈仍为“其他”时补充已识别技术栈的 D1 更新语句，不覆盖已有手工值：
+网站信息抓取使用 `npm run domains:enrich --`。它只读取公开首页的标题、站点名、首个 H1、描述和少量响应特征，输出带证据的 JSON；如果指定 `--sql-output`，会生成只补全空网站名称/行业、并在技术栈仍为“其他”时补充已识别技术栈的 D1 更新语句，不覆盖已有手工值。行业只输出 `计算器`、`资讯站`、`其他` 三类：
 
 ```bash
 npm run domains:enrich -- \
@@ -204,8 +207,24 @@ npm run domains:enrich -- \
 后端登录令牌现在由 `USER` 和 `PASS` 签名。首次部署此版本后，旧浏览器会话需要重新登录一次；之后仍会在同一浏览器长期保留，直到登出、清除站点数据或轮换 `PASS`。
 
 7. 部署
-   - 点击 "Save and Deploy"
-   - 等待部署完成
+   - Git 集成部署：根目录保持 `functions/` 和 `src/`，构建命令使用 `npm run build`，输出目录使用 `dist`，然后点击 `Save and Deploy`
+   - 命令行部署：必须使用 Pages 命令，不要使用 `npx wrangler deploy`
+
+     ```bash
+     npm ci
+     npm run build
+     npx wrangler pages deploy dist --project-name domain-manager-4j0 --branch production
+     ```
+   - `functions/api/ai/sync/index.ts` 会随 Pages Functions 一起发布。发布后使用 POST 验证，不要在浏览器地址栏用 GET 打开接口：
+
+     ```bash
+     curl -i -X POST "https://domain-manager-4j0.pages.dev/api/ai/sync" \
+       -H "Authorization: Bearer ${API_TOKEN}" \
+       -H "Content-Type: application/json" \
+       --data '{"domain":"example.com","fields":{}}'
+     ```
+
+     `401` 表示路由已发布但 Token 不匹配；`404` 表示路径、项目或部署方式错误；`405` 表示使用了 GET，接口必须使用 POST；“域名不存在”表示接口正常但 D1 中没有该域名。
 
 部署完成后，您可以通过 Cloudflare Pages 提供的域名访问系统。
 
@@ -266,7 +285,7 @@ Content-Type: application/json
   "domain": "example.com",
   "fields": {
     "site_name": "电气计算器站",
-    "industry": "电气/工程",
+    "industry": "计算器",
     "daily_clicks": 24,
     "clicks_updated_date": "2026-10-31",
     "seo_last_date": "2026-10-31",

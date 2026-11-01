@@ -20,6 +20,8 @@ const fieldNames = new Set(['status', 'site_name', 'industry', 'seo_last_date', 
 
 const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
 
+export const onRequestGet: PagesFunction<Env> = async () => json(null, 405, 'AI 同步接口只支持 POST，请使用 Authorization Bearer Header 和 JSON 请求体')
+
 export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkApiToken(context)
     if (authError) return authError

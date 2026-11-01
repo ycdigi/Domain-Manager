@@ -185,7 +185,7 @@ const ownerOptions = computed(() => [...new Set(adsenseAccounts.value.map(accoun
 const providerOptions = ['github', 'cloudflare', 'vhost', 'vps'];
 const resourceAccountOptions = computed(() => resourceAccounts.value.filter(account => account.status === '正常').map(account => ({ provider: account.provider, account: account.name, value: String(account.id) })));
 const platformOptions = ['WordPress', 'Astro', 'Next.js', '其他'];
-const industryBaseOptions = ['电气/工程', '工业/制造', '酒店/旅游', '家居/装修', '软件/工具', '健康/医疗', '教育', '其他'];
+const industryBaseOptions = ['计算器', '资讯站', '其他'];
 const industryOptions = computed(() => [...new Set([...industryBaseOptions, ...domains.value.map(domain => domain.industry).filter((value): value is string => Boolean(value))])]);
 const filteredDomains = computed(() => domains.value.filter(row => {
     const account = accountById.value.get(row.adsense_account_id || undefined);

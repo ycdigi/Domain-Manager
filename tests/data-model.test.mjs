@@ -111,9 +111,25 @@ test('export snapshot source does not query credential storage', () => {
 test('AI sync endpoint only exposes operational fields and does not query credentials', () => {
   const source = fs.readFileSync(path.join(repo, 'functions/api/ai/sync/index.ts'), 'utf8')
   assert.match(source, /checkApiToken/)
+  assert.match(source, /onRequestGet[\s\S]*405/)
   assert.match(source, /domain_ai_notes/)
   assert.match(source, /domain_operations/)
   assert.doesNotMatch(source, /provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|TELEGRAM_BOT_TOKEN/)
+})
+
+test('AI sync prompt uses fixed industries and only sends changed fields', () => {
+  const prompt = fs.readFileSync(path.join(repo, 'AI-SYNC-PROMPT.md'), 'utf8')
+  const dialog = fs.readFileSync(path.join(repo, 'src/components/DomainDialog.vue'), 'utf8')
+  const enrich = fs.readFileSync(path.join(repo, 'scripts/enrich-domains.mjs'), 'utf8')
+  assert.match(prompt, /计算器.*资讯站.*其他/)
+  assert.match(prompt, /后续维护只提交本次新增、修改或明确要求重写的字段/)
+  assert.match(prompt, /registrar.*registrar_link.*registrar_date.*expiry_date.*service_type/)
+  assert.match(prompt, /由调用环境注入为 `API_TOKEN`/)
+  assert.doesNotMatch(prompt, /65379f99f51befdf5cc3251e96ad8349410bbb263b4d3b5da239f95813746762/)
+  assert.doesNotMatch(dialog, /allow-create/)
+  assert.match(enrich, /\['计算器'/)
+  assert.match(enrich, /\['资讯站'/)
+  assert.match(enrich, /top\?\.\[1\] >= 1 \? top\[0\] : null/)
 })
 
 test('legacy addrec endpoint is removed while supported endpoints remain', () => {
