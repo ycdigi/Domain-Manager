@@ -1,14 +1,8 @@
 <template>
-    <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed, 'navigation-collapsed': navigationCollapsed }">
-        <aside class="workspace-navigation" aria-label="网站导航">
-            <WorkspaceNavigation :tabs="platformTabs" :counts="platformTabCounts" :active="platformTab" :active-manager="activeManager" :collapsed="navigationCollapsed" @select="selectPlatform" @manage="openManager" @collapse="toggleNavigation" @backup="handleJsonExport" @logout="handleLogout" />
-        </aside>
-        <el-drawer v-model="navigationMobileOpen" class="workspace-navigation-drawer" title="网站导航" direction="ltr" size="256px" :with-header="false" @closed="runPendingNavigationAction">
-            <WorkspaceNavigation :tabs="platformTabs" :counts="platformTabCounts" :active="platformTab" :active-manager="activeManager" mobile @select="selectPlatform" @manage="openManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(handleJsonExport)" @logout="runNavigationAction(handleLogout)" />
-        </el-drawer>
+    <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
         <main class="workspace">
             <div class="ledger-toolbar">
-                <div class="ledger-title"><el-button class="navigation-menu" :icon="Menu" aria-label="打开导航" :aria-expanded="navigationMobileOpen" @click="navigationMobileOpen = true" /><h2 id="domain-list-title">{{ platformTab === 'all' ? '全部网站' : `${platformTab} 网站` }}</h2><span class="record-count" role="status">{{ loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名` }}</span></div>
+                <WorkspaceHeading :title="platformTab === 'all' ? '全部网站' : `${platformTab} 网站`" :subtitle="loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名`" />
                 <div class="ledger-actions" aria-label="域名管理操作">
                     <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
                     <el-button type="primary" :icon="Plus" @click="handleAdd">新增域名</el-button>
@@ -26,11 +20,13 @@
                 <div class="summary-card"><span>Next.js 优秀网站</span><strong>{{ dashboard.totals.excellent_nextjs || 0 }}</strong></div>
             </section>
             <div class="workbench-grid">
-                <section class="domain-ledger" aria-labelledby="domain-list-title" :aria-busy="loading">
+                <section class="domain-ledger" aria-label="网站台账" :aria-busy="loading">
                     <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
                     <div class="ledger-viewbar">
+                        <el-tag v-if="sourceLabel" closable @close="clearSource">{{ sourceLabel }}</el-tag>
                         <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable /></div>
                     </div>
+                    <div v-if="contextError" class="load-error" role="alert">{{ contextError }}</div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
                     <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :row-class-name="tableRowClassName" @sort-change="handleTableSortChange">
                         <el-table-column prop="site_name" label="网站名称" min-width="170" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" :title="scope.row.site_name || '未命名'" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
@@ -54,48 +50,41 @@
                 <button v-if="!sidebarCollapsed" type="button" class="sidebar-backdrop" aria-label="关闭概览" @click="toggleSidebar"></button>
                 <aside class="dashboard-sidebar" aria-label="管理概览">
                     <button type="button" class="overview-close" @click="toggleSidebar">关闭概览</button>
-                    <section class="sidebar-panel"><div class="sidebar-title"><h2>AdSense 收入</h2><button class="sidebar-link" @click="adsenseManagerVisible = true">管理</button></div><div v-if="dashboard.owner_income.length" class="sidebar-list"><div v-for="item in dashboard.owner_income" :key="`${item.owner}-${item.currency}`" class="sidebar-row"><span>{{ item.owner }}<small>{{ item.account_count }} 个账号 · {{ item.currency }} · 本月</small></span><strong>{{ item.currency }} {{ Number(item.current_income || 0).toFixed(2) }}</strong></div></div><p v-else class="sidebar-empty">暂无月收入</p></section>
+                    <section class="sidebar-panel"><div class="sidebar-title"><h2>AdSense 收入</h2><button class="sidebar-link" @click="router.push({ name: 'Adsense' })">管理</button></div><div v-if="dashboard.owner_income.length" class="sidebar-list"><div v-for="item in dashboard.owner_income" :key="`${item.owner}-${item.currency}`" class="sidebar-row"><span>{{ item.owner }}<small>{{ item.account_count }} 个账号 · {{ item.currency }} · 本月</small></span><strong>{{ item.currency }} {{ Number(item.current_income || 0).toFixed(2) }}</strong></div></div><p v-else class="sidebar-empty">暂无月收入</p></section>
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>最久未 SEO</h2></div><div v-if="dashboard.seo.length" class="sidebar-list"><div v-for="item in dashboard.seo" :key="item.id" class="sidebar-row"><span>{{ item.domain }}<small>{{ item.seo_last_date || '从未优化' }} · {{ item.days_since ?? '—' }} 天</small></span><button v-if="seoState(item).actionable" class="sidebar-link" @click="markSeoById(item.id)">今天优化</button><span v-else class="sidebar-seo-locked" :title="seoState(item).title"><el-icon><Lock /></el-icon></span></div></div><p v-else class="sidebar-empty">暂无网站</p></section>
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>日点击分布</h2></div><div class="click-summary"><span>未填写 <strong>{{ dashboard.clicks.unknown || 0 }}</strong></span><span>&lt;10 <strong>{{ dashboard.clicks.under_10 || 0 }}</strong></span><span>10–29 <strong>{{ dashboard.clicks.from_10_to_29 || 0 }}</strong></span><span>30–49 <strong>{{ dashboard.clicks.from_30_to_49 || 0 }}</strong></span><span>50–99 <strong>{{ dashboard.clicks.from_50_to_99 || 0 }}</strong></span><span>≥100 <strong>{{ dashboard.clicks.over_100 || 0 }}</strong></span></div></section>
-                    <section class="sidebar-panel"><div class="sidebar-title"><h2>基础设施</h2><button class="sidebar-link" @click="resourceManagerVisible = true">管理</button></div><div class="provider-summary"><div v-for="item in dashboard.providers" :key="item.provider"><span>{{ providerLabel(item.provider) }}</span><strong>{{ item.account_count }} 账号 · {{ item.resource_count }} 资源 · {{ item.linked_domain_count }} 网站</strong></div></div></section>
+                    <section class="sidebar-panel"><div class="sidebar-title"><h2>基础设施</h2><button class="sidebar-link" @click="router.push({ name: 'Resources' })">管理</button></div><div class="provider-summary"><div v-for="item in dashboard.providers" :key="item.provider"><span>{{ providerLabel(item.provider) }}</span><strong>{{ item.account_count }} 账号 · {{ item.resource_count }} 资源 · {{ item.linked_domain_count }} 网站</strong></div></div></section>
                 </aside>
             </div>
         </main>
 
         <DomainDialog v-model:visible="dialogVisible" :is-edit="isEdit" :edit-data="editData" :accounts="adsenseAccounts" @submit="handleDialogSubmit" />
-        <AlertConfigDialog v-model:visible="configVisible" :config="alertConfig" @submit="handleConfigSubmit" />
-        <ImportDialog v-model:visible="importVisible" @success="reloadAll" />
-        <AdsenseManagerDialog v-model:visible="adsenseManagerVisible" :accounts="adsenseAccounts" @changed="reloadAll" />
-        <ResourceManagerDialog v-model:visible="resourceManagerVisible" @changed="reloadAll" />
-        <DomainDetailDrawer v-model:visible="detailVisible" :domain="detailDomain" @changed="loadDomains" @edit="handleDetailEdit" />
+        <DomainDetailDrawer v-model:visible="detailVisible" :domain="detailDomain" @changed="refreshDomainDetails" @edit="handleDetailEdit" />
         <QuickFieldDialog v-model:visible="quickFieldVisible" :title="quickFieldTitle" :context="quickFieldDomain?.domain" :label="quickFieldLabel" :value="quickFieldValue" :placeholder="quickFieldPlaceholder" :maxlength="quickFieldMode === 'platform_other' ? 100 : 200" @save="saveQuickField" />
         <AdsenseQuickDialog v-model:visible="adsenseQuickVisible" :domain="adsenseQuickDomain?.domain" :accounts="adsenseAccounts" :account-id="adsenseQuickDomain?.adsense_account_id" :opened-date="adsenseQuickDomain?.adsense_opened_date" :registrar-date="adsenseQuickDomain?.registrar_date" @save="saveAdsenseQuick" />
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
-import { useRouter } from 'vue-router';
+import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, watch } from 'vue';
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, type TableInstance } from 'element-plus';
-import { Menu, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
+import { Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
 import '../styles/home/home.css';
 import { useAuth } from '../utils/auth';
 import DomainDialog from '../components/DomainDialog.vue';
-import AlertConfigDialog from '../components/AlertConfigDialog.vue';
-import ImportDialog from '../components/ImportDialog.vue';
-import AdsenseManagerDialog from '../components/AdsenseManagerDialog.vue';
-import ResourceManagerDialog from '../components/ResourceManagerDialog.vue';
 import DomainDetailDrawer from '../components/DomainDetailDrawer.vue';
 import QuickFieldDialog from '../components/QuickFieldDialog.vue';
 import AdsenseQuickDialog from '../components/AdsenseQuickDialog.vue';
-import WorkspaceNavigation from '../components/WorkspaceNavigation.vue';
+import WorkspaceHeading from '../components/WorkspaceHeading.vue';
+import { cachedGet, cachedValue, invalidateData, queryText } from '../utils/workspaceCache';
+import { downloadExcel } from '../utils/downloads';
 import { createDomain, updateDomain, deleteDomain, type DomainData } from '../api/domains';
 import { getWriteQueue } from '../utils/writeQueue';
 import { api, ApiError } from '../utils/request';
 import { confirmAction, isDismissed } from '../utils/feedback';
 import { copyText } from '../utils/clipboard';
 
-interface AlertConfig { tg_token: string; tg_userid: string; days: number; }
 interface DomainSortState { prop: string; order: 'ascending' | 'descending'; }
 
 const defaultTableSort: DomainSortState = { prop: 'site_name', order: 'ascending' };
@@ -114,66 +103,35 @@ const readTableSort = (): DomainSortState => {
 };
 
 const router = useRouter();
+const route = useRoute();
 const auth = useAuth();
-const domains = ref<DomainData[]>([]);
+const domains = cachedValue<DomainData[]>('/api/domains');
+if (!domains.value) domains.value = [];
 // Presentation only: pinned columns would cover all actions on narrow screens.
 const tableMedia = window.matchMedia('(min-width: 761px)');
 const pinIdentityColumns = ref(tableMedia.matches);
 const updatePinnedColumns = () => { pinIdentityColumns.value = tableMedia.matches; };
-const navigationMobileOpen = ref(false);
-const navigationMedia = window.matchMedia('(min-width: 1024px)');
-const closeMobileNavigation = () => { if (navigationMedia.matches) navigationMobileOpen.value = false; };
-onMounted(() => navigationMedia.addEventListener('change', closeMobileNavigation));
-onUnmounted(() => navigationMedia.removeEventListener('change', closeMobileNavigation));
 onMounted(() => tableMedia.addEventListener('change', updatePinnedColumns));
 onUnmounted(() => tableMedia.removeEventListener('change', updatePinnedColumns));
 const tableRef = ref<TableInstance>();
-const tableSort = ref<DomainSortState>(readTableSort());
+const tableSort = ref<DomainSortState>(sortableTableProps.has(queryText(route.query.sort)) && ['ascending', 'descending'].includes(queryText(route.query.order)) ? { prop: queryText(route.query.sort), order: queryText(route.query.order) as DomainSortState['order'] } : readTableSort());
 const applyingTableSort = ref(false);
 const adsenseAccounts = ref<Array<{ id?: number; name: string; owner: string; publisher_id?: string | null; currency: string; status: string; memo: string; linked_domains?: number }>>([]);
-const adsenseManagerVisible = ref(false);
-const resourceManagerVisible = ref(false);
 const queue = getWriteQueue();
-const searchText = ref('');
-const platformTab = ref<'all' | 'Astro' | 'Next.js' | 'WordPress'>('all');
+const searchText = ref(queryText(route.query.q));
+const platformTab = computed(() => ['Astro', 'Next.js', 'WordPress'].includes(queryText(route.query.platform)) ? queryText(route.query.platform) : 'all');
 const computerOptions = ref<string[]>(['Mac Mini Luokun', 'Mac Mini YC', 'Mac MiniBook 旧']);
 const computerStorageKey = 'domain-manager.computers';
 try { const savedComputers = JSON.parse(localStorage.getItem(computerStorageKey) || '[]'); if (Array.isArray(savedComputers)) computerOptions.value = [...new Set([...computerOptions.value, ...savedComputers.filter(value => typeof value === 'string')])]; } catch { /* keep defaults */ }
-const platformTabs = [{ label: '全部', value: 'all' as const }, { label: 'Astro', value: 'Astro' as const }, { label: 'Next.js', value: 'Next.js' as const }, { label: 'WordPress', value: 'WordPress' as const }];
-const platformTabCounts = computed(() => ({ all: domains.value.length, Astro: domains.value.filter(row => row.platform === 'Astro').length, 'Next.js': domains.value.filter(row => row.platform === 'Next.js').length, WordPress: domains.value.filter(row => row.platform === 'WordPress').length }));
 const sidebarCollapsed = ref(true);
-const navigationCollapsed = ref(false);
-const navigationStorageKey = 'domain-manager.navigation-collapsed';
-try { navigationCollapsed.value = localStorage.getItem(navigationStorageKey) === 'true'; } catch { /* navigation remains usable without storage */ }
-const toggleNavigation = () => {
-    navigationCollapsed.value = !navigationCollapsed.value;
-    try { localStorage.setItem(navigationStorageKey, String(navigationCollapsed.value)); } catch { /* keep the current view */ }
-};
-let pendingNavigationAction: (() => void) | undefined;
-const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.(); };
-const runNavigationAction = (action: () => void) => {
-    if (navigationMobileOpen.value) { pendingNavigationAction = action; navigationMobileOpen.value = false; }
-    else action();
-};
-const selectPlatform = (value: typeof platformTab.value) => { platformTab.value = value; navigationMobileOpen.value = false; };
-const openManager = (value: 'resources' | 'adsense' | 'notifications') => runNavigationAction(() => {
-    if (value === 'resources') resourceManagerVisible.value = true;
-    else if (value === 'adsense') adsenseManagerVisible.value = true;
-    else handleConfig();
-});
 const loading = ref(false);
 const loadError = ref('');
 const overviewError = ref('');
-const alertDays = ref(30);
-const alertConfig = ref<AlertConfig>();
 const refreshing = ref(false);
 const dialogVisible = ref(false);
-const configVisible = ref(false);
-const activeManager = computed(() => resourceManagerVisible.value ? 'resources' : adsenseManagerVisible.value ? 'adsense' : configVisible.value ? 'notifications' : '');
 const isEdit = ref(false);
 const editData = ref<DomainData>();
-const importVisible = ref(false);
-const detailVisible = ref(false);
+const detailVisible = computed({ get: () => route.name === 'Home' && Boolean(route.query.site) && Boolean(detailDomain.value), set: value => { if (!value && route.query.site) { const query = { ...route.query }; delete query.site; void router.push({ query }) } } });
 const detailDomain = ref<DomainData>();
 const quickFieldVisible = ref(false);
 const quickFieldMode = ref<'site_name' | 'platform_other'>('site_name');
@@ -188,23 +146,34 @@ interface DashboardData { totals: Record<string, number>; seo: Array<{ id: numbe
 const dashboard = ref<DashboardData>({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [], platforms: [], quality: {} });
 const industryBaseOptions = ['计算器', '资讯站', '其他'];
 const industryOptions = computed(() => [...new Set([...industryBaseOptions, ...domains.value.map(domain => domain.industry).filter((value): value is string => Boolean(value))])]);
+const sourceLinks = ref<Array<{ domain_id: number; resource_id: number; account_id?: number; resource_name?: string; account_name?: string }>>([]);
+const sourceLabel = computed(() => {
+    if (route.query.adsense_account) return `AdSense：${adsenseAccounts.value.find(account => String(account.id) === route.query.adsense_account)?.name || route.query.adsense_account}`;
+    if (route.query.resource) return `资源：${sourceLinks.value.find(link => String(link.resource_id) === route.query.resource)?.resource_name || route.query.resource}`;
+    if (route.query.provider_account) return `资源账号：${sourceLinks.value.find(link => String(link.account_id) === route.query.provider_account)?.account_name || route.query.provider_account}`;
+    return '';
+});
+const clearSource = () => { const query = { ...route.query }; delete query.adsense_account; delete query.resource; delete query.provider_account; void router.push({ query }); };
+const contextError = ref('');
 const filteredDomains = computed(() => domains.value.filter(row => {
     const haystack = `${row.domain} ${row.site_name || ''} ${row.industry || ''} ${row.registrar} ${row.memo} ${row.computer_name || ''} ${row.resource_names || ''} ${row.platform}`.toLowerCase();
     if (searchText.value && !haystack.includes(searchText.value.trim().toLowerCase())) return false;
     if (platformTab.value !== 'all' && row.platform !== platformTab.value) return false;
+    if (route.query.adsense_account && String(row.adsense_account_id) !== route.query.adsense_account) return false;
+    if (route.query.resource && !sourceLinks.value.some(link => link.domain_id === row.id && String(link.resource_id) === route.query.resource)) return false;
+    if (route.query.provider_account && !sourceLinks.value.some(link => link.domain_id === row.id && String(link.account_id) === route.query.provider_account)) return false;
     return true;
 }));
 
 const checkLoginStatus = () => { if (!auth.getAuthToken()) router.push({ name: 'Login' }); };
-const handleLogout = () => { auth.clearAuth(); router.push({ name: 'Login' }); };
 const handleAdd = () => { isEdit.value = false; editData.value = undefined; dialogVisible.value = true; };
 const handleEdit = (row: DomainData) => { isEdit.value = true; editData.value = row; dialogVisible.value = true; };
-const openDomainDetail = (row: DomainData) => { detailDomain.value = row; detailVisible.value = true; };
+const openDomainDetail = (row: DomainData) => { detailDomain.value = row; void router.push({ query: { ...route.query, site: row.domain } }); };
 const handleDetailEdit = (row: DomainData) => { detailVisible.value = false; handleEdit(row); };
-const handleConfig = () => { configVisible.value = true; };
-const handleImport = () => { importVisible.value = true; };
+
+const handleImport = () => { void router.push({ name: 'Data' }); };
 const handleComputerChange = async (row: DomainData, value: string | null) => { const name = value?.trim() || ''; if (!row.id || row.computer_name === name) return; const previous = row.computer_name; row.computer_name = name || null; if (name && !computerOptions.value.includes(name)) { computerOptions.value.push(name); localStorage.setItem(computerStorageKey, JSON.stringify(computerOptions.value)); } try { await api.patch(`/api/domains/${row.id}`, { computer_name: name || null }); } catch (error) { row.computer_name = previous || null; ElMessage.error(error instanceof Error ? error.message : '电脑信息保存失败'); } };
-const saveTableSort = (sort: DomainSortState) => { tableSort.value = { ...sort }; window.localStorage.setItem(tableSortStorageKey, JSON.stringify(tableSort.value)); };
+const saveTableSort = (sort: DomainSortState) => { tableSort.value = { ...sort }; window.localStorage.setItem(tableSortStorageKey, JSON.stringify(tableSort.value)); void router.replace({ query: { ...route.query, sort: sort.prop, order: sort.order } }); };
 const applyTableSort = async () => { await nextTick(); if (!tableRef.value) return; applyingTableSort.value = true; tableRef.value.sort(tableSort.value.prop, tableSort.value.order); applyingTableSort.value = false; };
 const handleTableSortChange = ({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) => {
     if (applyingTableSort.value) return;
@@ -235,8 +204,8 @@ const clickRangeFromNumber = (value: number | null | undefined) => value == null
 const clickRangeRank = (row: DomainData) => ({ under10: 1, '10to29': 2, '30to49': 3, '50to99': 4, over100: 5 } as Record<string, number>)[row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks) || ''] || 0;
 const compareDailyClicks = (a: DomainData, b: DomainData) => clickRangeRank(a) - clickRangeRank(b);
 const copyDomain = async (domain: string) => { try { await copyText(domain); ElMessage.success(`已复制域名：${domain}`); } catch { ElMessage.error('复制失败，请手动复制'); } };
-const handleSeoToday = async (row: DomainData) => { if (!row.id || !seoState(row).actionable) return; const date = localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }); queue.enqueue({ type: 'domain_operation_add', domain_id: row.id, operation_date: date, operation_kind: 'SEO' }); row.seo_last_date = date; row.latest_operation_date = date; await queue.flush(); await loadDashboard(); await applyTableSort(); ElMessage.success('已记录今天的 SEO 优化'); } catch(error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 日期已加入待同步队列'); } };
-const handleDailyClicks = async (row: DomainData, value: string | null) => { if (!row.id) return; const previous = row.daily_clicks_range; row.daily_clicks_range = value as DomainData['daily_clicks_range']; row.daily_clicks = null; row.clicks_updated_date = value == null ? null : localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { daily_clicks: null, daily_clicks_range: value, clicks_updated_date: row.clicks_updated_date } }); await queue.flush(); await loadDashboard(); await applyTableSort(); } catch (error) { row.daily_clicks_range = previous; ElMessage.error(error instanceof Error ? error.message : '日点击区间已加入待同步队列'); } };
+const handleSeoToday = async (row: DomainData) => { if (!row.id || !seoState(row).actionable) return; const date = localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }); queue.enqueue({ type: 'domain_operation_add', domain_id: row.id, operation_date: date, operation_kind: 'SEO' }); row.seo_last_date = date; row.latest_operation_date = date; await queue.flush(); invalidateData('/api/dashboard/summary'); await loadDashboard(); await applyTableSort(); ElMessage.success('已记录今天的 SEO 优化'); } catch(error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 日期已加入待同步队列'); } };
+const handleDailyClicks = async (row: DomainData, value: string | null) => { if (!row.id) return; const previous = row.daily_clicks_range; row.daily_clicks_range = value as DomainData['daily_clicks_range']; row.daily_clicks = null; row.clicks_updated_date = value == null ? null : localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { daily_clicks: null, daily_clicks_range: value, clicks_updated_date: row.clicks_updated_date } }); await queue.flush(); invalidateData('/api/dashboard/summary'); await loadDashboard(); await applyTableSort(); } catch (error) { row.daily_clicks_range = previous; ElMessage.error(error instanceof Error ? error.message : '日点击区间已加入待同步队列'); } };
 const markSeoById = (id: number) => { const row = domains.value.find(item => item.id === id); if (row) void handleSeoToday(row); };
 const providerLabel = (value: string) => ({ github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }[value] || value);
 const platformText = (row: DomainData) => row.platform === '其他' ? (row.platform_other || '其他') : row.platform;
@@ -254,6 +223,7 @@ const handleInlineSelect = async (row: DomainData, field: 'status' | 'platform' 
     Object.assign(row, fields);
     try {
         await api.patch(`/api/domains/${row.id}`, fields);
+        invalidateData('/api/dashboard/summary');
         if (field === 'platform' && value === '其他') openQuickField(row, 'platform_other');
         await applyTableSort();
     } catch (error) {
@@ -297,6 +267,7 @@ const saveAdsenseStatus = async (row: DomainData, status: '未知' | '已开通'
     try {
         const updated = await api.patch<DomainData>(`/api/domains/${row.id}`, { adsense_connected: status, ...extra });
         Object.assign(row, updated);
+        invalidateData('/api/adsense/accounts', '/api/dashboard/summary');
         adsenseQuickVisible.value = false;
         await applyTableSort();
     } catch (error) {
@@ -315,10 +286,11 @@ const saveQuickField = async (value: string | null) => {
     try { await api.patch(`/api/domains/${row.id}`, { [field]: value }); quickFieldVisible.value = false; await applyTableSort(); }
     catch (error) { row[field] = oldValue as never; ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
 };
-const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await api.get(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); return true; } catch(error) { console.error('获取 AdSense 账号失败:', error); return false; } };
-const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await api.get(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); return true; } catch (error) { console.error('获取首页概览失败:', error); return false; } };
+const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await cachedGet(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); return true; } catch(error) { console.error('获取 AdSense 账号失败:', error); return false; } };
+const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await cachedGet(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); return true; } catch (error) { console.error('获取首页概览失败:', error); return false; } };
 const loadOverview = async () => { overviewError.value = ''; const results = await Promise.all([loadAdsenseAccounts(), loadDashboard()]); if (results.some(result => !result)) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。'; };
-const reloadAll = async () => { await Promise.all([loadDomains(), loadOverview()]); };
+const reloadAll = async () => { invalidateData('/api/domains', '/api/dashboard/summary', '/api/adsense/accounts'); await Promise.all([loadDomains(), loadOverview()]); };
+const refreshDomainDetails = async () => { invalidateData('/api/domains', '/api/dashboard/summary'); await loadDomains(); await loadDashboard(); };
 
 const handleDelete = async (row: DomainData) => {
     try {
@@ -338,7 +310,9 @@ const handleDialogSubmit = async (formData: Omit<DomainData, 'id' | 'created_at'
             await createDomain(formData);
         }
         dialogVisible.value = false;
+        invalidateData('/api/domains', '/api/adsense/accounts', '/api/dashboard/summary');
         await loadDomains();
+        await loadOverview();
     } catch (error: unknown) { ElMessage.error(error instanceof Error ? error.message : '操作失败'); }
 };
 
@@ -346,8 +320,9 @@ const loadDomains = async () => {
     loading.value = true;
     loadError.value = '';
     try {
-        domains.value = await api.get<DomainData[]>('/api/domains');
+        domains.value = await cachedGet<DomainData[]>('/api/domains');
         computerOptions.value = [...new Set([...computerOptions.value, ...domains.value.map(row => row.computer_name).filter((value): value is string => Boolean(value))])];
+        if (route.query.site) detailDomain.value = domains.value.find(row => row.domain === route.query.site);
         await applyTableSort();
     } catch (error: any) {
         loadError.value = error.message || '加载域名列表失败，请重试。';
@@ -358,20 +333,6 @@ const loadDomains = async () => {
 };
 
 watch(filteredDomains, () => { void applyTableSort(); });
-
-const handleConfigSubmit = async (config: AlertConfig) => {
-    try {
-        await api.post('/api/alertconfig', config);
-        ElMessage.success('配置保存成功');
-        alertDays.value = config.days;
-        alertConfig.value = config;
-        configVisible.value = false;
-    } catch (error: unknown) {
-        const errorMessage = error instanceof Error ? error.message : '保存配置失败';
-        ElMessage.error(errorMessage);
-        if (error instanceof ApiError && error.status === 401) { auth.clearAuth(); router.push({ name: 'Login' }); }
-    }
-};
 
 const handleRefresh = async () => {
     if (refreshing.value) return;
@@ -411,64 +372,32 @@ const handleRefresh = async () => {
     }
 };
 
-const loadAlertConfig = async () => {
+const handleExport = async () => { try { await downloadExcel(); ElMessage.success('导出成功'); } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败'); } };
+const restoreContext = async () => {
+    contextError.value = '';
     try {
-        const result = await api.get<AlertConfig>('/api/alertconfig');
-        if (result) {
-            alertConfig.value = result;
-            alertDays.value = result.days;
+        if (route.query.resource || route.query.provider_account) sourceLinks.value = await cachedGet('/api/resources/links');
+        if (route.query.site) {
+            detailDomain.value = domains.value.find((row: DomainData) => row.domain === route.query.site);
+            if (!detailDomain.value) contextError.value = '该域名不存在，无法打开详情。';
         }
-    } catch (error) { console.error('获取告警配置失败:', error); }
-};
-
-const handleExport = async () => {
-    const loading = ElMessage.info({ message: '正在准备导出数据...', duration: 0 });
-    try {
-        const snapshot = await api.get<any>('/api/export/snapshot');
-        const XLSX = await import('xlsx');
-        const workbook = XLSX.utils.book_new();
-        const sensitiveKey = /pass(word)?|token|ciphertext|secret|credential/i;
-        const safeRows = (rows: unknown[]) => rows.map(row => Object.fromEntries(Object.entries((row || {}) as Record<string, unknown>).filter(([key]) => !sensitiveKey.test(key))));
-        const sheets: Array<[string, unknown[]]> = [
-            ['域名总表', safeRows(snapshot.domains || [])],
-            ['操作记录', safeRows(snapshot.operations || [])],
-            ['AdSense账号', safeRows(snapshot.adsense_accounts || [])],
-            ['AdSense月收入', safeRows(snapshot.adsense_income || [])],
-            ['基础设施账号', safeRows(snapshot.provider_accounts || [])],
-            ['基础设施资源', safeRows(snapshot.provider_resources || [])],
-            ['网站资源关联', safeRows(snapshot.domain_resources || [])],
-            ['AI提示词与想法', safeRows(snapshot.ai_notes || [])]
-        ];
-        for (const [name, rows] of sheets) {
-            const sheet = XLSX.utils.json_to_sheet(rows);
-            const columns = rows.length ? Object.keys(rows[0] as Record<string, unknown>) : [];
-            sheet['!cols'] = columns.map(column => ({ wch: Math.min(42, Math.max(12, ...rows.map(row => String((row as Record<string, unknown>)[column] ?? '').length + 2))) }));
-            XLSX.utils.book_append_sheet(workbook, sheet, name);
+        if (route.query.adsense_account && !adsenseAccounts.value.some(account => String(account.id) === route.query.adsense_account)) contextError.value = '指定的 AdSense 账号不存在。';
+        if (route.query.resource || route.query.provider_account) {
+            const endpoint = route.query.resource ? '/api/resources' : '/api/resources/accounts';
+            const items = await cachedGet<Array<{ id: number }>>(endpoint);
+            if (!items.some(item => String(item.id) === String(route.query.resource || route.query.provider_account))) contextError.value = '指定的资源或账号不存在。';
         }
-        XLSX.writeFile(workbook, `domain-manager-${localDate()}.xlsx`);
-        ElMessage.success('导出成功');
-    } catch (error) {
-        ElMessage.error(error instanceof Error ? error.message : '导出失败');
-    } finally {
-        loading.close();
-    }
+    } catch (error) { contextError.value = error instanceof Error ? error.message : '关联数据加载失败'; }
 };
-
-const handleJsonExport = async () => {
-    try {
-        const download = await api.download('/api/domains/export');
-        const filename = download.headers.get('Content-Disposition')?.split('filename=')[1]?.replace(/"/g, '') || `domains-export.json`;
-        const blob = download.blob;
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); window.URL.revokeObjectURL(url);
-        ElMessage.success('JSON 备份已导出');
-    } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败'); }
-};
-
+watch(() => route.query, () => { if (route.name === 'Home') { searchText.value = queryText(route.query.q); if (sortableTableProps.has(queryText(route.query.sort)) && ['ascending','descending'].includes(queryText(route.query.order))) { tableSort.value = { prop: queryText(route.query.sort), order: queryText(route.query.order) as DomainSortState['order'] }; void applyTableSort(); } void restoreContext(); } });
+watch(searchText, value => { if (route.name === 'Home' && value !== queryText(route.query.q)) { const query = { ...route.query }; if (value) query.q = value; else delete query.q; void router.replace({ query }); } });
+let savedScroll = 0;
+onBeforeRouteLeave(() => { savedScroll = window.scrollY; });
+onDeactivated(() => { /* KeepAlive preserves the list, search and horizontal table position. */ });
+onActivated(async () => { await loadDomains(); await loadOverview(); await restoreContext(); await nextTick(); window.scrollTo(0, savedScroll); });
 onMounted(() => {
     checkLoginStatus();
     void loadDomains();
-    void loadAlertConfig();
     void loadOverview();
     void queue.flush();
 });

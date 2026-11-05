@@ -347,3 +347,11 @@ Content-Type: application/json
 `computer_name` 为可空电脑名称，支持下拉选择、输入新名称和清除。预置 Mac Mini Luokun、Mac Mini YC、Mac MiniBook 旧，不自动推测网站在哪台电脑维护。已关联名称从 D1 记录恢复，未使用的自定义候选保存在当前浏览器。JSON 导入/导出与 Excel 快照均包含该字段。
 
 已有库先备份，再执行一次 `npm run db:migrate:v1.8.0`，之后部署；新库的 `schema.sql` 已包含此字段。迁移不要重复执行，可通过 `PRAGMA table_info(domains);` 检查是否已有 `computer_name`。
+
+## 工作区导航（2026-11-05）
+
+登录后统一使用左侧导航：网站 `/home`，资源 `/resources`，AdSense `/adsense`，通知 `/settings/notifications`，数据 `/data`。页面可直接访问，沿用长期登录和同一权限守卫，本次无 D1 迁移。
+
+URL 可保存技术栈 `platform`、详情域名 `site`；资源页保存 `provider`、`account`、`resource`，AdSense 页保存 `account`、`month`。关联网站入口会在台账显示可移除来源标签。搜索/排序与浏览器返回保持，Token 与未保存文本不进入 URL。
+
+管理编辑在页内完成；域名详情、短编辑和危险操作确认保留抽屉/短弹窗。数据页先预览 JSON，再明确确认写入。JSON 是域名备份与导入格式，完整数据库恢复仍需 D1 备份；Excel 不包含凭据。

@@ -101,3 +101,17 @@ npm run lint:cleanup
 - 原概览收起状态 → 保持独立：左侧导航的收起记忆使用单独 localStorage key，概览的 `sidebarCollapsed` 和数据逻辑不混用。
 - 新增 `src/styles/home/navigation.css`：仅负责导航外观和响应式，不覆盖弹窗、表格或业务状态样式。
 - 验证：六种视口、三类管理弹窗、技术栈切换、搜索/排序保持、空/错状态、键盘 Escape 和焦点回归。
+
+## 2026-11-05 管理工作区页面化
+
+| 旧实现 | 新实现 | 删除依据与保留边界 |
+| --- | --- | --- |
+| ResourceManagerDialog 及 resources.css | Resources 路由页 + workspace 公共样式 | 原维护字段、API、确认保留；移除外层与嵌套管理弹窗及重复布局 |
+| AdsenseManagerDialog 及 adsense.css | Adsense 路由页 | 账号与收入 API 复用，页内编辑；加载后回填月份金额 |
+| AlertConfigDialog | Notifications 路由页 | 原字段与校验迁移，保存失败保留输入 |
+| ImportDialog | ImportPanel + 数据管理页 | 保留上传/预览/确认接口，明确分步预览，去除弹窗外壳 |
+| Home 持有侧栏与管理弹窗开关 | WorkspaceLayout + 嵌套路由 | 保留平台筛选、排序、域名抽屉与短编辑；管理开关及旧导航样式已删除 |
+| Home 重复 Excel/JSON 生成逻辑 | downloads 共享入口 | 首页、数据页及侧栏备份使用同一下载函数 |
+| 管理保存整体 reloadAll | 会话读缓存 + 关联失效 | 按原 GET 接口缓存与去重；变更仅标记受影响数据，凭据不缓存 |
+
+已确认源代码无旧组件导入；动态 Element Plus 类、域名短表单与详情样式继续保留。测试引用随迁移指向页面实现，新增缓存行为与路由去重实现检查。

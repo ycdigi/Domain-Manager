@@ -2,20 +2,14 @@
 /* Hallmark · pre-emit critique: actions first, quiet metrics, readable compact ledger; preserve all workflow wiring and full desktop width. */
 /* Management lives in the left navigation; only 新增域名 has filled accent in the toolbar. */
 /* User scope: a working table, no marketing hero, no capped container, no ornamental modules. */
-.home-container { display:grid; grid-template-columns:216px minmax(0,1fr); min-height:100svh; background: var(--color-paper-2); color:var(--color-ink); font-family:var(--font-body); font-size:var(--text-md); line-height:1.5; }
+.home-container { min-height:100svh; background: var(--color-paper-2); color:var(--color-ink); font-family:var(--font-body); font-size:var(--text-md); line-height:1.5; }
 .home-container h2 { margin:0; color:var(--color-ink); font-family:var(--font-display); font-weight:600; min-width:0; overflow-wrap:break-word; text-wrap:balance; }
 .home-container button:focus-visible, .home-container a:focus-visible { outline:2px solid var(--color-focus); outline-offset:2px; }
 .home-container button:not(:disabled):active { filter:brightness(.96); }
 .home-container p { margin:0; }
 html.dm-ui .home-container .workspace { min-width:0; width:100%; max-width:none; margin-inline:0; min-height:100svh; padding:var(--space-lg) clamp(12px, 1.5vw, 32px); }
+.home-container .ledger-toolbar > .workspace-heading { flex:1; margin:0; }
 .home-container .ledger-toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:var(--space-sm) var(--space-lg); margin-bottom:var(--space-md); }
-.home-container .ledger-title { display:flex; align-items:baseline; gap:var(--space-sm); min-width:0; }
-.home-container.navigation-collapsed { grid-template-columns:64px minmax(0,1fr); }
-.home-container .workspace-navigation { position:sticky; top:0; height:100svh; overflow-y:auto; border-right:1px solid var(--color-rule); background:var(--color-paper); }
-.home-container .navigation-menu { display:none; }
-html.dm-ui .workspace-navigation-drawer .el-drawer__body { padding:0; }
-.home-container .ledger-title h2 { font-size:18px; line-height:1.5; }
-.home-container .record-count { font-size:var(--text-xs); color:var(--color-muted); font-variant-numeric:tabular-nums; }
 .home-container .ledger-actions { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-xs); }
 .home-container .summary-grid { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); margin-bottom:var(--space-md); border:1px solid var(--color-rule); border-radius:var(--radius-panel); background: var(--color-paper); }
 .home-container .summary-card { display:flex; align-items:center; justify-content:space-between; gap:var(--space-xs); min-width:0; padding:var(--space-sm) var(--space-md); border-right:1px solid var(--color-rule); }
@@ -95,11 +89,6 @@ html.dm-ui .workspace-navigation-drawer .el-drawer__body { padding:0; }
 @media (max-width:1100px) {
   .home-container .summary-card { align-items:flex-start; flex-direction:column; gap:0; }
   .home-container .workbench-grid { grid-template-columns:minmax(0,1fr) minmax(260px,28%); }
-}
-@media (max-width:1023px) {
-  .home-container, .home-container.navigation-collapsed { display:block; }
-  .home-container .workspace-navigation { display:none; }
-  .home-container .navigation-menu { display:inline-flex; flex:0 0 auto; width:var(--touch-target); min-height:var(--touch-target); padding:0; }
 }
 @media (max-width:760px) {
   html.dm-ui .home-container .workspace { padding:var(--space-md) var(--space-xs); }

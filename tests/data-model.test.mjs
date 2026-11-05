@@ -227,7 +227,7 @@ test('site name star marks an operation in the last seven days', () => {
 
 test('ledger uses search and platform tabs with WordPress-only counts', () => {
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
-  assert.match(home, /platformTabs = .*全部.*Astro.*Next.js.*WordPress/)
+  assert.match(fs.readFileSync(path.join(repo, 'src/layouts/WorkspaceLayout.vue'), 'utf8'), /platformTabs = .*全部.*Astro.*Next.js.*WordPress/)
   assert.match(home, /platformTab.value !== 'all' && row.platform !== platformTab.value/)
   assert.match(home, /v-if="platformTab === 'WordPress'" label="文章数量"/)
   assert.match(home, /label="电脑"/)
@@ -238,14 +238,14 @@ test('copy actions share the clipboard fallback and keep domain copy local', () 
   const clipboard = fs.readFileSync(path.join(repo, 'src/utils/clipboard.ts'), 'utf8')
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
   const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
-  const resources = fs.readFileSync(path.join(repo, 'src/components/ResourceManagerDialog.vue'), 'utf8')
+  const resources = fs.readFileSync(path.join(repo, 'src/views/Resources.vue'), 'utf8')
   assert.match(clipboard, /navigator\.clipboard\?\.writeText/)
   assert.match(clipboard, /document\.execCommand\('copy'\)/)
   assert.match(home, /DocumentCopy/)
   assert.match(home, /@click\.stop="copyDomain\(scope\.row\.domain\)"/)
   assert.match(home, /已复制域名：\$\{domain\}/)
   assert.match(detail, /copyText\(content\)/)
-  assert.match(resources, /copyText\(result\.token\)/)
+  assert.match(resources, /copyText\(revealedToken\.value\)/)
   assert.doesNotMatch([home, detail, resources].join('\n'), /navigator\.clipboard/)
 })
 
@@ -264,23 +264,23 @@ test('domain detail drawer is compact and reuses the full edit flow', () => {
 
 test('form and detail loading states remain recoverable after request failures', () => {
   const domainDialog = fs.readFileSync(path.join(repo, 'src/components/DomainDialog.vue'), 'utf8')
-  const alertDialog = fs.readFileSync(path.join(repo, 'src/components/AlertConfigDialog.vue'), 'utf8')
+  const alertDialog = fs.readFileSync(path.join(repo, 'src/views/Notifications.vue'), 'utf8')
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
   const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
-  const resources = fs.readFileSync(path.join(repo, 'src/components/ResourceManagerDialog.vue'), 'utf8')
-  const adsense = fs.readFileSync(path.join(repo, 'src/components/AdsenseManagerDialog.vue'), 'utf8')
+  const resources = fs.readFileSync(path.join(repo, 'src/views/Resources.vue'), 'utf8')
+  const adsense = fs.readFileSync(path.join(repo, 'src/views/Adsense.vue'), 'utf8')
   const quickField = fs.readFileSync(path.join(repo, 'src/components/QuickFieldDialog.vue'), 'utf8')
   const adsenseQuick = fs.readFileSync(path.join(repo, 'src/components/AdsenseQuickDialog.vue'), 'utf8')
   assert.match(domainDialog, /emit\('submit', payload\)\s*\}\) \}/)
   assert.doesNotMatch(domainDialog, /emit\('submit', payload\); dialogVisible\.value = false/)
   assert.doesNotMatch(alertDialog, /emit\('submit', form\.value\)\s*\n\s*dialogVisible\.value = false/)
-  assert.match(home, /configVisible\.value = false/)
+  assert.match(alertDialog, /original\.value = JSON\.stringify\(form\.value\)/)
   assert.match(home, /overviewError/)
   assert.match(home, /loadOverview/)
   assert.match(detail, /Promise\.allSettled\(\[loadNotes\(\), loadOperations\(\)\]\)/)
   assert.match(detail, /detail-load-error/)
-  assert.match(resources, /resource-load-error/)
-  assert.match(resources, /loadError\.value = error instanceof Error/)
+  assert.match(resources, /page-error/)
+  assert.match(resources, /loadError\.value = e instanceof Error/)
   assert.match(adsense, /incomeRows\.value = \[\]/)
   assert.match(adsense, /incomeError/)
   assert.doesNotMatch(quickField, /emit\('save'.*dialogVisible\.value = false/)
@@ -419,4 +419,30 @@ test('v1.1 through v1.3 migrations preserve existing domains', () => {
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }
+})
+
+test('workspace routes replace management dialogs without duplicating implementations', () => {
+  const routes = fs.readFileSync(path.join(repo, 'src/router/index.ts'), 'utf8')
+  for (const route of ['home', 'resources', 'adsense', 'settings/notifications', 'data']) assert.ok(routes.includes(`path: '${route}'`))
+  for (const removed of ['AdsenseManagerDialog', 'ResourceManagerDialog', 'AlertConfigDialog', 'ImportDialog']) assert.equal(fs.existsSync(path.join(repo, `src/components/${removed}.vue`)), false)
+  for (const page of ['Resources', 'Adsense', 'Notifications', 'DataManagement']) assert.doesNotMatch(fs.readFileSync(path.join(repo, `src/views/${page}.vue`), 'utf8'), /<el-dialog/)
+})
+
+test('session read cache deduplicates requests, invalidates dependencies and retries failures', async () => {
+  const ts = await import('typescript')
+  const source = fs.readFileSync(path.join(repo, 'src/utils/workspaceCache.ts'), 'utf8')
+  const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  let calls = 0, resolveRead, rejectRead
+  const api = { get: () => { calls++; return new Promise((resolve, reject) => { resolveRead = resolve; rejectRead = reject }) } }
+  const exports = {}
+  new Function('require', 'exports', code)(name => name === 'vue' ? { ref: value => ({ value }) } : { api }, exports)
+  const one = exports.cachedGet('/api/domains'), two = exports.cachedGet('/api/domains')
+  assert.equal(calls, 1)
+  resolveRead([{ id: 1 }]); assert.deepEqual(await one, await two)
+  await exports.cachedGet('/api/domains'); assert.equal(calls, 1)
+  exports.invalidateData('/api/domains')
+  const pending = exports.cachedGet('/api/domains'); rejectRead(new Error('offline')); await assert.rejects(pending, /offline/)
+  const retry = exports.cachedGet('/api/domains'); resolveRead([{ id: 2 }]); assert.deepEqual(await retry, [{ id: 2 }])
+  assert.equal(calls, 3)
+  exports.clearWorkspaceCache(); const fresh = exports.cachedGet('/api/domains'); resolveRead([]); await fresh; assert.equal(calls, 4)
 })

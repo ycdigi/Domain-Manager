@@ -1,0 +1,107 @@
+<template>
+ <div class="workspace-page">
+  <WorkspaceHeading title="AdSense" subtitle="账号、归属人和月收入"><el-button :disabled="loading || saving" @click="load(true)">刷新</el-button><el-button @click="exportIncome">导出收入</el-button><el-button type="primary" @click="editAccount()">新增账号</el-button></WorkspaceHeading>
+  <div v-if="error || contextError" class="page-error" role="alert">{{ error || contextError }}<el-button v-if="error" @click="load(true)">重试</el-button><el-button v-else @click="router.push({ name: 'Adsense' })">查看全部账号</el-button></div>
+  <section class="page-panel"><div class="page-actions"><label for="income-month">统计月份</label><el-input id="income-month" :model-value="month" type="month" class="month-input" @change="changeMonth" /></div><ul class="page-list"><li v-for="item in ownerTotals" :key="item.key"><span>{{ item.owner }} · {{ item.currency }}</span><strong>{{ item.amount.toFixed(2) }}</strong></li></ul><p v-if="!ownerTotals.length" class="page-muted">暂无账号收入。</p></section>
+  <section v-if="editing" class="page-panel">
+   <div class="panel-heading"><h2>{{ editingId ? `编辑账号：${selected?.name || accountForm.name}` : '新增 AdSense 账号' }}</h2></div>
+   <el-form class="page-form page-form-grid" label-position="top" :model="accountForm" @submit.prevent="saveAccount">
+    <el-form-item label="账号名称" required><el-input v-model="accountForm.name" maxlength="200" /></el-form-item><el-form-item label="归属人" required><el-input v-model="accountForm.owner" maxlength="200" /></el-form-item>
+    <el-form-item label="Publisher ID"><el-input v-model="accountForm.publisher_id" placeholder="pub-xxxxxxxxxxxxxxxx" /></el-form-item>
+    <el-form-item label="货币"><el-select v-model="accountForm.currency"><el-option v-for="currency in ['USD','CNY','EUR','OTHER']" :key="currency" :label="currency" :value="currency" /></el-select></el-form-item>
+    <el-form-item label="账号状态"><el-select v-model="accountForm.status"><el-option v-for="status in ['正常','暂停','未知']" :key="status" :label="status" :value="status" /></el-select></el-form-item>
+    <el-form-item label="备注"><el-input v-model="accountForm.memo" /></el-form-item>
+    <div class="page-actions page-form-full"><el-button :disabled="saving" @click="cancelEdit">取消编辑</el-button><el-button type="primary" :loading="saving" native-type="submit">保存账号</el-button></div>
+   </el-form>
+  </section>
+  <div class="page-columns">
+   <section class="page-panel" v-loading="loading"><div class="panel-heading"><h2>账号列表</h2><span class="page-muted">{{ accounts.length }} 个账号</span></div>
+    <ul class="page-list"><li v-for="account in accounts" :key="account.id"><div><button type="button" class="page-link" :aria-current="selected?.id === account.id ? 'true' : undefined" @click="selectAccount(account.id)">{{ account.name }}</button><p class="page-muted">{{ account.owner }} · {{ account.publisher_id || '未记录 Publisher ID' }}</p><span class="page-muted">{{ account.status }} · {{ account.currency }} {{ Number(account.current_income || 0).toFixed(2) }}</span></div><button type="button" class="page-link" @click="showSites(account.id)">{{ account.linked_domains || 0 }} 个网站</button></li></ul><p v-if="!loading && !accounts.length" class="page-empty">还没有 AdSense 账号。</p>
+   </section>
+   <section class="page-panel">
+    <template v-if="selected">
+     <div class="panel-heading"><div><h2>{{ selected.name }}</h2><p class="page-muted">{{ selected.owner }} · {{ selected.publisher_id || '未记录 Publisher ID' }} · {{ selected.currency }}</p></div><div class="page-actions"><el-button :disabled="saving" @click="editAccount(selected)">编辑账号</el-button><el-button type="warning" :disabled="saving || selected.status === '暂停'" @click="disableAccount">停用</el-button></div></div>
+     <div class="panel-heading"><h2>{{ month }} 月收入</h2><span class="page-muted">{{ existingIncome ? '修改已有记录' : '新增该月记录' }}</span></div>
+     <div v-if="incomeError" class="page-error" role="alert">{{ incomeError }}<el-button @click="loadIncome(true)">重试</el-button></div>
+     <el-form v-if="incomeLoaded && !incomeLoading" label-position="top" :aria-busy="incomeLoading" @submit.prevent="saveIncome">
+      <el-form-item :label="`金额（${selected.currency}）`"><el-input-number v-model="incomeForm.amount" :disabled="incomeLoading || !!incomeError || saving" :min="0" :precision="2" :controls="false" /></el-form-item>
+      <el-form-item label="收入备注"><el-input v-model="incomeForm.memo" :disabled="incomeLoading || !!incomeError || saving" /></el-form-item>
+      <div class="page-actions"><el-button type="primary" native-type="submit" :loading="saving" :disabled="incomeLoading || !!incomeError || !incomeLoaded">保存本月收入</el-button><el-button :disabled="!incomeDirty || saving" @click="resetIncome">放弃修改</el-button></div>
+     </el-form>
+     <h3>收入历史</h3><el-table :data="incomeRows" size="small"><el-table-column prop="income_month" label="月份" min-width="100"><template #default="scope"><button class="page-link" @click="changeMonth(scope.row.income_month)">{{ scope.row.income_month }}</button></template></el-table-column><el-table-column prop="amount" label="金额" min-width="90" /><el-table-column prop="memo" label="备注" min-width="120" show-overflow-tooltip /></el-table>
+     <h3>关联网站</h3><ul class="page-list"><li v-for="site in linkedSites" :key="site.id"><button class="page-link" @click="openSite(site.domain)">{{ site.site_name || site.domain }}</button><span class="page-muted">{{ site.domain }} · {{ site.adsense_connected }}</span></li></ul><p v-if="!linkedSites.length" class="page-muted">没有关联网站。</p>
+    </template><p v-else class="page-empty">选择账号，查看月收入与关联网站。</p>
+   </section>
+  </div>
+ </div>
+</template>
+<script setup lang="ts">
+import { ref, computed, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
+import WorkspaceHeading from '../components/WorkspaceHeading.vue'
+import { useUnsavedChanges } from '../composables/useUnsavedChanges'
+import { cachedGet, invalidateData, localMonth, queryText } from '../utils/workspaceCache'
+import { api } from '../utils/request'
+import { confirmAction, isDismissed } from '../utils/feedback'
+import { downloadIncome } from '../utils/downloads'
+import type { DomainData } from '../api/domains'
+interface Account { id?: number; name: string; owner: string; publisher_id?: string | null; currency: string; status: string; memo: string; linked_domains?: number; current_income?: number }
+interface Income { id?: number; adsense_account_id: number; income_month: string; amount: number; memo: string }
+const route = useRoute(); const router = useRouter()
+const month = computed(() => /^\d{4}-(0[1-9]|1[0-2])$/.test(queryText(route.query.month)) ? queryText(route.query.month) : localMonth())
+const accounts = ref<Account[]>([]); const sites = ref<DomainData[]>([]); const loading = ref(false); const saving = ref(false); const error = ref('')
+const selected = computed(() => accounts.value.find(account => String(account.id) === route.query.account))
+const contextError = computed(() => !loading.value && route.query.account && !selected.value ? '指定的 AdSense 账号不存在。' : route.query.month && month.value !== route.query.month ? '月份格式无效，请使用 YYYY-MM。' : '')
+const ownerTotals = computed(() => { const totals = new Map<string, { key: string; owner: string; currency: string; amount: number }>(); for (const account of accounts.value) { const key = `${account.owner}-${account.currency}`; const item = totals.get(key) || { key, owner: account.owner, currency: account.currency, amount: 0 }; item.amount += Number(account.current_income || 0); totals.set(key, item) } return [...totals.values()] })
+const linkedSites = computed(() => sites.value.filter(site => site.adsense_account_id === selected.value?.id))
+const emptyAccount = () => ({ name: '', owner: '', publisher_id: '', currency: 'USD', status: '未知', memo: '' })
+const accountForm = ref(emptyAccount()); const editing = ref(false); const editingId = ref<number>(); const accountBaseline = ref('')
+const incomeRows = ref<Income[]>([]); const incomeLoading = ref(false); const incomeLoaded = ref(false); const incomeError = ref(''); const incomeForm = ref<{ amount: number | undefined; memo: string }>({ amount: undefined, memo: '' }); const incomeBaseline = ref('')
+const existingIncome = computed(() => incomeRows.value.find(row => row.income_month === month.value))
+const incomeDirty = computed(() => incomeLoaded.value && JSON.stringify(incomeForm.value) !== incomeBaseline.value)
+const dirty = computed(() => (editing.value && JSON.stringify(accountForm.value) !== accountBaseline.value) || incomeDirty.value)
+const { canDiscard } = useUnsavedChanges(dirty)
+let loadVersion = 0; let incomeVersion = 0
+const loadIncome = async (force = false) => {
+ const version = ++incomeVersion; incomeError.value = ''; incomeLoaded.value = false; incomeRows.value = []; incomeForm.value = { amount: undefined, memo: '' }
+ if (!selected.value?.id) { incomeLoading.value = false; return }
+ incomeLoading.value = true
+ try { const rows = await cachedGet<Income[]>(`/api/adsense/income?account_id=${selected.value.id}`, force); if (version !== incomeVersion) return; incomeRows.value = rows; const row = existingIncome.value; incomeForm.value = { amount: row?.amount, memo: row?.memo || '' }; incomeBaseline.value = JSON.stringify(incomeForm.value); incomeLoaded.value = true }
+ catch (e) { if (version === incomeVersion) incomeError.value = e instanceof Error ? e.message : '收入读取失败' }
+ finally { if (version === incomeVersion) incomeLoading.value = false }
+}
+const load = async (force = false) => {
+ if (force && !(await canDiscard())) return
+ const version = ++loadVersion; loading.value = true; error.value = ''
+ try { const [data, domains] = await Promise.all([cachedGet<Account[]>(`/api/adsense/accounts?month=${month.value}`, force), cachedGet<DomainData[]>('/api/domains')]); if (version !== loadVersion) return; accounts.value = data; sites.value = domains; await loadIncome(force) }
+ catch (e) { if (version === loadVersion) error.value = e instanceof Error ? e.message : '账号读取失败' }
+ finally { if (version === loadVersion) loading.value = false }
+}
+watch(() => [route.query.account, route.query.month], () => { editing.value = false; incomeLoaded.value = false; void load() }, { immediate: true })
+const selectAccount = (id?: number) => { void router.push({ query: { ...route.query, account: String(id) } }) }
+const changeMonth = (value: string) => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) void router.push({ query: { ...route.query, month: value } }) }
+const showSites = (id?: number) => { void router.push({ name: 'Home', query: { adsense_account: String(id) } }) }
+const openSite = (domain: string) => { void router.push({ name: 'Home', query: { site: domain } }) }
+const editAccount = async (account?: Account) => { if (!(await canDiscard())) return; incomeForm.value = JSON.parse(incomeBaseline.value || '{"memo":""}'); editingId.value = account?.id; accountForm.value = account ? { name: account.name, owner: account.owner, publisher_id: account.publisher_id || '', currency: account.currency, status: account.status, memo: account.memo || '' } : emptyAccount(); accountBaseline.value = JSON.stringify(accountForm.value); editing.value = true }
+const cancelEdit = async () => { if (await canDiscard()) editing.value = false }
+const saveAccount = async () => {
+ if (saving.value) return
+ if (!accountForm.value.name.trim() || !accountForm.value.owner.trim()) { ElMessage.error('账号名称和归属人不能为空'); return }
+ saving.value = true
+ try { const id = editingId.value; const saved = await (id ? api.put<Account>(`/api/adsense/accounts/${id}`, accountForm.value) : api.post<Account>('/api/adsense/accounts', accountForm.value)); editing.value = false; invalidateData('/api/adsense/accounts', '/api/domains', '/api/dashboard/summary'); await load(); if (saved?.id && String(saved.id) !== route.query.account) await router.replace({ query: { ...route.query, account: String(saved.id) } }); ElMessage.success('账号已保存') }
+ catch (e) { ElMessage.error(e instanceof Error ? e.message : '账号保存失败') }
+ finally { saving.value = false }
+}
+const disableAccount = async () => { if (!selected.value?.id || saving.value || !(await canDiscard())) return; try { await confirmAction(`停用“${selected.value.name}”？网站和收入历史会保留。`, '停用账号', { confirmButtonText: '停用' }); saving.value = true; await api.post(`/api/adsense/accounts/${selected.value.id}/disable`); invalidateData('/api/adsense/accounts', '/api/dashboard/summary'); editing.value = false; await load(); } catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '停用失败') } finally { saving.value = false } }
+const resetIncome = async () => { if (await canDiscard()) incomeForm.value = JSON.parse(incomeBaseline.value) }
+const saveIncome = async () => {
+ if (saving.value || incomeLoading.value || !incomeLoaded.value || !selected.value?.id || incomeError.value) return
+ if (incomeForm.value.amount == null || !Number.isFinite(incomeForm.value.amount) || incomeForm.value.amount < 0) { ElMessage.error('请输入非负收入金额'); return }
+ saving.value = true
+ try { await api.post('/api/adsense/income', { adsense_account_id: selected.value.id, income_month: month.value, ...incomeForm.value }); incomeBaseline.value = JSON.stringify(incomeForm.value); invalidateData('/api/adsense/income', '/api/adsense/accounts', '/api/dashboard/summary'); await load(); ElMessage.success('收入已保存') }
+ catch (e) { ElMessage.error(e instanceof Error ? e.message : '收入保存失败') }
+ finally { saving.value = false }
+}
+const exportIncome = async () => { try { await downloadIncome() } catch (e) { ElMessage.error(e instanceof Error ? e.message : '导出失败') } }
+</script>

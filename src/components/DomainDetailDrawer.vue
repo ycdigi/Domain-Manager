@@ -27,10 +27,10 @@
           <div><span>开通耗时</span><strong>{{ domain.adsense_open_days == null ? '未计算' : `${domain.adsense_open_days} 天` }}</strong></div>
           <div><span>技术栈</span><strong>{{ domain.platform === '其他' ? (domain.platform_other || '其他') : domain.platform }}</strong></div>
         </div>
-        <div class="detail-line"><span>AdSense账号</span><p>{{ domain.adsense_account_name || '未关联' }} · {{ domain.adsense_owner || '未记录' }} · {{ domain.adsense_publisher_id || '未记录 Publisher ID' }}</p></div>
+        <div class="detail-line"><span>AdSense账号</span><p><button v-if="domain.adsense_account_id" class="page-link" @click="router.push({ name: 'Adsense', query: { account: String(domain.adsense_account_id) } })">查看账号</button> {{ domain.adsense_account_name || '未关联' }} · {{ domain.adsense_owner || '未记录' }} · {{ domain.adsense_publisher_id || '未记录 Publisher ID' }}</p></div>
         <div class="detail-line"><span>WordPress统计</span><p v-if="domain.platform === 'WordPress'">计算器 {{ domain.wp_calculator_count ?? '未记录' }} 个 · 文章 {{ domain.wp_article_count ?? '未记录' }} 篇 · {{ domain.content_stats_updated_date || '未记录统计日期' }}</p><p v-else>不适用</p></div>
         <div class="detail-line"><span>部署资源</span><p>{{ domain.resource_names || '未关联' }}</p></div>
-        <div v-if="resources.length" class="detail-resource-list"><div v-for="resource in resources" :key="resource.id" class="detail-resource"><strong>{{ resource.provider }} · {{ resource.resource_name }}<small v-if="resource.is_primary">主资源</small></strong><span>{{ resource.account_name || '未关联账号' }} · {{ resource.login_email || '未记录邮箱' }}</span><span>{{ resource.resource_url || resource.ip_address || '未记录地址' }}<template v-if="resource.port">:{{ resource.port }}</template></span></div></div>
+        <div v-if="resources.length" class="detail-resource-list"><div v-for="resource in resources" :key="resource.id" class="detail-resource"><strong><button class="page-link" @click="router.push({ name: 'Resources', query: { provider: resource.provider, ...(resource.account_id ? { account: String(resource.account_id) } : {}), resource: String(resource.resource_id) } })">{{ resource.provider }} · {{ resource.resource_name }}</button><small v-if="resource.is_primary">主资源</small></strong><span>{{ resource.account_name || '未关联账号' }} · {{ resource.login_email || '未记录邮箱' }}</span><span>{{ resource.resource_url || resource.ip_address || '未记录地址' }}<template v-if="resource.port">:{{ resource.port }}</template></span></div></div>
         <div class="detail-line"><span>备注</span><p>{{ domain.memo || '未记录' }}</p></div>
       </section>
 
@@ -68,7 +68,7 @@
       <el-form v-if="editing" :model="noteForm" label-position="top" class="note-form">
         <el-form-item label="类型"><el-select v-model="noteForm.kind"><el-option label="AI提示词" value="AI提示词" /><el-option label="想法说明" value="想法说明" /></el-select></el-form-item>
         <el-form-item label="内容"><el-input v-model="noteForm.content" type="textarea" :rows="8" maxlength="20000" show-word-limit placeholder="输入要发送给 AI 的提示词，或记录你的判断和想法" /></el-form-item>
-        <div class="note-form-actions"><el-button @click="editing = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveNote">保存</el-button></div>
+        <div class="note-form-actions"><el-button @click="cancelNote">取消</el-button><el-button type="primary" :loading="saving" @click="saveNote">保存</el-button></div>
       </el-form>
 
       <el-dialog v-model="historyVisible" :title="domain?.domain ? `修改历史 · ${domain.domain}` : '修改历史'" width="460px" append-to-body>
@@ -83,6 +83,9 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
+import { useUnsavedChanges } from '../composables/useUnsavedChanges'
+
 import { ElMessage } from 'element-plus'
 import { CopyDocument, Edit } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
@@ -95,14 +98,19 @@ type NoteKind = 'AI提示词' | '想法说明'
 interface Note { id: number; domain_id: number; kind: NoteKind; content: string; updated_at?: string; version_count?: number }
 interface Version { id: number; note_id: number; kind: NoteKind; content: string; version_no: number; created_at?: string }
 interface Operation { id: number; domain_id: number; operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他'; created_at?: string }
-interface ResourceLink { id: number; provider: string; resource_name: string; resource_url?: string | null; ip_address?: string | null; port?: number | null; account_name?: string | null; login_email?: string | null; role: string; is_primary: number }
+interface ResourceLink { id: number; resource_id: number; account_id?: number; provider: string; resource_name: string; resource_url?: string | null; ip_address?: string | null; port?: number | null; account_name?: string | null; login_email?: string | null; role: string; is_primary: number }
+const router = useRouter()
 const props = defineProps<{ visible: boolean; domain?: DomainData }>()
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'changed'): void; (event: 'edit', domain: DomainData): void }>()
 const drawerVisible = computed({ get: () => props.visible, set: value => emit('update:visible', value) })
 const notes = ref<Note[]>([])
 const editing = ref(false)
+const noteBaseline = ref('')
 const saving = ref(false)
 const noteForm = ref<{ id?: number; kind: NoteKind; content: string }>({ kind: 'AI提示词', content: '' })
+const noteDirty = computed(() => props.visible && editing.value && JSON.stringify(noteForm.value) !== noteBaseline.value)
+const { canDiscard } = useUnsavedChanges(noteDirty)
+const cancelNote = async () => { if (await canDiscard()) editing.value = false }
 const historyVisible = ref(false)
 const history = ref<Version[]>([])
 const operations = ref<Operation[]>([])
@@ -148,9 +156,10 @@ const loadDetailData = async () => {
 const saveOperation = async () => { if (!props.domain?.id || !operationForm.value.operation_date) { ElMessage.warning('请选择操作日期'); return }; try { queue.enqueue({ type: 'domain_operation_add', domain_id: props.domain.id, operation_date: operationForm.value.operation_date, operation_kind: operationForm.value.operation_kind }); await queue.flush(); await loadOperations(); emit('changed'); ElMessage.success('操作日期已记录') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '操作日期已加入待同步队列') } }
 const recordToday = (kind: Operation['operation_kind']) => { operationForm.value = { operation_date: localDate(), operation_kind: kind }; void saveOperation() }
 const removeOperation = async (operation: Operation) => { try { await confirmAction(`删除“${props.domain?.domain || '当前网站'}”的 ${operation.operation_date} · ${operation.operation_kind} 操作记录？`, `删除操作记录 · ${props.domain?.domain || '当前网站'}`, { confirmButtonText: '删除' }); await api.delete(`/api/domains/${props.domain?.id}/operations/${operation.id}`); await loadOperations(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }
-const startCreate = () => { noteForm.value = { kind: 'AI提示词', content: '' }; editing.value = true }
-const startEdit = (note: Note) => { noteForm.value = { id: note.id, kind: note.kind, content: note.content }; editing.value = true }
+const startCreate = async () => { if (!(await canDiscard())) return; noteForm.value = { kind: 'AI提示词', content: '' }; noteBaseline.value = JSON.stringify(noteForm.value); editing.value = true }
+const startEdit = async (note: Note) => { if (!(await canDiscard())) return; noteForm.value = { id: note.id, kind: note.kind, content: note.content }; noteBaseline.value = JSON.stringify(noteForm.value); editing.value = true }
 const saveNote = async () => {
+  if (saving.value) return
   if (!props.domain?.id || !noteForm.value.content.trim()) { ElMessage.warning('请输入内容'); return }
   saving.value = true
   try {
@@ -165,7 +174,7 @@ const archiveNote = async (note: Note) => {
 }
 const showHistory = async (note: Note) => { if (!props.domain?.id || !note.id) return; try { history.value = await api.get<Version[]>(`/api/domains/${props.domain.id}/ai-notes/${note.id}/history`); historyVisible.value = true } catch (error) { ElMessage.error(error instanceof Error ? error.message : '历史读取失败') } }
 const copyNote = async (content: string) => { try { await copyText(content); ElMessage.success('已复制') } catch { ElMessage.error('复制失败，请手动选择文本') } }
-watch(() => [props.visible, props.domain?.id], ([visible]) => { if (visible) { editing.value = false; operationFilter.value = '全部'; operationForm.value = { operation_date: localDate(), operation_kind: 'SEO' }; void loadDetailData() } })
+watch(() => [props.visible, props.domain?.id], ([visible]) => { if (visible) { editing.value = false; operationFilter.value = '全部'; operationForm.value = { operation_date: localDate(), operation_kind: 'SEO' }; void loadDetailData() } }, { immediate: true })
 </script>
 
 <style scoped src="../styles/dialogs/domain-detail.css"></style>

@@ -28,3 +28,4 @@
 .error-msg { color: var(--color-error); }
 :deep(.el-collapse-item__header) { color: var(--color-ink); font: inherit; white-space: normal; line-height: 1.5; }
 @media (max-width: 600px) { .selected-file { align-items: flex-start; } }
+.import-footer { margin-top:var(--space-md); }

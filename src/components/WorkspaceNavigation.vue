@@ -20,6 +20,7 @@
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'resources' }" aria-label="资源管理" title="资源管理" @click="emit('manage', 'resources')"><el-icon aria-hidden="true"><FolderOpened /></el-icon><span v-if="!collapsed" class="workspace-nav-text">资源管理</span></button>
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'adsense' }" aria-label="AdSense 管理" title="AdSense 管理" @click="emit('manage', 'adsense')"><el-icon aria-hidden="true"><Coin /></el-icon><span v-if="!collapsed" class="workspace-nav-text">AdSense 管理</span></button>
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'notifications' }" aria-label="通知配置" title="通知配置" @click="emit('manage', 'notifications')"><el-icon aria-hidden="true"><Bell /></el-icon><span v-if="!collapsed" class="workspace-nav-text">通知配置</span></button>
+        <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'data' }" aria-label="数据管理" title="数据管理" @click="emit('manage', 'data')"><el-icon aria-hidden="true"><Download /></el-icon><span v-if="!collapsed" class="workspace-nav-text">数据管理</span></button>
       </div>
     </nav>
     <div class="workspace-nav-footer">
@@ -34,7 +35,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import type { DropdownInstance } from 'element-plus';
-import { Grid, Lightning, Connection, Document, FolderOpened, Coin, Bell, MoreFilled, Close, Expand, Fold } from '@element-plus/icons-vue';
+import { Grid, Lightning, Connection, Document, FolderOpened, Coin, Bell, MoreFilled, Download, Close, Expand, Fold } from '@element-plus/icons-vue';
 const moreMenu = ref<DropdownInstance>();
 const closeMoreMenu = () => { moreMenu.value?.handleClose(); };
 onMounted(() => window.addEventListener('resize', closeMoreMenu));
@@ -43,14 +44,14 @@ type View = 'all' | 'Astro' | 'Next.js' | 'WordPress';
 defineProps<{
   tabs: Array<{ label: string; value: View }>;
   counts: Record<View, number>;
-  active: View;
+  active: string;
   activeManager: string;
   collapsed?: boolean;
   mobile?: boolean;
 }>();
 const emit = defineEmits<{
   select: [value: View];
-  manage: [value: 'resources' | 'adsense' | 'notifications'];
+  manage: [value: 'resources' | 'adsense' | 'notifications' | 'data'];
   collapse: [];
   close: [];
   backup: [];

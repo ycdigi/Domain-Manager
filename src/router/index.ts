@@ -1,10 +1,14 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/Login.vue'
 import Home from '../views/Home.vue'
+import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
+import { clearWorkspaceCache } from '../utils/workspaceCache'
+let loggingOut = false
 import { useAuth } from '../utils/auth'
 
 const router = createRouter({
     history: createWebHistory(),
+    scrollBehavior(to, from, saved) { return saved || (to.path === from.path ? undefined : { top: 0 }) },
     routes: [
         {
             path: '/',
@@ -16,10 +20,16 @@ const router = createRouter({
             component: Login
         },
         {
-            path: '/home',
-            name: 'Home',
-            component: Home,
-            meta: { requiresAuth: true }
+            path: '/',
+            component: WorkspaceLayout,
+            meta: { requiresAuth: true },
+            children: [
+                { path: 'home', name: 'Home', component: Home },
+                { path: 'resources', name: 'Resources', component: () => import('../views/Resources.vue') },
+                { path: 'adsense', name: 'Adsense', component: () => import('../views/Adsense.vue') },
+                { path: 'settings/notifications', name: 'Notifications', component: () => import('../views/Notifications.vue') },
+                { path: 'data', name: 'Data', component: () => import('../views/DataManagement.vue') }
+            ]
         }
     ]
 })
@@ -31,11 +41,20 @@ router.beforeEach(async (to, _from, next) => {
 
     if (to.meta.requiresAuth && !token) {
         next('/login')
-    } else if (to.name === 'Login' && token) {
+    } else if (to.name === 'Login' && token && !loggingOut) {
         next({ name: 'Home' })
     } else {
         next()
     }
 })
 
+router.afterEach(to => { if (to.name === 'Login' && !useAuth().getAuthToken()) clearWorkspaceCache() })
+
+export const logoutWorkspace = async () => {
+    loggingOut = true
+    try {
+        const failure = await router.push({ name: 'Login' })
+        if (!failure) { useAuth().clearAuth(); clearWorkspaceCache() }
+    } finally { loggingOut = false }
+}
 export default router
