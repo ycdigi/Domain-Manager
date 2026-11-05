@@ -248,6 +248,14 @@ test('ledger uses search and platform tabs with WordPress-only counts', () => {
   assert.doesNotMatch(home, /v-model="(?:ownerFilter|seoFilter|resourceFilter)"/)
 })
 
+test('ledger service provider cell can add an existing resource', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  assert.match(home, /添加资源|去添加/)
+  assert.match(home, /\/api\/resources\/links/)
+  assert.match(home, /resourceOptionLabel/)
+  assert.match(home, /resourceRole/)
+})
+
 test('copy actions share the clipboard fallback and keep domain copy local', () => {
   const clipboard = fs.readFileSync(path.join(repo, 'src/utils/clipboard.ts'), 'utf8')
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
