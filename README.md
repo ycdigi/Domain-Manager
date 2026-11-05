@@ -182,6 +182,11 @@ npx wrangler d1 execute domains-db --remote --command "SELECT lower(rtrim(domain
 npm run db:migrate:v1.3.0
 npm run db:migrate:v1.4.0
 npm run db:migrate:v1.5.0
+npm run db:migrate:v1.6.0
+npm run db:migrate:v1.7.0
+npm run db:migrate:v1.8.0
+npm run db:migrate:v1.9.0
+npm run db:migrate:v1.10.0
 npm run db:verify:remote
 ```
 
