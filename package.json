@@ -10,7 +10,7 @@
     "test:data": "node --test tests/data-model.test.mjs",
     "lint:cleanup": "node scripts/lint-cleanup.mjs",
     "domains:enrich": "node scripts/enrich-domains.mjs",
-    "deploy:pages": "npm run build && wrangler pages deploy dist --project-name domain-manager --branch production",
+    "deploy:pages": "npm run build && wrangler pages deploy dist --project-name domain-manager --branch main",
     "preview": "vite preview",
     "pages:dev": "wrangler pages dev --compatibility-date=2024-01-01 --d1=DB -- npm run dev",
     "db:create": "wrangler d1 create domains-db",
@@ -29,8 +29,8 @@
     "db:verify:remote": "wrangler d1 execute domains-db --remote --command \"SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('domains','adsense_accounts','adsense_income','provider_accounts','provider_resources','domain_resources','provider_credentials','domain_ai_notes','domain_ai_note_versions','domain_operations');\"",
     "db:execute": "npm run db:init:remote",
     "db:local": "wrangler d1 execute domains-db --local --file=./schema.sql --yes",
-    "deploy": "npm run build && wrangler pages deploy dist --branch production",
-    "deploy:full": "npm run build && npm run db:execute && wrangler pages deploy dist --branch production",
+    "deploy": "npm run build && wrangler pages deploy dist --branch main",
+    "deploy:full": "npm run build && npm run db:execute && wrangler pages deploy dist --branch main",
     "dev:local": "npm run db:local && npm run pages:dev"
   },
   "dependencies": {

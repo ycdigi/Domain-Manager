@@ -215,7 +215,7 @@ npm run domains:enrich -- \
      ```bash
      npm ci
      npm run build
-     npx wrangler pages deploy dist --project-name domain-manager --branch production
+     npx wrangler pages deploy dist --project-name domain-manager --branch main
      ```
    - `functions/api/ai/sync/index.ts` 会随 Pages Functions 一起发布。发布后使用 POST 验证，不要在浏览器地址栏用 GET 打开接口：
 

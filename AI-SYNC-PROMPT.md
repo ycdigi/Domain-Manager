@@ -131,7 +131,7 @@ Cloudflare Pages 必须从仓库根目录部署，不能使用 `npx wrangler dep
 ```bash
 npm ci
 npm run build
-npx wrangler pages deploy dist --project-name domain-manager --branch production
+npx wrangler pages deploy dist --project-name domain-manager --branch main
 ```
 
 Cloudflare Pages 项目还必须配置：
