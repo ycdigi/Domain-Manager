@@ -2,7 +2,7 @@
  <div class="workspace-page">
   <WorkspaceHeading title="AdSense" subtitle="账号、归属人和月收入"><el-button :disabled="loading || saving" @click="load(true)">刷新</el-button><el-button @click="exportIncome">导出收入</el-button><el-button type="primary" @click="editAccount()">新增账号</el-button></WorkspaceHeading>
   <div v-if="error || contextError" class="page-error" role="alert">{{ error || contextError }}<el-button v-if="error" @click="load(true)">重试</el-button><el-button v-else @click="router.push({ name: 'Adsense' })">查看全部账号</el-button></div>
-  <section class="page-panel"><div class="page-actions"><label for="income-month">统计月份</label><el-input id="income-month" :model-value="month" type="month" class="month-input" @change="changeMonth" /></div><ul class="page-list"><li v-for="item in ownerTotals" :key="item.key"><span>{{ item.owner }} · USD</span><strong>{{ item.amount.toFixed(2) }}</strong></li></ul><p v-if="!ownerTotals.length" class="page-muted">暂无账号收入。</p></section>
+  <section class="page-panel"><div class="page-actions"><label for="income-month">统计月份</label><el-date-picker id="income-month" :model-value="month" type="month" value-format="YYYY-MM" format="YYYY-MM" class="month-input" :clearable="false" @change="changeMonth" /></div><ul class="page-list"><li v-for="item in ownerTotals" :key="item.key"><span>{{ item.owner }} · USD</span><strong>{{ item.amount.toFixed(2) }}</strong></li></ul><p v-if="!ownerTotals.length" class="page-muted">暂无账号收入。</p></section>
   <section v-if="editing" class="page-panel">
    <div class="panel-heading"><h2>{{ editingId ? `编辑账号：${selected?.name || accountForm.name}` : '新增 AdSense 账号' }}</h2></div>
    <el-form class="page-form page-form-grid" label-position="top" :model="accountForm" @submit.prevent="saveAccount">
