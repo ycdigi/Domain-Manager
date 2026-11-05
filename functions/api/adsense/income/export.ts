@@ -6,7 +6,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
     if (authError) return authError
     try {
         const { results } = await context.env.DB.prepare(`
-            SELECT a.name AS adsense_account, a.owner, a.publisher_id, a.currency, i.income_month, i.amount, i.memo
+            SELECT a.name AS adsense_account, a.owner, a.publisher_id, a.currency, i.income_month, CASE WHEN i.amount_usd = 0 AND i.amount <> 0 THEN i.amount ELSE i.amount_usd END AS amount_usd, i.amount_cny, i.transfer_date, i.memo
             FROM adsense_income i
             JOIN adsense_accounts a ON a.id = i.adsense_account_id
             ORDER BY i.income_month DESC, a.name COLLATE NOCASE

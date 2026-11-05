@@ -356,6 +356,18 @@ test('income can be totaled by owner and currency across multiple accounts', () 
   }
 })
 
+test('legacy income writes still fall back to amount when the new USD field is zero', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/income-compat.db'
+  try {
+    runSql(db, fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8'))
+    runSql(db, `INSERT INTO adsense_accounts(name, owner) VALUES ('main', 'self'); INSERT INTO adsense_income(adsense_account_id, income_month, amount) VALUES (1, '2026-10', 12.5);`)
+    const total = runSql(db, `SELECT SUM(CASE WHEN amount_usd = 0 AND amount <> 0 THEN amount ELSE amount_usd END) FROM adsense_income;`).trim()
+    assert.equal(total, '12.5')
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
 test('operation dates are unique per domain, date and kind, and cascade on deletion', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/operations.db'
   try {
@@ -374,7 +386,7 @@ test('v1.6 migration preserves legacy domains and adds site identity fields', ()
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/migration-v15.db'
   try {
     runSql(db, `CREATE TABLE domains (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, registrar TEXT NOT NULL, registrar_link TEXT, registrar_date TEXT NOT NULL, expiry_date TEXT NOT NULL, service_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT '离线', tgsend INTEGER DEFAULT 0, st_tgsend INTEGER DEFAULT 1, memo TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP); INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type) VALUES ('legacy.example.com', 'test', '2025-01-01', '2026-12-31', '正常网站');`)
-    for (const version of ['v1.1.0', 'v1.2.0', 'v1.3.0', 'v1.4.0', 'v1.5.0', 'v1.6.0', 'v1.7.0']) runSql(db, fs.readFileSync(path.join(repo, `schema-migration-${version}.sql`), 'utf8'))
+    for (const version of ['v1.1.0', 'v1.2.0', 'v1.3.0', 'v1.4.0', 'v1.5.0', 'v1.6.0', 'v1.7.0', 'v1.8.0', 'v1.9.0']) runSql(db, fs.readFileSync(path.join(repo, `schema-migration-${version}.sql`), 'utf8'))
     const row = runSql(db, "SELECT domain || '|' || platform FROM domains;").trim()
     assert.equal(row, 'legacy.example.com|其他')
     assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
@@ -510,4 +522,38 @@ test('domain expiry presentation and fixed type choices are explicit', () => {
   assert.match(validation, /网站类型只能是计算器、资讯站或其他/)
   assert.match(resources, /editor-provider-context/)
   assert.match(resources, /resource-account-grid/)
+})
+
+test('v1.9 migration adds monthly transfer metadata and optional site income breakdowns', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/income-v19.db'
+  try {
+    runSql(db, `CREATE TABLE domains (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, registrar TEXT NOT NULL, registrar_date TEXT NOT NULL, expiry_date TEXT NOT NULL, service_type TEXT NOT NULL, adsense_account_id INTEGER);
+      CREATE TABLE adsense_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, owner TEXT NOT NULL);
+      CREATE TABLE adsense_income (id INTEGER PRIMARY KEY AUTOINCREMENT, adsense_account_id INTEGER NOT NULL, income_month TEXT NOT NULL, amount REAL NOT NULL DEFAULT 0, memo TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP, UNIQUE (adsense_account_id, income_month), FOREIGN KEY (adsense_account_id) REFERENCES adsense_accounts(id));`)
+    runSql(db, "INSERT INTO adsense_accounts(name, owner) VALUES ('main', 'self'); INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type, adsense_account_id) VALUES ('one.example', 'test', '2025-01-01', '2027-01-01', '正常网站', 1); INSERT INTO adsense_income(adsense_account_id, income_month, amount) VALUES (1, '2026-10', 12.5);")
+    runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.9.0.sql'), 'utf8'))
+    const columns = runSql(db, 'PRAGMA table_info(adsense_income);')
+    assert.match(columns, /amount_usd/)
+    assert.match(columns, /amount_cny/)
+    assert.match(columns, /transfer_date/)
+    assert.equal(runSql(db, 'SELECT amount_usd FROM adsense_income WHERE id=1;').trim(), '12.5')
+    assert.match(runSql(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='adsense_income_domains';"), /adsense_income_domains/)
+    runSql(db, "INSERT INTO adsense_income_domains(income_id, domain_id, amount_usd) VALUES (1, 1, 6.25);")
+    assert.equal(runSql(db, 'SELECT amount_usd FROM adsense_income_domains WHERE income_id=1;').trim(), '6.25')
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
+test('AdSense page exposes USD/CNY transfer date and optional site breakdown', () => {
+  const page = fs.readFileSync(path.join(repo, 'src/views/Adsense.vue'), 'utf8')
+  const income = fs.readFileSync(path.join(repo, 'functions/api/adsense/income/index.ts'), 'utf8')
+  assert.match(page, /美元金额（USD）/)
+  assert.match(page, /人民币金额（CNY，可空）/)
+  assert.match(page, /转账日期（可空）/)
+  assert.match(page, /网站美元明细（可选）/)
+  assert.match(page, /type="month"/)
+  assert.match(income, /adsense_income_domains/)
+  assert.match(income, /amount_cny/)
+  assert.match(income, /transfer_date/)
 })

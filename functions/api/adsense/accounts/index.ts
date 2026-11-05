@@ -13,7 +13,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
         const result = await context.env.DB.prepare(`
             SELECT a.*, COUNT(DISTINCT d.id) AS linked_domains,
-                   COALESCE((SELECT SUM(i.amount) FROM adsense_income i WHERE i.adsense_account_id = a.id AND i.income_month = ?), 0) AS current_income
+                   COALESCE((SELECT SUM(CASE WHEN i.amount_usd = 0 AND i.amount <> 0 THEN i.amount ELSE i.amount_usd END) FROM adsense_income i WHERE i.adsense_account_id = a.id AND i.income_month = ?), 0) AS current_income
             FROM adsense_accounts a
             LEFT JOIN domains d ON d.adsense_account_id = a.id
             GROUP BY a.id ORDER BY a.name COLLATE NOCASE

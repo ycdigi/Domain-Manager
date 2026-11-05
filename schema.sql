@@ -59,11 +59,27 @@ CREATE TABLE IF NOT EXISTS adsense_income (
     adsense_account_id INTEGER NOT NULL,
     income_month TEXT NOT NULL,
     amount REAL NOT NULL DEFAULT 0,
+    amount_usd REAL NOT NULL DEFAULT 0,
+    amount_cny REAL,
+    transfer_date TEXT,
     memo TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (adsense_account_id, income_month),
     FOREIGN KEY (adsense_account_id) REFERENCES adsense_accounts(id)
 );
+
+CREATE TABLE IF NOT EXISTS adsense_income_domains (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    income_id INTEGER NOT NULL,
+    domain_id INTEGER NOT NULL,
+    amount_usd REAL NOT NULL DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (income_id, domain_id),
+    FOREIGN KEY (income_id) REFERENCES adsense_income(id) ON DELETE CASCADE,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_adsense_income_domains_income ON adsense_income_domains(income_id);
+CREATE INDEX IF NOT EXISTS idx_adsense_income_domains_domain ON adsense_income_domains(domain_id);
 
 CREATE INDEX IF NOT EXISTS idx_domains_adsense_account ON domains(adsense_account_id);
 CREATE INDEX IF NOT EXISTS idx_domains_seo_last_date ON domains(seo_last_date);

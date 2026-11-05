@@ -136,3 +136,11 @@ npm run lint:cleanup
 | 行业可动态扩展旧值 | 类型固定为计算器、资讯站、其他；旧值展示归入其他 | `Home.vue`, `DomainDialog.vue`, `domain-validation.ts`, import/AI API | 删除动态选项和自定义写入口；保留底层 `industry` 列兼容 | 35 项数据测试、API 校验 |
 | 资源账号表单把服务商作为普通字段并与备注并排 | 服务商上下文徽标、说明、双列核心字段、整行备注和独立操作区 | `Resources.vue`, `workspace.css` | 删除旧错位布局 | 桌面/移动工作区回归 |
 | 桌面沿用 13/14px 密集文本 | 1024px 以上提升正文、表格和控件字号；移动端不放大 | shared/base, home, workspace styles | 增加单一响应式字号规则，不追加组件覆盖 | build、Playwright 多尺寸 |
+
+## 2026-11-06 AdSense 收入字段扩展
+
+| 旧规则/入口 | 新规则/新入口 | 使用模板/组件/API | 删除/保留 | 验证方式 |
+| --- | --- | --- | --- | --- |
+| 月收入只有旧 `amount` 和备注 | `amount_usd` 为主金额，增加可空 `amount_cny`、`transfer_date`；旧 `amount` 继续同步兼容 | `Adsense.vue`, `/api/adsense/income`, `adsense_income` | 保留旧列兼容，新增 v1.9.0 字段 | 迁移测试、构建、数据回归 |
+| 收入只能按账号查看 | `adsense_income_domains` 保存可选的网站美元明细 | AdSense 月收入表单、收入 GET/POST、Excel 快照 | 保留账号总额；不自动分摊 | 账号多网站校验和导出检查 |
+| 账号 `currency` 直接作为收入汇总单位 | 汇总明确显示 USD；`currency` 只作为账号元数据 | `Adsense.vue`, dashboard summary | 删除误导性标签，不删除账号字段 | 页面静态检查、API SQL 检查 |

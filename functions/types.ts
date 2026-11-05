@@ -107,8 +107,12 @@ export interface AdsenseIncome {
     adsense_account_id: number
     income_month: string
     amount: number
+    amount_usd: number
+    amount_cny?: number | null
+    transfer_date?: string | null
     memo: string
     created_at?: string
+    site_amounts?: Array<{ domain_id: number; domain: string; site_name?: string | null; amount_usd: number }>
 }
 
 export type ProviderType = 'github' | 'cloudflare' | 'vhost' | 'vps'

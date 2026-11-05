@@ -121,6 +121,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 已有数据库升级到网站名称和行业字段时，再执行一次 `schema-migration-v1.6.0.sql`
    - 已有数据库升级到日点击区间选择时，再执行一次 `schema-migration-v1.7.0.sql`
    - 已有数据库升级到电脑字段时，再执行一次 `schema-migration-v1.8.0.sql`
+   - 已有数据库升级到 AdSense 月度美元/人民币金额、转账日期和可选网站美元明细时，再执行一次 `schema-migration-v1.9.0.sql`
 
 ### D1 命令行管理
 
@@ -163,6 +164,7 @@ npm run db:migrate:v1.5.0
 npm run db:migrate:v1.6.0
 npm run db:migrate:v1.7.0
 npm run db:migrate:v1.8.0
+npm run db:migrate:v1.9.0
 npm run db:verify:remote
 ```
 
@@ -190,7 +192,7 @@ npm run db:verify:remote
 
 资源账号、资源和网站关联通过 `/api/resources/*` 管理；完整 Token 只在明确点击显示时返回，不包含在域名导出文件或 Excel 快照中。网站详情可以维护技术栈、WordPress 计算器页数、文章数、统计日期和操作日期历史。
 
-状态写入会按日期去重；SEO 和点击修改使用浏览器本地队列，最多保留 200 项，每批最多 25 项。重复字段变更会合并，断网或 D1 临时失败会保留待同步任务。资源状态由 D1 关联触发器维护。AdSense 月收入按账号和月份保存，不分摊到单个网站。首页“导出”会生成包含域名、操作、AdSense、收入、资源关联和 AI 记录的多工作表 Excel，不包含密码、API Token、Provider Token、凭据密文或加密密钥。
+状态写入会按日期去重；SEO 和点击修改使用浏览器本地队列，最多保留 200 项，每批最多 25 项。重复字段变更会合并，断网或 D1 临时失败会保留待同步任务。资源状态由 D1 关联触发器维护。AdSense 月收入按账号和月份保存：美元金额是主金额，人民币金额和转账日期均可为空；一个账号关联多个网站时，可以额外填写每个网站的美元明细，不填写时不会自动分摊总额。首页“导出”会生成包含域名、操作、AdSense、收入、资源关联和 AI 记录的多工作表 Excel，不包含密码、API Token、Provider Token、凭据密文或加密密钥。
 
 前端清理审计使用 `npm run lint:cleanup`，检查旧接口引用、CSS 类来源、模板内联样式、共享 token 重复定义，以及写入队列与批量 API 的字段一致性。
 
