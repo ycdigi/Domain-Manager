@@ -86,3 +86,10 @@ npm run lint:cleanup
 | Element Plus `.el-*`、`:deep()`、动态 SEO/行色类 | 保持实际运行来源 | 组件库生成/teleport/scoped 内部节点 | 保留，无法按静态模板名删 | UI 回归 |
 
 设计参考读取结果、选择范围与不适用部分见根 DESIGN.md；两份来源都是营销系统，不声明有未经验证的后台导航/筛选设计。此次除 Home 新增固定列的响应式呈现监听外，Vue 业务 script 内容与基线一致，后端/路由/HTML/SEO/数据结构不在差异中。
+
+## 2026-11-05 用户指定蓝色主色
+
+- 旧绿色 accent → `brand: rgb(0,112,249)` 与派生 accent：共享主按钮、登录、保存、链接、焦点和 Element Plus 状态复用唯一 token，未增加组件覆盖。
+- 中性选中标签 → 浅蓝选中态：仅替换原 `.platform-tabs button.active` 规则，无重复选择器。
+- success / warning / error 与近期操作浅绿行保留，避免将业务状态误当品牌色。
+- 精确主色搭配白字对比度约 4.48:1，填充色混合 2% 黑色后约 4.64:1；链接使用更深的派生蓝。

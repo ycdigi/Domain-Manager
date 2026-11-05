@@ -1,5 +1,5 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: project · redesign: full · scope: explicit opt-in · v2.0.0 */
-/* Hallmark · pre-emit critique: preserve green actions and semantic colors; use one surface and density scale across existing workflows. */
+/* Hallmark · pre-emit critique: use the requested blue primary and preserve semantic status colors; use one surface and density scale across existing workflows. */
 :root.dm-ui {
   --color-paper: oklch(100% 0 0);
   --color-paper-2: oklch(98% 0.003 250);
@@ -9,11 +9,13 @@
   --color-muted: oklch(48% 0.014 255);
   --color-rule: oklch(88% 0.006 255);
   --color-field-edge: oklch(65% 0.012 255);
-  --color-accent: oklch(43% 0.11 150);
-  --color-accent-hover: oklch(37% 0.1 150);
+  --color-brand: rgb(0, 112, 249);
+  --color-accent: color-mix(in srgb, var(--color-brand) 98%, black);
+  --color-accent-hover: color-mix(in srgb, var(--color-brand) 84%, black);
+  --color-accent-paper: color-mix(in srgb, var(--color-brand) 7%, white);
   --color-accent-ink: oklch(100% 0 0);
-  --color-link: oklch(44% 0.17 255);
-  --color-focus: oklch(44% 0.17 255);
+  --color-link: var(--color-accent-hover);
+  --color-focus: var(--color-brand);
   --color-success: oklch(39% 0.1 150);
   --color-success-paper: oklch(96% 0.025 150);
   --color-warning: oklch(40% 0.09 75);
@@ -45,13 +47,13 @@
   --radius-panel: 8px;
   --container: 1440px;
   --gutter: clamp(16px, 3vw, 40px);
-  --el-color-primary: var(--color-link);
-  --el-color-primary-light-3: var(--color-link);
-  --el-color-primary-light-5: var(--color-rule);
-  --el-color-primary-light-7: var(--color-paper-3);
-  --el-color-primary-light-8: var(--color-paper-3);
-  --el-color-primary-light-9: var(--color-paper-2);
-  --el-color-primary-dark-2: var(--color-ink);
+  --el-color-primary: var(--color-accent);
+  --el-color-primary-light-3: color-mix(in srgb, var(--color-brand) 70%, white);
+  --el-color-primary-light-5: color-mix(in srgb, var(--color-brand) 50%, white);
+  --el-color-primary-light-7: color-mix(in srgb, var(--color-brand) 30%, white);
+  --el-color-primary-light-8: color-mix(in srgb, var(--color-brand) 20%, white);
+  --el-color-primary-light-9: var(--color-accent-paper);
+  --el-color-primary-dark-2: var(--color-accent-hover);
   --el-color-success: var(--color-success);
   --el-color-danger: var(--color-error);
   --el-color-warning: var(--color-warning);

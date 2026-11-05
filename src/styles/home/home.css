@@ -1,6 +1,6 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: project · redesign: polish · scope: /home · v2.0.0 */
 /* Hallmark · pre-emit critique: actions first, quiet metrics, readable compact ledger; preserve all workflow wiring and full desktop width. */
-/* Hallmark · dismissed F4 · only 新增域名 has filled accent; management controls and tabs are neutral surfaces, verified in browser. */
+/* Hallmark · dismissed F4 · only 新增域名 has filled accent; management controls are neutral; the active view uses a light blue surface, verified in browser. */
 /* User scope: a working table, no marketing hero, no capped container, no ornamental modules. */
 .home-container { min-height:100svh; background: var(--color-paper-2); color:var(--color-ink); font-family:var(--font-body); font-size:var(--text-md); line-height:1.5; }
 .home-container h2 { margin:0; color:var(--color-ink); font-family:var(--font-display); font-weight:600; min-width:0; overflow-wrap:break-word; text-wrap:balance; }
@@ -30,7 +30,7 @@ html.dm-ui .home-container .workspace { width:100%; max-width:none; margin-inlin
 .home-container .platform-tabs { display:flex; flex-wrap:wrap; gap:var(--space-2xs); }
 .home-container .platform-tabs button { display:flex; align-items:center; justify-content:center; gap:var(--space-xs); min-height:var(--control-height); padding:6px 10px; border:1px solid var(--color-clear); border-radius:var(--radius-control); background: var(--color-clear); color:var(--color-muted); font:inherit; font-size:var(--text-sm); cursor:pointer; }
 .home-container .platform-tabs button:hover { background: var(--color-paper-2); color:var(--color-ink); }
-.home-container .platform-tabs button.active { border-color:var(--color-rule); background: var(--color-paper-3); color:var(--color-ink); font-weight:500; }
+.home-container .platform-tabs button.active { border-color:var(--color-brand); background: var(--color-accent-paper); color:var(--color-link); font-weight:500; }
 .home-container .platform-tabs span { font-size:var(--text-xs); color:var(--color-muted); font-variant-numeric:tabular-nums; }
 .home-container .custom-table { width:100%; overflow:clip; --el-table-header-bg-color:var(--color-paper-2); }
 .home-container .custom-table .el-table__cell { font-size:var(--text-sm); }

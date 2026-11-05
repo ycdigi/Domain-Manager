@@ -6,7 +6,7 @@
 
 代码实际为 Vue 3 / Vite 6 / Element Plus，默认登录后页面 `/home`。保留台账和管理入口，调整工具、摘要、搜索标签、数据表的呈现顺序，未迁移框架。
 
-通过 GitHub contents API 枚举并读取 `VoltAgent/awesome-design-md` 下 `design-md/linear.app`、`design-md/airtable` 实际存在的 DESIGN.md 和 README.md。两份均主要描述营销站；只借鉴已记载的控件密度、白底/深色正文、细分隔与层级。不将未经记载的应用内导航或筛选规范当作依据，保持本站浅色、绿色主操作和全宽。
+通过 GitHub contents API 枚举并读取 `VoltAgent/awesome-design-md` 下 `design-md/linear.app`、`design-md/airtable` 实际存在的 DESIGN.md 和 README.md。两份均主要描述营销站；只借鉴已记载的控件密度、白底/深色正文、细分隔与层级。不将未经记载的应用内导航或筛选规范当作依据，保持本站浅色与全宽。随后按用户新指定的 `rgb(0, 112, 249)` 统一蓝色主操作，语义状态色保留。
 
 ## 实际改动
 
