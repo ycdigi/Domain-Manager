@@ -30,6 +30,7 @@
    </section>
    <section class="page-panel">
     <template v-if="selected">
+     <span id="income-editor" class="income-editor-anchor" aria-hidden="true"></span>
      <div class="panel-heading"><div><h2>{{ selected.name }}</h2><p class="page-muted">{{ selected.owner }} · {{ selected.publisher_id || '未记录 Publisher ID' }} · {{ selected.currency }}</p></div><div class="page-actions"><el-button :disabled="saving" @click="editAccount(selected)">编辑账号</el-button><el-button type="warning" :disabled="saving || selected.status === '暂停'" @click="disableAccount">停用</el-button></div></div>
      <div class="panel-heading"><h2 class="income-heading"><select id="income-month-history" class="income-heading-month native-month-select" :value="month" :disabled="incomeLoading" @change="changeMonthFromEvent"><option v-for="option in monthOptions" :key="option.value" :value="option.value">{{ option.label }}</option></select><span>月收入</span></h2><span class="page-muted">{{ existingIncome ? '修改已有记录' : '新增该月记录' }}</span></div>
      <div v-if="incomeError" class="page-error" role="alert">{{ incomeError }}<el-button @click="loadIncome(true)">重试</el-button></div>
@@ -37,9 +38,9 @@
       <div class="income-form-grid"><el-form-item label="美元金额（USD）" required><StableNumberInput v-model="incomeForm.amount_usd" :disabled="incomeLoading || !incomeLoaded || !!incomeError || saving" :min="0" :precision="2" :controls="false" /></el-form-item><el-form-item label="人民币金额（CNY，可空）"><StableNumberInput v-model="incomeForm.amount_cny" :disabled="incomeLoading || !incomeLoaded || !!incomeError || saving" :min="0" :precision="2" :controls="false" /></el-form-item><el-form-item label="转账日期（可空）"><el-date-picker v-model="incomeForm.transfer_date" type="date" value-format="YYYY-MM-DD" clearable :disabled="incomeLoading || !incomeLoaded || !!incomeError || saving" /></el-form-item></div>
       <el-form-item label="收入备注"><el-input v-model="incomeForm.memo" :disabled="incomeLoading || !incomeLoaded || !!incomeError || saving" /></el-form-item>
       <section class="income-site-breakdown"><div class="panel-heading"><div><h3>网站美元明细（可选）</h3><p class="page-muted">只有能确认分摊时填写；不填写不会自动分摊账号总额。</p></div><span class="page-muted">{{ linkedSites.length }} 个关联网站</span></div><div v-if="linkedSites.length" class="income-site-list"><div v-for="site in linkedSites" :key="site.id" class="income-site-row"><div><strong>{{ site.site_name || site.domain }}</strong><span>{{ site.domain }}</span></div><StableNumberInput v-model="incomeForm.siteAmounts[String(site.id)]" :disabled="incomeLoading || !incomeLoaded || !!incomeError || saving" :min="0" :precision="2" :controls="false" placeholder="未填写" /></div></div><p v-else class="page-muted">当前账号还没有关联网站。</p></section>
-      <div class="page-actions"><el-button type="primary" native-type="submit" :loading="saving" :disabled="incomeLoading || !!incomeError || !incomeLoaded">保存本月收入</el-button><el-button :disabled="!incomeDirty || saving" @click="resetIncome">放弃修改</el-button></div>
+      <div class="page-actions"><el-button type="primary" native-type="submit" :loading="saving" :disabled="incomeLoading || !!incomeError || !incomeLoaded">保存 {{ month }} 收入</el-button><el-button :disabled="!incomeDirty || saving" @click="resetIncome">放弃修改</el-button></div>
      </el-form>
-     <h3>收入历史</h3><el-table :data="incomeRows" size="small"><el-table-column prop="income_month" label="月份" min-width="100"><template #default="scope"><button class="page-link" @click="changeMonth(scope.row.income_month)">{{ scope.row.income_month }}</button></template></el-table-column><el-table-column prop="amount_usd" label="美元" min-width="90"><template #default="scope">{{ Number(scope.row.amount_usd || scope.row.amount || 0).toFixed(2) }}</template></el-table-column><el-table-column prop="amount_cny" label="人民币" min-width="90"><template #default="scope">{{ scope.row.amount_cny == null ? '—' : Number(scope.row.amount_cny).toFixed(2) }}</template></el-table-column><el-table-column prop="transfer_date" label="转账日期" min-width="105"><template #default="scope">{{ scope.row.transfer_date || '—' }}</template></el-table-column><el-table-column prop="memo" label="备注" min-width="120" show-overflow-tooltip /></el-table>
+     <h3>收入历史</h3><el-table :data="incomeRows" size="small"><el-table-column prop="income_month" label="月份" min-width="100"><template #default="scope"><button type="button" class="page-link" :aria-label="`编辑 ${scope.row.income_month} 收入`" @click="changeMonth(scope.row.income_month, true)">{{ scope.row.income_month }}</button></template></el-table-column><el-table-column prop="amount_usd" label="美元" min-width="90"><template #default="scope">{{ Number(scope.row.amount_usd || scope.row.amount || 0).toFixed(2) }}</template></el-table-column><el-table-column prop="amount_cny" label="人民币" min-width="90"><template #default="scope">{{ scope.row.amount_cny == null ? '—' : Number(scope.row.amount_cny).toFixed(2) }}</template></el-table-column><el-table-column prop="transfer_date" label="转账日期" min-width="105"><template #default="scope">{{ scope.row.transfer_date || '—' }}</template></el-table-column><el-table-column prop="memo" label="备注" min-width="120" show-overflow-tooltip /></el-table>
      <h3>关联网站</h3><ul class="page-list"><li v-for="site in linkedSites" :key="site.id"><button class="page-link" @click="openSite(site.domain)">{{ site.site_name || site.domain }}</button><span class="page-muted">{{ site.domain }} · {{ site.adsense_connected }}</span></li></ul><p v-if="!linkedSites.length" class="page-muted">没有关联网站。</p>
     </template><p v-else class="page-empty">选择账号，查看月收入与关联网站。</p>
    </section>
@@ -47,7 +48,7 @@
  </div>
 </template>
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import StableNumberInput from '../components/StableNumberInput.vue'
@@ -70,7 +71,8 @@ const linkedSites = computed(() => sites.value.filter(site => site.adsense_accou
 const emptyAccount = () => ({ name: '', owner: '', publisher_id: '', opened_date: '', currency: 'USD', status: '未知', memo: '' })
 const accountForm = ref(emptyAccount()); const editing = ref(false); const editingId = ref<number>(); const accountBaseline = ref('')
 const incomeRows = ref<Income[]>([]); const incomeLoading = ref(false); const incomeLoaded = ref(false); const incomeError = ref(''); const incomeForm = ref<{ amount_usd: number | undefined; amount_cny: number | undefined; transfer_date: string; memo: string; siteAmounts: Record<string, number | undefined> }>({ amount_usd: undefined, amount_cny: undefined, transfer_date: '', memo: '', siteAmounts: {} }); const incomeBaseline = ref('')
-const monthOptions = computed(() => { const base = localMonth().split('-').map(Number); const months = new Set<string>(); for (let offset = 0; offset < 6; offset++) { const date = new Date(base[0], base[1] - 1 - offset, 1); months.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`) } incomeRows.value.forEach(row => months.add(row.income_month)); return [...months].sort((a, b) => b.localeCompare(a)).map(value => ({ value, label: value === month.value ? `${value}（当前）` : incomeRows.value.some(row => row.income_month === value) ? `${value}（已有记录）` : value })) })
+const currentMonth = computed(() => localMonth())
+const monthOptions = computed(() => { const base = currentMonth.value.split('-').map(Number); const months = new Set<string>(); for (let offset = 0; offset < 6; offset++) { const date = new Date(base[0], base[1] - 1 - offset, 1); months.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`) } incomeRows.value.forEach(row => months.add(row.income_month)); return [...months].sort((a, b) => b.localeCompare(a)).map(value => ({ value, label: value === currentMonth.value ? `${value}（当前）` : incomeRows.value.some(row => row.income_month === value) ? `${value}（已有记录）` : value })) })
 const existingIncome = computed(() => incomeRows.value.find(row => row.income_month === month.value))
 const incomeDirty = computed(() => incomeLoaded.value && JSON.stringify(incomeForm.value) !== incomeBaseline.value)
 const dirty = computed(() => (editing.value && JSON.stringify(accountForm.value) !== accountBaseline.value) || incomeDirty.value)
@@ -91,9 +93,17 @@ const load = async (force = false) => {
  catch (e) { if (version === loadVersion) error.value = e instanceof Error ? e.message : '账号读取失败' }
  finally { if (version === loadVersion) loading.value = false }
 }
-watch(() => [route.query.account, route.query.month], () => { editing.value = false; incomeLoaded.value = false; void load() }, { immediate: true })
+watch(() => [route.query.account, route.query.month], (current, previous) => {
+ const accountChanged = !previous || current[0] !== previous[0]
+ if (accountChanged) { editing.value = false; incomeLoaded.value = false; void load() }
+ else void loadIncome()
+}, { immediate: true })
 const selectAccount = (id?: number) => { void router.push({ query: { ...route.query, account: String(id) } }) }
-const changeMonth = (value: string) => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(value)) void router.push({ query: { ...route.query, month: value } }) }
+const changeMonth = async (value: string, focusEditor = false) => {
+ if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(value) || value === month.value) { if (focusEditor) document.getElementById('income-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); return }
+ const failure = await router.push({ query: { ...route.query, month: value } })
+ if (!failure && focusEditor) { await nextTick(); document.getElementById('income-editor')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) }
+}
 const changeMonthFromEvent = (event: Event) => changeMonth((event.target as HTMLSelectElement).value)
 const showSites = (id?: number) => { void router.push({ name: 'Home', query: { adsense_account: String(id) } }) }
 const openSite = (domain: string) => { void router.push({ name: 'Home', query: { site: domain } }) }
