@@ -3,7 +3,7 @@ import { checkAuth } from '../../../utils/auth'
 import { isValidDate } from '../../../utils/domain-validation'
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const validMonth = (value: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(value)
-const validMoney = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0
+const validMoney = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0 && Math.abs(value * 100 - Math.round(value * 100)) < 1e-9
 
 const withSiteAmounts = async (db: D1Database, rows: AdsenseIncome[]) => {
     if (!rows.length) return rows

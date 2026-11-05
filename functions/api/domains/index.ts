@@ -18,6 +18,8 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
                    CASE WHEN d.adsense_opened_date IS NOT NULL AND d.registrar_date IS NOT NULL AND d.adsense_opened_date >= d.registrar_date
                         THEN CAST(julianday(d.adsense_opened_date) - julianday(d.registrar_date) AS INTEGER)
                         ELSE NULL END AS adsense_open_days,
+                   (SELECT SUM(x.amount_usd) FROM adsense_income_domains x WHERE x.domain_id = d.id) AS adsense_income_usd,
+                   (SELECT COUNT(*) FROM adsense_income_domains x WHERE x.domain_id = d.id) AS adsense_income_detail_count,
                    (SELECT COUNT(*) FROM domain_resources dr WHERE dr.domain_id = d.id) AS resource_count,
                    (SELECT GROUP_CONCAT(label, ', ') FROM (
                        SELECT DISTINCT r.provider || ': ' || COALESCE(a.name || ' / ', '') || r.name AS label

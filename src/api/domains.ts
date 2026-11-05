@@ -21,6 +21,8 @@ export interface DomainData {
     adsense_publisher_id?: string | null
     adsense_connected: '未知' | '已开通' | '未开通'
     adsense_opened_date: string | null
+    adsense_income_usd?: number | null
+    adsense_income_detail_count?: number
     seo_last_date: string | null
     daily_clicks: number | null
     daily_clicks_range: 'under10' | '10to29' | '30to49' | '50to99' | 'over100' | null

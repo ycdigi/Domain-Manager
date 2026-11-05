@@ -78,5 +78,6 @@
 - 月份选择器使用 `el-date-picker type="month"`，变更后通过 `month=YYYY-MM` 路由参数加载对应历史记录；不再使用无法稳定触发组件变更的 `el-input type="month"`。
 - 月收入表单已拆分为必填 USD、可空 CNY、可空转账日期和备注；账号列表与归属人汇总明确以 USD 显示，账号货币仍作为元数据展示。
 - 可选填写关联网站的美元明细；服务端校验网站必须属于当前 AdSense 账号，未填写时不自动分摊总额。
+- 网站台账新增“AdSense收入”列，仅汇总 `adsense_income_domains` 中明确分配到该站的累计 USD；无站点明细显示“未细化”。USD/CNY 和网站明细输入均支持最多两位小数，服务端同步校验。
 - 新增 `schema-migration-v1.9.0.sql`，迁移旧 `amount` 到 `amount_usd`，创建网站收入明细表；`schema.sql` 已包含新库结构。
 - `npm run build`、`npm run test:auth`、`TMPDIR=/tmp npm run test:data`（37/37）、`npm run lint:cleanup` 和 `git diff --check` 均通过；未写入生产 D1。

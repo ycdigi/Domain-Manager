@@ -204,6 +204,19 @@ test('domain table sorting is persisted and reapplied after data changes', () =>
   }
 })
 
+test('domain list exposes only explicit site-level AdSense income and supports two decimals', () => {
+  const domains = fs.readFileSync(path.join(repo, 'functions/api/domains/index.ts'), 'utf8')
+  const income = fs.readFileSync(path.join(repo, 'functions/api/adsense/income/index.ts'), 'utf8')
+  const update = fs.readFileSync(path.join(repo, 'functions/api/adsense/income/[id]/index.ts'), 'utf8')
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  assert.match(domains, /SUM\(x\.amount_usd\).*adsense_income_usd/)
+  assert.match(domains, /COUNT\(\*\).*adsense_income_detail_count/)
+  assert.match(home, /label="AdSense收入"/)
+  assert.match(home, /未细化/)
+  assert.match(income, /Math\.abs\(value \* 100 - Math\.round\(value \* 100\)/)
+  assert.match(update, /Math\.abs\(value \* 100 - Math\.round\(value \* 100\)/)
+})
+
 test('site name displays a warning marker for never-optimized and over-30-day SEO', () => {
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
   const css = fs.readFileSync(path.join(repo, 'src/styles/home/home.css'), 'utf8')
