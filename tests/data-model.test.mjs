@@ -256,6 +256,13 @@ test('ledger service provider cell can add an existing resource', () => {
   assert.match(home, /resourceRole/)
 })
 
+test('resource account cards expose the missing resource step', () => {
+  const resources = fs.readFileSync(path.join(repo, 'src/views/Resources.vue'), 'utf8')
+  assert.match(resources, /新增资源/)
+  assert.match(resources, /账号已存在，但还没有可绑定的网站资源/)
+  assert.match(resources, /openResourceFormFor/)
+})
+
 test('copy actions share the clipboard fallback and keep domain copy local', () => {
   const clipboard = fs.readFileSync(path.join(repo, 'src/utils/clipboard.ts'), 'utf8')
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
