@@ -1,14 +1,14 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: project · redesign: full · scope: explicit opt-in · v2.0.0 */
-/* Hallmark · pre-emit critique: reuse the locked tokens unchanged; both page templates share the explicit dm-ui document scope. */
+/* Hallmark · pre-emit critique: preserve green actions and semantic colors; use one surface and density scale across existing workflows. */
 :root.dm-ui {
   --color-paper: oklch(100% 0 0);
-  --color-paper-2: oklch(97.5% 0.003 250);
-  --color-paper-3: oklch(94% 0.005 250);
+  --color-paper-2: oklch(98% 0.003 250);
+  --color-paper-3: oklch(95% 0.005 250);
   --color-ink: oklch(27% 0.014 255);
   --color-ink-2: oklch(43% 0.016 255);
   --color-muted: oklch(48% 0.014 255);
-  --color-rule: oklch(84% 0.008 255);
-  --color-field-edge: oklch(59% 0.014 255);
+  --color-rule: oklch(88% 0.006 255);
+  --color-field-edge: oklch(65% 0.012 255);
   --color-accent: oklch(43% 0.11 150);
   --color-accent-hover: oklch(37% 0.1 150);
   --color-accent-ink: oklch(100% 0 0);
@@ -21,6 +21,11 @@
   --color-error: oklch(44% 0.17 26);
   --color-error-paper: oklch(97% 0.015 26);
   --color-clear: transparent;
+  --color-scrim: oklch(20% 0.02 255 / 0.24);
+  --shadow-overlay: 0 12px 40px oklch(20% 0.02 255 / 0.12);
+  --control-height: 34px;
+  --touch-target: 44px;
+  --row-height: 44px;
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   --font-display: var(--font-body);
   --space-3xs: 2px;

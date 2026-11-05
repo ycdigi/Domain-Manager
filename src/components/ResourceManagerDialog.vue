@@ -10,7 +10,7 @@
         </div>
         <el-table :data="accountsForProvider" size="small" stripe>
           <el-table-column prop="name" label="账号" min-width="150" />
-          <el-table-column prop="login_email" label="登录邮箱" min-width="180" />
+          <el-table-column prop="login_email" label="登录邮箱" min-width="180" show-overflow-tooltip />
           <el-table-column prop="resource_count" label="资源数" width="80" />
           <el-table-column prop="linked_domain_count" label="网站数" width="80" />
           <el-table-column prop="status" label="状态" width="90" />
@@ -30,12 +30,12 @@
             <el-button size="small" @click="openResourceForm">新增资源</el-button>
           </div>
           <el-table :data="accountResources" size="small">
-            <el-table-column prop="name" label="名称" min-width="150" />
+            <el-table-column prop="name" label="名称" min-width="150" show-overflow-tooltip />
             <el-table-column prop="resource_url" label="地址" min-width="220" show-overflow-tooltip />
             <el-table-column prop="ip_address" label="IP" width="140" />
             <el-table-column prop="linked_domain_count" label="网站数" width="80" />
             <el-table-column prop="status" label="状态" width="90" />
-            <el-table-column label="操作" width="100">
+            <el-table-column label="操作" width="188">
               <template #default="scope"><el-button text size="small" @click="openLinkForm(scope.row)">关联网站</el-button><el-button text size="small" @click="editResource(scope.row)">编辑</el-button><el-button text size="small" type="warning" @click="disableResource(scope.row)">停用</el-button></template>
             </el-table-column>
           </el-table>
@@ -60,7 +60,7 @@
     </el-tabs>
 
     <el-dialog v-model="accountFormVisible" :title="editingAccount ? '编辑基础设施账号' : '新增基础设施账号'" width="460px" append-to-body :close-on-click-modal="false">
-      <el-form :model="accountForm" label-width="90px">
+      <el-form :model="accountForm" label-width="90px" label-position="top">
         <el-form-item label="服务商"><el-select v-model="accountForm.provider" class="field-full"><el-option v-for="item in providers" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
         <el-form-item label="账号名称"><el-input v-model="accountForm.name" /></el-form-item>
         <el-form-item label="登录邮箱"><el-input v-model="accountForm.login_email" /></el-form-item>
@@ -70,7 +70,7 @@
     </el-dialog>
 
     <el-dialog v-model="resourceFormVisible" :title="editingResourceId ? '编辑资源' : '新增资源'" width="520px" append-to-body :close-on-click-modal="false">
-      <el-form :model="resourceForm" label-width="90px">
+      <el-form :model="resourceForm" label-width="90px" label-position="top">
         <el-form-item v-if="activeTab !== 'vps'" label="账号"><el-select v-model="resourceForm.account_id" class="field-full"><el-option v-for="item in accountsForProvider" :key="item.id" :label="item.name" :value="item.id || 0" /></el-select></el-form-item>
         <el-form-item v-else label="服务商账号"><el-select v-model="resourceForm.account_id" clearable class="field-full"><el-option label="不关联账号" :value="0" /><el-option v-for="item in accountsForProvider" :key="item.id" :label="item.name" :value="item.id || 0" /></el-select></el-form-item>
         <el-form-item label="资源名称"><el-input v-model="resourceForm.name" /></el-form-item>
@@ -85,7 +85,7 @@
     </el-dialog>
 
     <el-dialog v-model="credentialVisible" title="GitHub Token" width="520px" append-to-body :close-on-click-modal="false">
-      <el-form :model="credentialForm" label-width="90px">
+      <el-form :model="credentialForm" label-width="90px" label-position="top">
         <el-form-item label="账号"><span>{{ selectedAccount?.name }}</span></el-form-item>
         <el-form-item label="名称"><el-input v-model="credentialForm.label" /></el-form-item>
         <el-form-item label="完整 Token"><el-input v-model="credentialForm.token" show-password /></el-form-item>
@@ -103,7 +103,7 @@
     </el-dialog>
 
     <el-dialog v-model="linkVisible" title="关联网站" width="460px" append-to-body :close-on-click-modal="false">
-      <el-form :model="linkForm" label-width="90px">
+      <el-form :model="linkForm" label-width="90px" label-position="top">
         <el-form-item label="资源"><span>{{ linkResource?.name }}</span></el-form-item>
         <el-form-item label="网站"><el-select v-model="linkForm.domain_id" filterable class="field-full"><el-option v-for="domain in domains" :key="domain.id" :label="domain.domain" :value="domain.id || 0" /></el-select></el-form-item>
         <el-form-item label="角色"><el-select v-model="linkForm.role" class="field-full"><el-option v-for="role in roles" :key="role" :label="role" :value="role" /></el-select></el-form-item>

@@ -1,8 +1,8 @@
 <template>
-  <el-drawer v-model="drawerVisible" size="min(560px, 94vw)" :aria-busy="detailLoading" :close-on-click-modal="!editing" destroy-on-close>
+  <el-drawer class="domain-detail-drawer" v-model="drawerVisible" size="min(560px, 94vw)" :aria-busy="detailLoading" :close-on-click-modal="!editing" destroy-on-close>
     <template #header>
       <div class="detail-drawer-header">
-        <div class="detail-drawer-title"><strong>{{ domain?.domain || '运营详情' }}</strong><span v-if="domain">运营详情</span></div>
+        <div class="detail-drawer-title"><strong :title="domain?.domain || '运营详情'">{{ domain?.domain || '运营详情' }}</strong><span v-if="domain">运营详情</span></div>
         <div v-if="domain" class="detail-drawer-actions">
           <el-button text size="small" :icon="CopyDocument" :title="`复制 ${domain.domain}`" :aria-label="`复制 ${domain.domain}`" @click="copyDomain" />
           <el-button text size="small" :icon="Edit" title="编辑域名信息" aria-label="编辑域名信息" @click="startDomainEdit" />

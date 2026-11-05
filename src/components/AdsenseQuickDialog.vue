@@ -1,6 +1,6 @@
 <template>
   <el-dialog v-model="dialogVisible" :title="domain ? `补充 AdSense 信息 · ${domain}` : '补充 AdSense 信息'" width="420px" :close-on-click-modal="false">
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="92px" @submit.prevent="submit">
+    <el-form ref="formRef" :model="form" :rules="rules" label-width="92px" @submit.prevent="submit" label-position="top">
       <el-form-item label="AdSense账号" prop="adsense_account_id">
         <el-select v-model="form.adsense_account_id" placeholder="选择关联账号" clearable>
           <el-option v-for="account in accounts" :key="account.id" :label="`${account.name} · ${account.owner}`" :value="account.id || 0" />

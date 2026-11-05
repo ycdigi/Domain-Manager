@@ -1,1 +1,6 @@
-.form-hint { margin-left: 8px; color: var(--color-muted); font-size: var(--text-sm); }
+/* Two columns fit the existing domain fields; mobile keeps their source order. */
+.domain-edit-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 var(--space-md); }
+.domain-edit-form .el-form-item { min-width:0; }
+.domain-edit-form .el-form-item:has(.el-textarea), .domain-edit-form .el-form-item:has(.form-hint), .domain-edit-form .el-form-item:has(#domain-input) { grid-column:1 / -1; }
+.form-hint { margin-left:var(--space-xs); color:var(--color-muted); font-size:var(--text-xs); }
+@media (max-width:600px) { .domain-edit-form { grid-template-columns:minmax(0,1fr); } }

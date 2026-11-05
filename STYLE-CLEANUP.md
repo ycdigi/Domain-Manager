@@ -69,3 +69,20 @@ npm run lint:cleanup
 ```
 
 审计内容包括：旧路由引用、唯一文档作用域、模板内联样式、CSS 类来源、共享 token 重复定义、队列与批量 API 字段一致性。
+
+## 2026-11-05 Dashboard 呈现层优化
+
+| 旧规则/入口 | 新规则/入口 | 引用与证据 | 删除/保留 | 检查 |
+| --- | --- | --- | --- | --- |
+| shared/base 手机端 label 的 inline width / margin-left `!important` 覆盖 | 既有 el-form 设置 label-position=top | 所有现有组件表单；script sections 无变化 | 删除旧覆盖 | 表单错误和 320/390px 检查 |
+| Home 独立 `.el-table` 颜色、cell 内边距、表头等公共配方 | shared/base 统一账户、资源和域名表 | Home + Ads/Resource 表使用 Element Plus | Home 仅留密度与状态特例 | build / 数据回归 |
+| Home `.registrar-link`、expiry/status 旧展示类、`.not-applicable` | 当前 tab 表格没有这些模板节点 | 检查所有 Home 动态 class，API 只返回数据不生成这些类 | 删除 Home 确认无引用规则；其业务字段仍在详情/导出 | lint:cleanup + 源码引用核对 |
+| `.el-table__fixed-body-wrapper` 旧版本结构选择器 | 当前 `.el-table__body tr`，包含 fixed td | 已安装 Element Plus 使用 sticky 单元格，没有旧容器 | 删除旧容器配方 | 浏览器行色/固定列 |
+| 首部历史 Hallmark 注释与已撤销品牌头、footer 的描述 | 当前 stamp 和根 DESIGN.md | 当前 Home 无 header/footer 树 | 替换失效说明，不删功能节点 | 差异检查 |
+| 资源 `.resource-manager-dialog .credential-* / .field-full` | scoped `.credential-* / .field-full` | append-to-body 的嵌套弹窗不在父 dialog DOM 内 | 替换失效祖先前缀 | Token/账号子弹窗 |
+| `resources.css` 手机端 width `!important` | shared overlay max-width | 所有 el-dialog 统一屏幕安全边距 | 删除重复覆盖 | 320/390/768px |
+| Home 重复框架样式/尾部断点叠加 | 一份有序 home.css | 只由 Home.vue 导入 | 原位替换，不追加新覆盖文件 | lint:cleanup / diff |
+| base 现有 reduced-motion 强制缩短动画 | 原 reduced-motion 规则 | Element Plus 动画依赖 | 保留；不是为覆盖视觉冲突追加 | 减少动态偏好 |
+| Element Plus `.el-*`、`:deep()`、动态 SEO/行色类 | 保持实际运行来源 | 组件库生成/teleport/scoped 内部节点 | 保留，无法按静态模板名删 | UI 回归 |
+
+设计参考读取结果、选择范围与不适用部分见根 DESIGN.md；两份来源都是营销系统，不声明有未经验证的后台导航/筛选设计。此次除 Home 新增固定列的响应式呈现监听外，Vue 业务 script 内容与基线一致，后端/路由/HTML/SEO/数据结构不在差异中。

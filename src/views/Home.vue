@@ -1,6 +1,23 @@
 <template>
     <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
         <main class="workspace">
+            <div class="ledger-toolbar">
+                <div class="ledger-title"><h2 id="domain-list-title">域名列表</h2><span class="record-count" role="status">{{ loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名` }}</span></div>
+                <div class="ledger-actions" aria-label="域名管理操作">
+                    <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
+                    <el-button type="primary" :icon="Plus" @click="handleAdd">新增域名</el-button>
+                    <el-button :icon="Upload" @click="handleImport">导入</el-button>
+                    <el-button :icon="Download" @click="handleExport">导出</el-button>
+                    <el-button class="management-button" @click="resourceManagerVisible = true">资源管理</el-button>
+                    <el-button class="management-button" @click="adsenseManagerVisible = true">AdSense 管理</el-button>
+                    <el-button class="management-button" :icon="Setting" @click="handleConfig">通知配置</el-button>
+                    <el-button :icon="sidebarCollapsed ? Expand : Fold" :aria-expanded="!sidebarCollapsed" :title="sidebarCollapsed ? '显示概览' : '隐藏概览'" @click="toggleSidebar">{{ sidebarCollapsed ? '显示概览' : '隐藏概览' }}</el-button>
+                    <el-dropdown>
+                        <el-button class="more-button">更多</el-button>
+                        <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleJsonExport">导出 JSON 备份</el-dropdown-item><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
+                    </el-dropdown>
+                </div>
+            </div>
             <section class="summary-grid" aria-label="运营指标">
                 <div class="summary-card"><span>域名总数</span><strong>{{ domains.length }}</strong></div>
                 <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
@@ -11,30 +28,15 @@
             </section>
             <div class="workbench-grid">
                 <section class="domain-ledger" aria-labelledby="domain-list-title" :aria-busy="loading">
-                    <div class="ledger-toolbar">
-                        <div class="ledger-title"><h2 id="domain-list-title">域名列表</h2><span class="record-count" role="status">{{ loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名` }}</span></div>
-                        <div class="ledger-actions" aria-label="域名管理操作">
-                            <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
-                            <el-button type="primary" :icon="Plus" @click="handleAdd">新增域名</el-button>
-                            <el-button :icon="Upload" @click="handleImport">导入</el-button>
-                            <el-button :icon="Download" @click="handleExport">导出</el-button>
-                            <el-button @click="resourceManagerVisible = true">资源管理</el-button>
-                            <el-button @click="adsenseManagerVisible = true">AdSense 管理</el-button>
-                            <el-button :icon="Setting" @click="handleConfig">通知配置</el-button>
-                            <el-button :icon="sidebarCollapsed ? Expand : Fold" :aria-expanded="!sidebarCollapsed" :title="sidebarCollapsed ? '显示概览' : '隐藏概览'" @click="toggleSidebar">{{ sidebarCollapsed ? '显示概览' : '隐藏概览' }}</el-button>
-                            <el-dropdown>
-                                <el-button class="more-button">更多</el-button>
-                                <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleJsonExport">导出 JSON 备份</el-dropdown-item><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
-                            </el-dropdown>
-                        </div>
-                    </div>
                     <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
-                    <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable /></div>
-                    <nav class="platform-tabs" aria-label="按技术栈查看"><button v-for="tab in platformTabs" :key="tab.value" type="button" :aria-pressed="platformTab === tab.value" :class="{ active: platformTab === tab.value }" @click="platformTab = tab.value">{{ tab.label }}<span>{{ platformTabCounts[tab.value] }}</span></button></nav>
+                    <div class="ledger-viewbar">
+                        <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable /></div>
+                        <nav class="platform-tabs" aria-label="按技术栈查看"><button v-for="tab in platformTabs" :key="tab.value" type="button" :aria-pressed="platformTab === tab.value" :class="{ active: platformTab === tab.value }" @click="platformTab = tab.value">{{ tab.label }}<span>{{ platformTabCounts[tab.value] }}</span></button></nav>
+                    </div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
                     <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :row-class-name="tableRowClassName" @sort-change="handleTableSortChange">
-                        <el-table-column prop="site_name" label="网站名称" min-width="142" fixed sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
-                        <el-table-column prop="domain" label="域名" min-width="162" fixed sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
+                        <el-table-column prop="site_name" label="网站名称" min-width="170" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" :title="scope.row.site_name || '未命名'" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
+                        <el-table-column prop="domain" label="域名" min-width="200" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link" :title="scope.row.domain" :aria-label="`打开 ${scope.row.domain}`">{{ scope.row.domain }}</a><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
                         <el-table-column v-if="platformTab === 'all'" prop="platform" label="技术栈" min-width="90" sortable><template #default="scope">{{ platformText(scope.row) }}</template></el-table-column>
                         <el-table-column label="SEO" width="54"><template #default="scope"><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div></template></el-table-column>
                         <el-table-column v-if="platformTab === 'WordPress'" label="文章数量" min-width="82"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /></template></el-table-column>
@@ -42,10 +44,10 @@
                         <el-table-column prop="industry" label="行业" min-width="90" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
                         <el-table-column prop="daily_clicks" label="日点击" min-width="96" sortable :sort-method="compareDailyClicks"><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
-                        <el-table-column label="服务商" min-width="150"><template #default="scope"><span class="provider-cell">{{ scope.row.resource_names || '未关联' }}</span></template></el-table-column>
+                        <el-table-column label="服务商" min-width="150" show-overflow-tooltip><template #default="scope"><span class="provider-cell" :title="scope.row.resource_names || '未关联'">{{ scope.row.resource_names || '未关联' }}</span></template></el-table-column>
                         <el-table-column prop="registrar_date" label="注册时间" min-width="100" sortable><template #default="scope">{{ scope.row.registrar_date || '未记录' }}</template></el-table-column>
-                        <el-table-column label="电脑" min-width="150"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.computer_name || ''" placeholder="选择 / 添加" filterable allow-create default-first-option clearable @change="value => handleComputerChange(scope.row, value)"><el-option v-for="computer in computerOptions" :key="computer" :label="computer" :value="computer" /></el-select></template></el-table-column>
-                        <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" title="详情" aria-label="详情" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" title="修改" aria-label="修改" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" title="删除" aria-label="删除" @click="handleDelete(scope.row)" /></div></template></el-table-column>
+                        <el-table-column label="电脑" min-width="155"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.computer_name || ''" placeholder="选择 / 添加" filterable allow-create default-first-option clearable @change="value => handleComputerChange(scope.row, value)"><el-option v-for="computer in computerOptions" :key="computer" :label="computer" :value="computer" /></el-select></template></el-table-column>
+                        <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" :title="`详情：${scope.row.domain}`" :aria-label="`详情：${scope.row.domain}`" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" :title="`修改：${scope.row.domain}`" :aria-label="`修改：${scope.row.domain}`" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" :title="`删除：${scope.row.domain}`" :aria-label="`删除：${scope.row.domain}`" @click="handleDelete(scope.row)" /></div></template></el-table-column>
                         <template #empty><div class="empty-state" v-if="!loading && !loadError"><p>还没有域名</p><span>新增或导入域名后，会在此显示。</span><button type="button" class="table-action" @click="handleAdd">新增域名</button></div><div v-else class="empty-state"><span>{{ loading ? '正在加载域名…' : '域名列表未能加载，请重试。' }}</span></div></template>
                     </el-table>
                     <p class="table-scroll-hint">左右滑动查看全部字段和操作。</p>
@@ -53,6 +55,7 @@
 
                 <button v-if="!sidebarCollapsed" type="button" class="sidebar-backdrop" aria-label="关闭概览" @click="toggleSidebar"></button>
                 <aside class="dashboard-sidebar" aria-label="管理概览">
+                    <button type="button" class="overview-close" @click="toggleSidebar">关闭概览</button>
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>AdSense 收入</h2><button class="sidebar-link" @click="adsenseManagerVisible = true">管理</button></div><div v-if="dashboard.owner_income.length" class="sidebar-list"><div v-for="item in dashboard.owner_income" :key="`${item.owner}-${item.currency}`" class="sidebar-row"><span>{{ item.owner }}<small>{{ item.account_count }} 个账号 · {{ item.currency }} · 本月</small></span><strong>{{ item.currency }} {{ Number(item.current_income || 0).toFixed(2) }}</strong></div></div><p v-else class="sidebar-empty">暂无月收入</p></section>
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>最久未 SEO</h2></div><div v-if="dashboard.seo.length" class="sidebar-list"><div v-for="item in dashboard.seo" :key="item.id" class="sidebar-row"><span>{{ item.domain }}<small>{{ item.seo_last_date || '从未优化' }} · {{ item.days_since ?? '—' }} 天</small></span><button v-if="seoState(item).actionable" class="sidebar-link" @click="markSeoById(item.id)">今天优化</button><span v-else class="sidebar-seo-locked" :title="seoState(item).title"><el-icon><Lock /></el-icon></span></div></div><p v-else class="sidebar-empty">暂无网站</p></section>
                     <section class="sidebar-panel"><div class="sidebar-title"><h2>日点击分布</h2></div><div class="click-summary"><span>未填写 <strong>{{ dashboard.clicks.unknown || 0 }}</strong></span><span>&lt;10 <strong>{{ dashboard.clicks.under_10 || 0 }}</strong></span><span>10–29 <strong>{{ dashboard.clicks.from_10_to_29 || 0 }}</strong></span><span>30–49 <strong>{{ dashboard.clicks.from_30_to_49 || 0 }}</strong></span><span>50–99 <strong>{{ dashboard.clicks.from_50_to_99 || 0 }}</strong></span><span>≥100 <strong>{{ dashboard.clicks.over_100 || 0 }}</strong></span></div></section>
@@ -73,7 +76,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue';
+import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type TableInstance } from 'element-plus';
 import { Setting, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
@@ -114,6 +117,12 @@ const readTableSort = (): DomainSortState => {
 const router = useRouter();
 const auth = useAuth();
 const domains = ref<DomainData[]>([]);
+// Presentation only: pinned columns would cover all actions on narrow screens.
+const tableMedia = window.matchMedia('(min-width: 761px)');
+const pinIdentityColumns = ref(tableMedia.matches);
+const updatePinnedColumns = () => { pinIdentityColumns.value = tableMedia.matches; };
+onMounted(() => tableMedia.addEventListener('change', updatePinnedColumns));
+onUnmounted(() => tableMedia.removeEventListener('change', updatePinnedColumns));
 const tableRef = ref<TableInstance>();
 const tableSort = ref<DomainSortState>(readTableSort());
 const applyingTableSort = ref(false);

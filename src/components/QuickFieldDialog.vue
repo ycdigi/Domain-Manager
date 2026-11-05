@@ -1,6 +1,6 @@
 <template>
   <el-dialog v-model="dialogVisible" :title="context ? `${title} · ${context}` : title" width="420px" :close-on-click-modal="false">
-    <el-form @submit.prevent="submit">
+    <el-form @submit.prevent="submit" label-position="top">
       <el-form-item :label="label">
         <el-input v-model="draft" :placeholder="placeholder" :maxlength="maxlength" show-word-limit clearable autofocus />
       </el-form-item>

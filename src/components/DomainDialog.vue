@@ -1,6 +1,6 @@
 <template>
     <el-dialog v-model="dialogVisible" :title="isEdit ? `修改域名 · ${editData?.domain || ''}` : '新建域名'" width="600px" :close-on-click-modal="false">
-        <el-form ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="right">
+        <el-form class="domain-edit-form" ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="top">
             <el-form-item label="域名" prop="domain"><el-input v-model="form.domain" placeholder="请输入域名" id="domain-input" autocomplete="off" clearable /></el-form-item>
             <el-form-item label="网站名称"><el-input v-model="form.site_name" placeholder="例如：电气计算器站" maxlength="200" show-word-limit clearable /></el-form-item>
             <el-form-item label="行业"><el-select v-model="form.industry" placeholder="选择行业" filterable clearable><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></el-form-item>

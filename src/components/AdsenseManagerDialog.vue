@@ -2,7 +2,7 @@
   <el-dialog v-model="visibleModel" title="AdSense 管理" width="720px" :close-on-click-modal="false">
     <div class="adsense-manager">
       <div class="manager-toolbar"><span>账号与月收入</span><div class="manager-actions"><el-button @click="exportIncome">导出收入</el-button><el-button type="primary" @click="editing = undefined; accountForm = emptyAccount">新增账号</el-button></div></div>
-      <el-form v-if="editing !== null" :model="accountForm" label-width="90px" class="account-form">
+      <el-form v-if="editing !== null" :model="accountForm" label-width="90px" class="account-form" label-position="top">
         <el-form-item label="账号名称"><el-input v-model="accountForm.name" placeholder="例如：主账号" /></el-form-item>
         <el-form-item label="归属人"><el-input v-model="accountForm.owner" placeholder="例如：自己" /></el-form-item>
         <el-form-item label="Publisher ID"><el-input v-model="accountForm.publisher_id" placeholder="例如：pub-xxxxxxxxxxxxxxxx" /></el-form-item>
