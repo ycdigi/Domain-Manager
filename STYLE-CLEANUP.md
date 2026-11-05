@@ -93,3 +93,11 @@ npm run lint:cleanup
 - 中性选中标签 → 浅蓝选中态：仅替换原 `.platform-tabs button.active` 规则，无重复选择器。
 - success / warning / error 与近期操作浅绿行保留，避免将业务状态误当品牌色。
 - 精确主色搭配白字对比度约 4.48:1，填充色混合 2% 黑色后约 4.64:1；链接使用更深的派生蓝。
+
+## 2026-11-05 左侧工作区导航
+
+- 顶部重复管理入口 → `WorkspaceNavigation.vue` 的网站/管理分组：继续调用原有平台筛选、资源、AdSense、通知、JSON 备份和登出处理；删除 Home 工具栏中的重复入口。
+- 原平台标签 → 桌面左栏与移动抽屉：复用 `platformTab`、`platformTabs`、`platformTabCounts`，不新增筛选逻辑。
+- 原概览收起状态 → 保持独立：左侧导航的收起记忆使用单独 localStorage key，概览的 `sidebarCollapsed` 和数据逻辑不混用。
+- 新增 `src/styles/home/navigation.css`：仅负责导航外观和响应式，不覆盖弹窗、表格或业务状态样式。
+- 验证：六种视口、三类管理弹窗、技术栈切换、搜索/排序保持、空/错状态、键盘 Escape 和焦点回归。

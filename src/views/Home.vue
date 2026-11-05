@@ -1,21 +1,20 @@
 <template>
-    <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
+    <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed, 'navigation-collapsed': navigationCollapsed }">
+        <aside class="workspace-navigation" aria-label="网站导航">
+            <WorkspaceNavigation :tabs="platformTabs" :counts="platformTabCounts" :active="platformTab" :active-manager="activeManager" :collapsed="navigationCollapsed" @select="selectPlatform" @manage="openManager" @collapse="toggleNavigation" @backup="handleJsonExport" @logout="handleLogout" />
+        </aside>
+        <el-drawer v-model="navigationMobileOpen" class="workspace-navigation-drawer" title="网站导航" direction="ltr" size="256px" :with-header="false" @closed="runPendingNavigationAction">
+            <WorkspaceNavigation :tabs="platformTabs" :counts="platformTabCounts" :active="platformTab" :active-manager="activeManager" mobile @select="selectPlatform" @manage="openManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(handleJsonExport)" @logout="runNavigationAction(handleLogout)" />
+        </el-drawer>
         <main class="workspace">
             <div class="ledger-toolbar">
-                <div class="ledger-title"><h2 id="domain-list-title">域名列表</h2><span class="record-count" role="status">{{ loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名` }}</span></div>
+                <div class="ledger-title"><el-button class="navigation-menu" :icon="Menu" aria-label="打开导航" :aria-expanded="navigationMobileOpen" @click="navigationMobileOpen = true" /><h2 id="domain-list-title">{{ platformTab === 'all' ? '全部网站' : `${platformTab} 网站` }}</h2><span class="record-count" role="status">{{ loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名` }}</span></div>
                 <div class="ledger-actions" aria-label="域名管理操作">
                     <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
                     <el-button type="primary" :icon="Plus" @click="handleAdd">新增域名</el-button>
                     <el-button :icon="Upload" @click="handleImport">导入</el-button>
                     <el-button :icon="Download" @click="handleExport">导出</el-button>
-                    <el-button class="management-button" @click="resourceManagerVisible = true">资源管理</el-button>
-                    <el-button class="management-button" @click="adsenseManagerVisible = true">AdSense 管理</el-button>
-                    <el-button class="management-button" :icon="Setting" @click="handleConfig">通知配置</el-button>
                     <el-button :icon="sidebarCollapsed ? Expand : Fold" :aria-expanded="!sidebarCollapsed" :title="sidebarCollapsed ? '显示概览' : '隐藏概览'" @click="toggleSidebar">{{ sidebarCollapsed ? '显示概览' : '隐藏概览' }}</el-button>
-                    <el-dropdown>
-                        <el-button class="more-button">更多</el-button>
-                        <template #dropdown><el-dropdown-menu><el-dropdown-item @click="handleJsonExport">导出 JSON 备份</el-dropdown-item><el-dropdown-item @click="handleLogout">登出</el-dropdown-item></el-dropdown-menu></template>
-                    </el-dropdown>
                 </div>
             </div>
             <section class="summary-grid" aria-label="运营指标">
@@ -31,7 +30,6 @@
                     <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
                     <div class="ledger-viewbar">
                         <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable /></div>
-                        <nav class="platform-tabs" aria-label="按技术栈查看"><button v-for="tab in platformTabs" :key="tab.value" type="button" :aria-pressed="platformTab === tab.value" :class="{ active: platformTab === tab.value }" @click="platformTab = tab.value">{{ tab.label }}<span>{{ platformTabCounts[tab.value] }}</span></button></nav>
                     </div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
                     <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :row-class-name="tableRowClassName" @sort-change="handleTableSortChange">
@@ -79,7 +77,7 @@
 import { ref, computed, onMounted, onUnmounted, nextTick, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { ElMessage, type TableInstance } from 'element-plus';
-import { Setting, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
+import { Menu, Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
 import '../styles/home/home.css';
 import { useAuth } from '../utils/auth';
 import DomainDialog from '../components/DomainDialog.vue';
@@ -90,6 +88,7 @@ import ResourceManagerDialog from '../components/ResourceManagerDialog.vue';
 import DomainDetailDrawer from '../components/DomainDetailDrawer.vue';
 import QuickFieldDialog from '../components/QuickFieldDialog.vue';
 import AdsenseQuickDialog from '../components/AdsenseQuickDialog.vue';
+import WorkspaceNavigation from '../components/WorkspaceNavigation.vue';
 import { createDomain, updateDomain, deleteDomain, type DomainData } from '../api/domains';
 import { getWriteQueue } from '../utils/writeQueue';
 import { api, ApiError } from '../utils/request';
@@ -121,6 +120,11 @@ const domains = ref<DomainData[]>([]);
 const tableMedia = window.matchMedia('(min-width: 761px)');
 const pinIdentityColumns = ref(tableMedia.matches);
 const updatePinnedColumns = () => { pinIdentityColumns.value = tableMedia.matches; };
+const navigationMobileOpen = ref(false);
+const navigationMedia = window.matchMedia('(min-width: 1024px)');
+const closeMobileNavigation = () => { if (navigationMedia.matches) navigationMobileOpen.value = false; };
+onMounted(() => navigationMedia.addEventListener('change', closeMobileNavigation));
+onUnmounted(() => navigationMedia.removeEventListener('change', closeMobileNavigation));
 onMounted(() => tableMedia.addEventListener('change', updatePinnedColumns));
 onUnmounted(() => tableMedia.removeEventListener('change', updatePinnedColumns));
 const tableRef = ref<TableInstance>();
@@ -138,6 +142,25 @@ try { const savedComputers = JSON.parse(localStorage.getItem(computerStorageKey)
 const platformTabs = [{ label: '全部', value: 'all' as const }, { label: 'Astro', value: 'Astro' as const }, { label: 'Next.js', value: 'Next.js' as const }, { label: 'WordPress', value: 'WordPress' as const }];
 const platformTabCounts = computed(() => ({ all: domains.value.length, Astro: domains.value.filter(row => row.platform === 'Astro').length, 'Next.js': domains.value.filter(row => row.platform === 'Next.js').length, WordPress: domains.value.filter(row => row.platform === 'WordPress').length }));
 const sidebarCollapsed = ref(true);
+const navigationCollapsed = ref(false);
+const navigationStorageKey = 'domain-manager.navigation-collapsed';
+try { navigationCollapsed.value = localStorage.getItem(navigationStorageKey) === 'true'; } catch { /* navigation remains usable without storage */ }
+const toggleNavigation = () => {
+    navigationCollapsed.value = !navigationCollapsed.value;
+    try { localStorage.setItem(navigationStorageKey, String(navigationCollapsed.value)); } catch { /* keep the current view */ }
+};
+let pendingNavigationAction: (() => void) | undefined;
+const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.(); };
+const runNavigationAction = (action: () => void) => {
+    if (navigationMobileOpen.value) { pendingNavigationAction = action; navigationMobileOpen.value = false; }
+    else action();
+};
+const selectPlatform = (value: typeof platformTab.value) => { platformTab.value = value; navigationMobileOpen.value = false; };
+const openManager = (value: 'resources' | 'adsense' | 'notifications') => runNavigationAction(() => {
+    if (value === 'resources') resourceManagerVisible.value = true;
+    else if (value === 'adsense') adsenseManagerVisible.value = true;
+    else handleConfig();
+});
 const loading = ref(false);
 const loadError = ref('');
 const overviewError = ref('');
@@ -146,6 +169,7 @@ const alertConfig = ref<AlertConfig>();
 const refreshing = ref(false);
 const dialogVisible = ref(false);
 const configVisible = ref(false);
+const activeManager = computed(() => resourceManagerVisible.value ? 'resources' : adsenseManagerVisible.value ? 'adsense' : configVisible.value ? 'notifications' : '');
 const isEdit = ref(false);
 const editData = ref<DomainData>();
 const importVisible = ref(false);
