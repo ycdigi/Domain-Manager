@@ -10,7 +10,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         const month = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
         const [domains, operations, adsenseAccounts, income, providerAccounts, resources, links, notes] = await Promise.all([
             db.prepare(`SELECT d.id, d.domain, d.registrar, d.registrar_link, d.registrar_date, d.expiry_date,
-                d.service_type, d.status, d.memo, d.adsense_connected, d.adsense_opened_date,
+                d.service_type, d.status, d.memo, d.computer_name, d.adsense_connected, d.adsense_opened_date,
                 d.site_name, d.industry,
                 d.seo_last_date, d.daily_clicks, d.daily_clicks_range, d.clicks_updated_date, d.platform, d.platform_other,
                 d.wp_calculator_count, d.wp_article_count, d.content_stats_updated_date,

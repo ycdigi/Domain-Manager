@@ -149,3 +149,7 @@
 - 可执行导出是 [`src/styles/shared/tokens.css`](src/styles/shared/tokens.css)；通用按钮、焦点、表单、弹窗和减少动态效果规则在 [`src/styles/shared/base.css`](src/styles/shared/base.css)。共用容器在 shared/layout.css；Home、Login 和导入结果只持有各自局部布局，不复制另一套 token。
 - 当前没有 Tailwind、DTCG、shadcn 导出，不为锁定系统引入新依赖或第二份 token 源。修改设计时同步更新本文件及实际 CSS，不能只改文档快照。
 - 本地验收产物不随源代码推送。参考验收：`.hallmark/home-after-lint.json`、`.hallmark/home-redesign/verification.json`、`.hallmark/home-redesign/handoff.md`。预览的 `.example` 记录是本地测试夹具，未写入应用或数据库，不能作为真实业务素材复用。
+
+## 技术栈台账（2026-11-05）
+
+筛选区仅保留全局搜索，以轻量按钮标签切换全部、Astro、Next.js、WordPress。Astro / Next.js 共用紧凑核心表头；WordPress 在 SEO 后追加文章数、计算器数。全部视图额外展示技术栈。概览进入页面时隐藏，统计卡片仅作只读数据摘要。电脑列复用透明行内下拉样式，支持输入新增名称；服务商继续来自真实资源关联，不与电脑归属混用。

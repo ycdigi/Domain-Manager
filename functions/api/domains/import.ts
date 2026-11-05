@@ -15,6 +15,7 @@ interface DomainImport {
     status?: string
     memo?: string | null
     site_name?: string | null
+    computer_name?: string | null
     industry?: string | null
     tgsend?: number
     st_tgsend?: number
@@ -36,7 +37,7 @@ interface DomainImport {
 }
 
 const providers = new Set<ProviderType>(['github', 'cloudflare', 'vhost', 'vps'])
-const allowedFields = ['registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
+const allowedFields = ['registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'computer_name', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
 const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const todayShanghai = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
@@ -72,6 +73,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             }
             if (item.registrar_link != null && typeof item.registrar_link !== 'string') return '域名商链接格式无效'
             if (item.memo != null && typeof item.memo !== 'string') return '备注格式无效'
+            if (item.computer_name != null && (typeof item.computer_name !== 'string' || item.computer_name.length > 120)) return '电脑名称格式无效或过长'
             if (item.site_name != null && (typeof item.site_name !== 'string' || item.site_name.length > 200)) return '网站名称格式无效或过长'
             if (item.industry != null && (typeof item.industry !== 'string' || item.industry.length > 100)) return '行业格式无效或过长'
             if (item.adsense_account != null && typeof item.adsense_account !== 'string') return 'AdSense 账号名称格式无效'

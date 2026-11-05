@@ -31,6 +31,7 @@ CREATE TABLE IF NOT EXISTS domains (
     last_expiry_alert_date TEXT,
     last_offline_alert_at DATETIME,
     resource_status TEXT NOT NULL DEFAULT '未关联',
+    computer_name TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

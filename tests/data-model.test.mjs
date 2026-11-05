@@ -27,7 +27,23 @@ test('schema is repeatable and includes resource tables', () => {
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /daily_clicks_range/)
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /site_name/)
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /industry/)
+    assert.match(runSql(db, 'PRAGMA table_info(domains);'), /computer_name/)
     assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
+test('v1.8 migration adds an optional computer label without changing domain rows', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/computer-migration.db'
+  try {
+    const legacySchema = fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8').replace(/^\s*computer_name TEXT,\r?\n/m, '')
+    runSql(db, legacySchema)
+    runSql(db, "INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type) VALUES ('example.com', 'test', '2025-01-01', '2027-01-01', '正常网站');")
+    runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.8.0.sql'), 'utf8'))
+    assert.equal(runSql(db, 'SELECT computer_name FROM domains WHERE domain=\'example.com\';').trim(), '')
+    runSql(db, "UPDATE domains SET computer_name='Mac Mini YC' WHERE domain='example.com';")
+    assert.equal(runSql(db, 'SELECT computer_name FROM domains WHERE domain=\'example.com\';').trim(), 'Mac Mini YC')
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }
@@ -164,7 +180,7 @@ test('domain quick editing exposes a narrow PATCH contract and SEO dual write', 
 test('WordPress content counts are editable in the ledger and PATCH with their statistics date', () => {
   const patch = fs.readFileSync(path.join(repo, 'functions/api/domains/[id].ts'), 'utf8')
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
-  assert.match(home, /label="日点击"[\s\S]*?label="计算器数"[\s\S]*?label="文章数"/)
+  assert.match(home, /label="文章数量"[\s\S]*?label="计算器数量"[\s\S]*?label="行业"[\s\S]*?label="日点击"/)
   assert.match(home, /handleWordPressCount\(scope\.row, 'wp_calculator_count', value\)/)
   assert.match(home, /handleWordPressCount\(scope\.row, 'wp_article_count', value\)/)
   assert.match(home, /content_stats_updated_date: nextDate/)
@@ -183,7 +199,7 @@ test('domain table sorting is persisted and reapplied after data changes', () =>
   assert.match(home, /saveTableSort\(\{ \.\.\.defaultTableSort \}\);\s*void applyTableSort\(\)/)
   assert.match(home, /watch\(filteredDomains/)
   assert.doesNotMatch(home, /:default-sort=/)
-  for (const prop of ['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'latest_operation_date', 'registrar_date', 'expiry_date', 'status']) {
+  for (const prop of ['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'registrar_date']) {
     assert.match(home, new RegExp(`sortableTableProps.*${prop}`))
   }
 })
@@ -209,13 +225,13 @@ test('site name star marks an operation in the last seven days', () => {
   assert.match(css, /row-recent-operation[^}]*background: var\(--color-success-paper\)/)
 })
 
-test('table keeps the header visible and sorts recent operations as dates', () => {
+test('ledger uses search and platform tabs with WordPress-only counts', () => {
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
-  const css = fs.readFileSync(path.join(repo, 'src/styles/home/home.css'), 'utf8')
-  assert.match(home, /label="最近操作"[\s\S]*?:sort-method="compareOperationDates"/)
-  assert.match(home, /const compareOperationDates = \(a: DomainData, b: DomainData\)/)
-  assert.match(home, /if \(!aDate\) return 1/)
-  assert.match(css, /\.custom-table \.el-table__header-wrapper \{ position: sticky; top: 0;/)
+  assert.match(home, /platformTabs = .*全部.*Astro.*Next.js.*WordPress/)
+  assert.match(home, /platformTab.value !== 'all' && row.platform !== platformTab.value/)
+  assert.match(home, /v-if="platformTab === 'WordPress'" label="文章数量"/)
+  assert.match(home, /label="电脑"/)
+  assert.doesNotMatch(home, /v-model="(?:ownerFilter|seoFilter|resourceFilter)"/)
 })
 
 test('copy actions share the clipboard fallback and keep domain copy local', () => {

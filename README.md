@@ -120,6 +120,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 已有数据库升级到 Publisher ID、网站技术栈、WordPress 内容统计和操作日期时，再执行一次 `schema-migration-v1.5.0.sql`
    - 已有数据库升级到网站名称和行业字段时，再执行一次 `schema-migration-v1.6.0.sql`
    - 已有数据库升级到日点击区间选择时，再执行一次 `schema-migration-v1.7.0.sql`
+   - 已有数据库升级到电脑字段时，再执行一次 `schema-migration-v1.8.0.sql`
 
 ### D1 命令行管理
 
@@ -161,6 +162,7 @@ npm run db:migrate:v1.4.0
 npm run db:migrate:v1.5.0
 npm run db:migrate:v1.6.0
 npm run db:migrate:v1.7.0
+npm run db:migrate:v1.8.0
 npm run db:verify:remote
 ```
 
@@ -213,7 +215,7 @@ npm run domains:enrich -- \
      ```bash
      npm ci
      npm run build
-     npx wrangler pages deploy dist --project-name domain-manager-4j0 --branch production
+     npx wrangler pages deploy dist --project-name domain-manager --branch production
      ```
    - `functions/api/ai/sync/index.ts` 会随 Pages Functions 一起发布。发布后使用 POST 验证，不要在浏览器地址栏用 GET 打开接口：
 
@@ -337,3 +339,11 @@ Content-Type: application/json
 ## 许可证
 
 本项目基于 MIT 许可证开源 - 查看 [LICENSE](LICENSE) 文件了解更多详情。
+
+### 技术栈工作台与电脑归属
+
+首页只保留全局搜索，使用“全部 / Astro / Next.js / WordPress”切换技术栈；WordPress 标签额外提供文章数量和计算器数量维护。概览每次进入默认隐藏，可手动展开。顶部指标保留为只读统计，不再产生隐藏筛选条件。
+
+`computer_name` 为可空电脑名称，支持下拉选择、输入新名称和清除。预置 Mac Mini Luokun、Mac Mini YC、Mac MiniBook 旧，不自动推测网站在哪台电脑维护。已关联名称从 D1 记录恢复，未使用的自定义候选保存在当前浏览器。JSON 导入/导出与 Excel 快照均包含该字段。
+
+已有库先备份，再执行一次 `npm run db:migrate:v1.8.0`，之后部署；新库的 `schema.sql` 已包含此字段。迁移不要重复执行，可通过 `PRAGMA table_info(domains);` 检查是否已有 `computer_name`。

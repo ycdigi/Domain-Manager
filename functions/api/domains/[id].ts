@@ -111,7 +111,7 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         const id = context.params.id as string
         const input = await context.request.json() as Record<string, unknown>
         const fields = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === '' ? null : value]))
-        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other', 'adsense_connected', 'adsense_account_id', 'adsense_opened_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date']
+        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other', 'adsense_connected', 'adsense_account_id', 'adsense_opened_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'computer_name']
         const keys = Object.keys(fields)
         if (!keys.length || keys.some(key => !allowed.includes(key))) return Response.json({ status: 400, message: '局部更新包含不支持的字段', data: null }, { status: 400 })
 
@@ -131,6 +131,7 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         if ('content_stats_updated_date' in fields && fields.content_stats_updated_date != null && !isValidDate(fields.content_stats_updated_date)) {
             return Response.json({ status: 400, message: '内容统计日期格式无效', data: null }, { status: 400 })
         }
+        if ('computer_name' in fields && fields.computer_name != null && (typeof fields.computer_name !== 'string' || fields.computer_name.length > 120)) return Response.json({ status: 400, message: '电脑名称不能超过 120 个字符', data: null }, { status: 400 })
 
         const merged = { ...current, ...fields }
         if (fields.platform && fields.platform !== '其他') merged.platform_other = null

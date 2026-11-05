@@ -12,6 +12,7 @@ export interface DomainData {
     tgsend: number
     st_tgsend: number
     memo: string
+    computer_name?: string | null
     site_name: string | null
     industry: string | null
     adsense_account_id: number | null

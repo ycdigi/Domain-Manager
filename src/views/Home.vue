@@ -2,16 +2,15 @@
     <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
         <main class="workspace">
             <section class="summary-grid" aria-label="运营指标">
-                <button type="button" class="summary-card" :class="{ 'summary-card-active': activeSummaryPreset === 'all' }" @click="applySummaryFilter('all')"><span>域名总数</span><strong>{{ dashboard.totals.total_domains || domains.length }}</strong></button>
-                <button type="button" class="summary-card" :class="{ 'summary-card-active': activeSummaryPreset === 'expiring' }" @click="applySummaryFilter('expiring')"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></button>
-                <button type="button" class="summary-card" :class="{ 'summary-card-active': activeSummaryPreset === 'seo-stale' }" @click="applySummaryFilter('seo-stale')"><span>30 天未优化</span><strong>{{ dashboard.totals.seo_stale_domains || 0 }}</strong></button>
-                <button type="button" class="summary-card" :class="{ 'summary-card-active': activeSummaryPreset === 'wordpress-excellent' }" @click="applySummaryFilter('wordpress-excellent')"><span>WP 优秀网站</span><strong>{{ dashboard.totals.excellent_wordpress || 0 }}</strong><small>WordPress · 日点击 ≥30</small></button>
-                <button type="button" class="summary-card" :class="{ 'summary-card-active': activeSummaryPreset === 'astro-excellent' }" @click="applySummaryFilter('astro-excellent')"><span>Astro 优秀网站</span><strong>{{ dashboard.totals.excellent_astro || 0 }}</strong><small>Astro · 日点击 ≥30</small></button>
-                <button type="button" class="summary-card" :class="{ 'summary-card-active': activeSummaryPreset === 'next-excellent' }" @click="applySummaryFilter('next-excellent')"><span>Next.js 优秀网站</span><strong>{{ dashboard.totals.excellent_nextjs || 0 }}</strong><small>Next.js · 日点击 ≥30</small></button>
+                <div class="summary-card"><span>域名总数</span><strong>{{ domains.length }}</strong></div>
+                <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
+                <div class="summary-card"><span>30 天未优化</span><strong>{{ dashboard.totals.seo_stale_domains || 0 }}</strong></div>
+                <div class="summary-card"><span>WP 优秀网站</span><strong>{{ dashboard.totals.excellent_wordpress || 0 }}</strong></div>
+                <div class="summary-card"><span>Astro 优秀网站</span><strong>{{ dashboard.totals.excellent_astro || 0 }}</strong></div>
+                <div class="summary-card"><span>Next.js 优秀网站</span><strong>{{ dashboard.totals.excellent_nextjs || 0 }}</strong></div>
             </section>
-
             <div class="workbench-grid">
-                <section ref="domainLedgerRef" class="domain-ledger" aria-labelledby="domain-list-title" :aria-busy="loading">
+                <section class="domain-ledger" aria-labelledby="domain-list-title" :aria-busy="loading">
                     <div class="ledger-toolbar">
                         <div class="ledger-title"><h2 id="domain-list-title">域名列表</h2><span class="record-count" role="status">{{ loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名` }}</span></div>
                         <div class="ledger-actions" aria-label="域名管理操作">
@@ -30,36 +29,22 @@
                         </div>
                     </div>
                     <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
-                    <div class="domain-filters">
-                        <el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable />
-                        <el-select v-model="ownerFilter" placeholder="归属人" clearable><el-option v-for="owner in ownerOptions" :key="owner" :label="owner" :value="owner" /></el-select>
-                        <el-select v-model="accountFilter" placeholder="AdSense账号" clearable><el-option v-for="account in adsenseAccounts" :key="account.id" :label="account.name" :value="String(account.id)" /></el-select>
-                        <el-select v-model="adsenseFilter" placeholder="AdSense 状态" clearable><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /><el-option label="未知" value="未知" /></el-select>
-                        <el-select v-model="seoFilter" placeholder="SEO 状态" clearable @change="activeSummaryPreset = ''"><el-option label="从未优化" value="never" /><el-option label="最近 7 天" value="recent" /><el-option label="超过 7 天" value="7" /><el-option label="超过 30 天" value="30" /><el-option label="30 天未优化" value="stale30" /></el-select>
-                        <el-select v-model="clicksFilter" placeholder="日点击" clearable @change="activeSummaryPreset = ''"><el-option label="未填写" value="unknown" /><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30 次及以上" value="over30" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select>
-                        <el-select v-model="resourceFilter" placeholder="资源状态" clearable><el-option label="已关联" value="linked" /><el-option label="未关联" value="unlinked" /></el-select>
-                        <el-select v-model="providerFilter" placeholder="服务商" clearable><el-option v-for="provider in providerOptions" :key="provider" :label="providerLabel(provider)" :value="provider" /></el-select>
-                        <el-select v-model="resourceAccountFilter" placeholder="服务商账号" clearable><el-option v-for="option in resourceAccountOptions" :key="option.value" :label="`${providerLabel(option.provider)} · ${option.account}`" :value="option.value" /></el-select>
-                        <el-select v-model="platformFilter" placeholder="技术栈" clearable @change="activeSummaryPreset = ''"><el-option v-for="platform in platformOptions" :key="platform" :label="platform" :value="platform" /></el-select>
-                        <el-select v-model="industryFilter" placeholder="行业" filterable clearable><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select>
-                        <el-select v-model="expiryFilter" placeholder="到期时间" clearable @change="activeSummaryPreset = ''"><el-option label="30 天内到期" value="within30" /><el-option label="已过期" value="expired" /><el-option label="30 天后" value="after30" /></el-select>
-                        <el-button @click="clearFilters">清除筛选</el-button>
-                    </div>
+                    <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable /></div>
+                    <nav class="platform-tabs" aria-label="按技术栈查看"><button v-for="tab in platformTabs" :key="tab.value" type="button" :aria-pressed="platformTab === tab.value" :class="{ active: platformTab === tab.value }" @click="platformTab = tab.value">{{ tab.label }}<span>{{ platformTabCounts[tab.value] }}</span></button></nav>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
                     <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :row-class-name="tableRowClassName" @sort-change="handleTableSortChange">
                         <el-table-column prop="site_name" label="网站名称" min-width="142" fixed sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
                         <el-table-column prop="domain" label="域名" min-width="162" fixed sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link">{{ scope.row.domain }}</a><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
+                        <el-table-column v-if="platformTab === 'all'" prop="platform" label="技术栈" min-width="90" sortable><template #default="scope">{{ platformText(scope.row) }}</template></el-table-column>
                         <el-table-column label="SEO" width="54"><template #default="scope"><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div></template></el-table-column>
-                        <el-table-column prop="industry" label="行业" min-width="96" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable filterable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
+                        <el-table-column v-if="platformTab === 'WordPress'" label="文章数量" min-width="82"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /></template></el-table-column>
+                        <el-table-column v-if="platformTab === 'WordPress'" label="计算器数量" min-width="92"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_calculator_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 计算器数量`" @change="value => handleWordPressCount(scope.row, 'wp_calculator_count', value)" /></template></el-table-column>
+                        <el-table-column prop="industry" label="行业" min-width="90" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
                         <el-table-column prop="daily_clicks" label="日点击" min-width="96" sortable :sort-method="compareDailyClicks"><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
-                        <el-table-column label="计算器数" min-width="92"><template #default="scope"><el-input-number v-if="scope.row.platform === 'WordPress'" class="inline-count-input" size="small" :model-value="scope.row.wp_calculator_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" :placeholder="'未填'" :aria-label="`${scope.row.domain} 计算器数量`" @change="value => handleWordPressCount(scope.row, 'wp_calculator_count', value)" /><span v-else class="not-applicable">不适用</span></template></el-table-column>
-                        <el-table-column label="文章数" min-width="86"><template #default="scope"><el-input-number v-if="scope.row.platform === 'WordPress'" class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /><span v-else class="not-applicable">不适用</span></template></el-table-column>
-                        <el-table-column prop="platform" label="技术栈" min-width="98" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.platform" @change="value => handleInlineSelect(scope.row, 'platform', value)"><el-option v-for="platform in platformOptions" :key="platform" :label="platformText({ ...scope.row, platform })" :value="platform" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
-                        <el-table-column prop="latest_operation_date" label="最近操作" min-width="88" sortable :sort-method="compareOperationDates"><template #default="scope">{{ scope.row.latest_operation_date || '未记录' }}</template></el-table-column>
-                        <el-table-column prop="registrar_date" label="注册时间" min-width="92" sortable><template #default="scope">{{ scope.row.registrar_date || '未记录' }}</template></el-table-column>
-                        <el-table-column prop="expiry_date" label="剩余时间" min-width="92" sortable :sort-method="(a, b) => calculateRemainingDays(a.expiry_date) - calculateRemainingDays(b.expiry_date)"><template #default="scope"><span class="expiry-label" :class="expiryClass(scope.row.expiry_date)">{{ formatRemainingDays(scope.row.expiry_date) }}</span></template></el-table-column>
-                        <el-table-column prop="status" label="状态" min-width="72" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.status" @change="value => handleInlineSelect(scope.row, 'status', value)"><el-option label="在线" value="在线" /><el-option label="离线" value="离线" /></el-select></template></el-table-column>
+                        <el-table-column label="服务商" min-width="150"><template #default="scope"><span class="provider-cell">{{ scope.row.resource_names || '未关联' }}</span></template></el-table-column>
+                        <el-table-column prop="registrar_date" label="注册时间" min-width="100" sortable><template #default="scope">{{ scope.row.registrar_date || '未记录' }}</template></el-table-column>
+                        <el-table-column label="电脑" min-width="150"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.computer_name || ''" placeholder="选择 / 添加" filterable allow-create default-first-option clearable @change="value => handleComputerChange(scope.row, value)"><el-option v-for="computer in computerOptions" :key="computer" :label="computer" :value="computer" /></el-select></template></el-table-column>
                         <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" title="详情" aria-label="详情" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" title="修改" aria-label="修改" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" title="删除" aria-label="删除" @click="handleDelete(scope.row)" /></div></template></el-table-column>
                         <template #empty><div class="empty-state" v-if="!loading && !loadError"><p>还没有域名</p><span>新增或导入域名后，会在此显示。</span><button type="button" class="table-action" @click="handleAdd">新增域名</button></div><div v-else class="empty-state"><span>{{ loading ? '正在加载域名…' : '域名列表未能加载，请重试。' }}</span></div></template>
                     </el-table>
@@ -111,9 +96,9 @@ import { copyText } from '../utils/clipboard';
 interface AlertConfig { tg_token: string; tg_userid: string; days: number; }
 interface DomainSortState { prop: string; order: 'ascending' | 'descending'; }
 
-const defaultTableSort: DomainSortState = { prop: 'expiry_date', order: 'ascending' };
+const defaultTableSort: DomainSortState = { prop: 'site_name', order: 'ascending' };
 const tableSortStorageKey = 'domain-manager.table-sort';
-const sortableTableProps = new Set(['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'latest_operation_date', 'registrar_date', 'expiry_date', 'status']);
+const sortableTableProps = new Set(['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'registrar_date']);
 const readTableSort = (): DomainSortState => {
     try {
         const raw = window.localStorage.getItem(tableSortStorageKey);
@@ -137,21 +122,13 @@ const adsenseManagerVisible = ref(false);
 const resourceManagerVisible = ref(false);
 const queue = getWriteQueue();
 const searchText = ref('');
-const ownerFilter = ref('');
-const accountFilter = ref('');
-const adsenseFilter = ref('');
-const seoFilter = ref('');
-const clicksFilter = ref('');
-const expiryFilter = ref('');
-const resourceFilter = ref('');
-const providerFilter = ref('');
-const resourceAccountFilter = ref('');
-const platformFilter = ref('');
-const industryFilter = ref('');
-const activeSummaryPreset = ref('');
-const domainLedgerRef = ref<HTMLElement>();
-const storedSidebarState = localStorage.getItem('domain-manager.sidebar-collapsed');
-const sidebarCollapsed = ref(storedSidebarState === null ? window.innerWidth <= 760 : storedSidebarState === '1');
+const platformTab = ref<'all' | 'Astro' | 'Next.js' | 'WordPress'>('all');
+const computerOptions = ref<string[]>(['Mac Mini Luokun', 'Mac Mini YC', 'Mac MiniBook 旧']);
+const computerStorageKey = 'domain-manager.computers';
+try { const savedComputers = JSON.parse(localStorage.getItem(computerStorageKey) || '[]'); if (Array.isArray(savedComputers)) computerOptions.value = [...new Set([...computerOptions.value, ...savedComputers.filter(value => typeof value === 'string')])]; } catch { /* keep defaults */ }
+const platformTabs = [{ label: '全部', value: 'all' as const }, { label: 'Astro', value: 'Astro' as const }, { label: 'Next.js', value: 'Next.js' as const }, { label: 'WordPress', value: 'WordPress' as const }];
+const platformTabCounts = computed(() => ({ all: domains.value.length, Astro: domains.value.filter(row => row.platform === 'Astro').length, 'Next.js': domains.value.filter(row => row.platform === 'Next.js').length, WordPress: domains.value.filter(row => row.platform === 'WordPress').length }));
+const sidebarCollapsed = ref(true);
 const loading = ref(false);
 const loadError = ref('');
 const overviewError = ref('');
@@ -175,35 +152,13 @@ const quickFieldValue = computed(() => quickFieldMode.value === 'site_name' ? qu
 const adsenseQuickVisible = ref(false);
 const adsenseQuickDomain = ref<DomainData>();
 interface DashboardData { totals: Record<string, number>; seo: Array<{ id: number; domain: string; seo_last_date: string | null; days_since: number | null }>; clicks: Record<string, number>; providers: Array<{ provider: string; account_count: number; resource_count: number; linked_domain_count: number }>; owner_income: Array<{ owner: string; currency: string; account_count: number; current_income: number }>; platforms: Array<{ platform: string; count: number }>; quality: Record<string, number> }
-interface ResourceLinkData { id: number; domain_id: number; resource_id: number; role: string; provider: string; account_id: number | null; account_name: string | null; resource_name: string }
-interface ResourceAccountData { id: number; provider: string; name: string; status: string; linked_domain_count: number }
 const dashboard = ref<DashboardData>({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [], platforms: [], quality: {} });
-const resourceLinks = ref<ResourceLinkData[]>([]);
-const resourceAccounts = ref<ResourceAccountData[]>([]);
-const accountById = computed(() => new Map(adsenseAccounts.value.map(account => [account.id, account])));
-const ownerOptions = computed(() => [...new Set(adsenseAccounts.value.map(account => account.owner).filter(Boolean))]);
-const providerOptions = ['github', 'cloudflare', 'vhost', 'vps'];
-const resourceAccountOptions = computed(() => resourceAccounts.value.filter(account => account.status === '正常').map(account => ({ provider: account.provider, account: account.name, value: String(account.id) })));
-const platformOptions = ['WordPress', 'Astro', 'Next.js', '其他'];
 const industryBaseOptions = ['计算器', '资讯站', '其他'];
 const industryOptions = computed(() => [...new Set([...industryBaseOptions, ...domains.value.map(domain => domain.industry).filter((value): value is string => Boolean(value))])]);
 const filteredDomains = computed(() => domains.value.filter(row => {
-    const account = accountById.value.get(row.adsense_account_id || undefined);
-    const haystack = `${row.domain} ${row.site_name || ''} ${row.industry || ''} ${row.registrar} ${row.memo}`.toLowerCase();
+    const haystack = `${row.domain} ${row.site_name || ''} ${row.industry || ''} ${row.registrar} ${row.memo} ${row.computer_name || ''} ${row.resource_names || ''} ${row.platform}`.toLowerCase();
     if (searchText.value && !haystack.includes(searchText.value.trim().toLowerCase())) return false;
-    if (ownerFilter.value && account?.owner !== ownerFilter.value) return false;
-    if (accountFilter.value && String(row.adsense_account_id || '') !== accountFilter.value) return false;
-    if (adsenseFilter.value && row.adsense_connected !== adsenseFilter.value) return false;
-    if (seoFilter.value) { const days = row.seo_last_date ? daysSince(row.seo_last_date) : null; if (seoFilter.value === 'never' && days !== null) return false; if (seoFilter.value === 'recent' && (days === null || days > 7)) return false; if (seoFilter.value === '7' && (days === null || days < 7)) return false; if (seoFilter.value === '30' && (days === null || days < 30)) return false; if (seoFilter.value === 'stale30' && days !== null && days <= 30) return false; }
-    if (clicksFilter.value && !matchesClicks(row, clicksFilter.value)) return false;
-    if (expiryFilter.value && !matchesExpiry(row.expiry_date, expiryFilter.value)) return false;
-    if (resourceFilter.value === 'linked' && !row.resource_count) return false;
-    if (resourceFilter.value === 'unlinked' && row.resource_count) return false;
-    const links = resourceLinks.value.filter(link => link.domain_id === row.id);
-    if (providerFilter.value && !links.some(link => link.provider === providerFilter.value)) return false;
-    if (resourceAccountFilter.value && !links.some(link => String(link.account_id || '') === resourceAccountFilter.value)) return false;
-    if (platformFilter.value && row.platform !== platformFilter.value) return false;
-    if (industryFilter.value && row.industry !== industryFilter.value) return false;
+    if (platformTab.value !== 'all' && row.platform !== platformTab.value) return false;
     return true;
 }));
 
@@ -215,7 +170,7 @@ const openDomainDetail = (row: DomainData) => { detailDomain.value = row; detail
 const handleDetailEdit = (row: DomainData) => { detailVisible.value = false; handleEdit(row); };
 const handleConfig = () => { configVisible.value = true; };
 const handleImport = () => { importVisible.value = true; };
-const clearFilters = () => { searchText.value = ''; ownerFilter.value = ''; accountFilter.value = ''; adsenseFilter.value = ''; seoFilter.value = ''; clicksFilter.value = ''; expiryFilter.value = ''; resourceFilter.value = ''; providerFilter.value = ''; resourceAccountFilter.value = ''; platformFilter.value = ''; industryFilter.value = ''; activeSummaryPreset.value = ''; };
+const handleComputerChange = async (row: DomainData, value: string | null) => { const name = value?.trim() || ''; if (!row.id || row.computer_name === name) return; const previous = row.computer_name; row.computer_name = name || null; if (name && !computerOptions.value.includes(name)) { computerOptions.value.push(name); localStorage.setItem(computerStorageKey, JSON.stringify(computerOptions.value)); } try { await api.patch(`/api/domains/${row.id}`, { computer_name: name || null }); } catch (error) { row.computer_name = previous || null; ElMessage.error(error instanceof Error ? error.message : '电脑信息保存失败'); } };
 const saveTableSort = (sort: DomainSortState) => { tableSort.value = { ...sort }; window.localStorage.setItem(tableSortStorageKey, JSON.stringify(tableSort.value)); };
 const applyTableSort = async () => { await nextTick(); if (!tableRef.value) return; applyingTableSort.value = true; tableRef.value.sort(tableSort.value.prop, tableSort.value.order); applyingTableSort.value = false; };
 const handleTableSortChange = ({ prop, order }: { prop: string; order: 'ascending' | 'descending' | null }) => {
@@ -227,22 +182,7 @@ const handleTableSortChange = ({ prop, order }: { prop: string; order: 'ascendin
 };
 const daysSince = (date: string) => { const [y,m,d] = date.split('-').map(Number); const today = localDate().split('-').map(Number); return Math.max(0, Math.floor((Date.UTC(today[0], today[1] - 1, today[2]) - Date.UTC(y, m - 1, d)) / 86400000)); };
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
-const toggleSidebar = () => { sidebarCollapsed.value = !sidebarCollapsed.value; localStorage.setItem('domain-manager.sidebar-collapsed', sidebarCollapsed.value ? '1' : '0'); };
-const matchesExpiry = (date: string, filter: string) => { const days = calculateRemainingDays(date); return filter === 'within30' ? days >= 0 && days <= 30 : filter === 'expired' ? days < 0 : filter === 'after30' ? days > 30 : true; };
-const applySummaryFilter = async (preset: 'all' | 'expiring' | 'seo-stale' | 'wordpress-excellent' | 'astro-excellent' | 'next-excellent') => {
-    expiryFilter.value = '';
-    seoFilter.value = '';
-    platformFilter.value = '';
-    clicksFilter.value = '';
-    activeSummaryPreset.value = preset;
-    if (preset === 'expiring') expiryFilter.value = 'within30';
-    if (preset === 'seo-stale') seoFilter.value = 'stale30';
-    if (preset === 'wordpress-excellent') { platformFilter.value = 'WordPress'; clicksFilter.value = 'over30'; }
-    if (preset === 'astro-excellent') { platformFilter.value = 'Astro'; clicksFilter.value = 'over30'; }
-    if (preset === 'next-excellent') { platformFilter.value = 'Next.js'; clicksFilter.value = 'over30'; }
-    await nextTick();
-    domainLedgerRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-};
+const toggleSidebar = () => { sidebarCollapsed.value = !sidebarCollapsed.value; };
 const seoState = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: string | null }) => {
     if (!row.seo_last_date) return { kind: 'never', actionable: true, label: '未优化', title: '从未优化，点击记录今天' };
     const days = daysSince(row.seo_last_date);
@@ -258,18 +198,9 @@ const tableRowClassName = ({ row }: { row: DomainData }) => {
     if (hasRecentOperation(row)) classes.push('row-recent-operation');
     return classes.join(' ');
 };
-const compareOperationDates = (a: DomainData, b: DomainData) => {
-    const aDate = a.latest_operation_date || '';
-    const bDate = b.latest_operation_date || '';
-    if (!aDate && !bDate) return 0;
-    if (!aDate) return 1;
-    if (!bDate) return -1;
-    return aDate.localeCompare(bDate);
-};
 const clickRangeFromNumber = (value: number | null | undefined) => value == null ? null : value < 10 ? 'under10' : value < 30 ? '10to29' : value < 50 ? '30to49' : value < 100 ? '50to99' : 'over100';
 const clickRangeRank = (row: DomainData) => ({ under10: 1, '10to29': 2, '30to49': 3, '50to99': 4, over100: 5 } as Record<string, number>)[row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks) || ''] || 0;
 const compareDailyClicks = (a: DomainData, b: DomainData) => clickRangeRank(a) - clickRangeRank(b);
-const matchesClicks = (row: DomainData, filter: string) => { const range = row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks); return filter === 'unknown' ? range == null : filter === 'over30' ? ['30to49', '50to99', 'over100'].includes(range || '') : range === filter; };
 const copyDomain = async (domain: string) => { try { await copyText(domain); ElMessage.success(`已复制域名：${domain}`); } catch { ElMessage.error('复制失败，请手动复制'); } };
 const handleSeoToday = async (row: DomainData) => { if (!row.id || !seoState(row).actionable) return; const date = localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }); queue.enqueue({ type: 'domain_operation_add', domain_id: row.id, operation_date: date, operation_kind: 'SEO' }); row.seo_last_date = date; row.latest_operation_date = date; await queue.flush(); await loadDashboard(); await applyTableSort(); ElMessage.success('已记录今天的 SEO 优化'); } catch(error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 日期已加入待同步队列'); } };
 const handleDailyClicks = async (row: DomainData, value: string | null) => { if (!row.id) return; const previous = row.daily_clicks_range; row.daily_clicks_range = value as DomainData['daily_clicks_range']; row.daily_clicks = null; row.clicks_updated_date = value == null ? null : localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { daily_clicks: null, daily_clicks_range: value, clicks_updated_date: row.clicks_updated_date } }); await queue.flush(); await loadDashboard(); await applyTableSort(); } catch (error) { row.daily_clicks_range = previous; ElMessage.error(error instanceof Error ? error.message : '日点击区间已加入待同步队列'); } };
@@ -353,8 +284,7 @@ const saveQuickField = async (value: string | null) => {
 };
 const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await api.get(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); return true; } catch(error) { console.error('获取 AdSense 账号失败:', error); return false; } };
 const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await api.get(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); return true; } catch (error) { console.error('获取首页概览失败:', error); return false; } };
-const loadResourceLinks = async () => { try { [resourceLinks.value, resourceAccounts.value] = await Promise.all([api.get<ResourceLinkData[]>('/api/resources/links'), api.get<ResourceAccountData[]>('/api/resources/accounts')]); return true; } catch (error) { console.error('获取资源关联失败:', error); return false; } };
-const loadOverview = async () => { overviewError.value = ''; const results = await Promise.all([loadAdsenseAccounts(), loadDashboard(), loadResourceLinks()]); if (results.some(result => !result)) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。'; };
+const loadOverview = async () => { overviewError.value = ''; const results = await Promise.all([loadAdsenseAccounts(), loadDashboard()]); if (results.some(result => !result)) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。'; };
 const reloadAll = async () => { await Promise.all([loadDomains(), loadOverview()]); };
 
 const handleDelete = async (row: DomainData) => {
@@ -384,6 +314,7 @@ const loadDomains = async () => {
     loadError.value = '';
     try {
         domains.value = await api.get<DomainData[]>('/api/domains');
+        computerOptions.value = [...new Set([...computerOptions.value, ...domains.value.map(row => row.computer_name).filter((value): value is string => Boolean(value))])];
         await applyTableSort();
     } catch (error: any) {
         loadError.value = error.message || '加载域名列表失败，请重试。';
@@ -394,25 +325,6 @@ const loadDomains = async () => {
 };
 
 watch(filteredDomains, () => { void applyTableSort(); });
-
-const calculateRemainingDays = (expiryDate: string) => {
-    const [year, month, day] = expiryDate.split('-').map(Number);
-    const [todayYear, todayMonth, todayDay] = localDate().split('-').map(Number);
-    const todayDate = Date.UTC(todayYear, todayMonth - 1, todayDay);
-    return Math.round((Date.UTC(year, month - 1, day) - todayDate) / 86400000);
-};
-
-const formatRemainingDays = (expiryDate: string) => {
-    const days = calculateRemainingDays(expiryDate);
-    if (days < 0) return `已过期 ${Math.abs(days)} 天`;
-    if (days === 0) return '今日到期';
-    return `${days} 天`;
-};
-
-const expiryClass = (expiryDate: string) => {
-    const days = calculateRemainingDays(expiryDate);
-    return days < 0 ? 'expiry-expired' : days <= alertDays.value ? 'expiry-warning' : '';
-};
 
 const handleConfigSubmit = async (config: AlertConfig) => {
     try {

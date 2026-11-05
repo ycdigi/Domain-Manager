@@ -46,6 +46,7 @@ export interface Domain {
     last_expiry_alert_date?: string | null
     last_offline_alert_at?: string | null
     resource_status?: string
+    computer_name?: string | null
     resource_count?: number
     resource_names?: string | null
     ai_note_count?: number
