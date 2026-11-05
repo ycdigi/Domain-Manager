@@ -1,6 +1,6 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { dailyClicksRangeFromNumber, normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, normalizeDomain, normalizeDomainType, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
     try {
@@ -95,7 +95,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data.st_tgsend ?? 1,
             data.memo || '',
             data.site_name?.trim() || null,
-            data.industry?.trim() || null,
+            normalizeDomainType(data.industry?.trim()) || null,
             data.adsense_account_id ?? null,
             data.adsense_connected || '未知',
             data.adsense_opened_date || null,

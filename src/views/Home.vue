@@ -25,7 +25,7 @@
                     <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
                     <div class="ledger-viewbar">
                         <el-tag v-if="sourceLabel" closable @close="clearSource">{{ sourceLabel }}</el-tag>
-                        <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable /></div>
+                        <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、类型、备注" clearable /></div>
                     </div>
                     <div v-if="detectProgress.total" class="detection-progress" role="status">已检测 {{ detectProgress.done }} / {{ detectProgress.total }} · 状态变化 {{ detectProgress.changed }} · 检测失败 {{ detectProgress.failed }}<span v-if="!detecting"> · {{ queue.pending.value.length ? '部分结果待同步' : '已同步' }}</span></div>
                     <div v-if="contextError" class="load-error" role="alert">{{ contextError }}</div>
@@ -36,11 +36,11 @@
                         <el-table-column v-if="platformTab === 'all'" prop="platform" label="技术栈" min-width="90" sortable><template #default="scope">{{ platformText(scope.row) }}</template></el-table-column>
                         <el-table-column v-if="platformTab === 'WordPress'" label="文章数量" min-width="82"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /></template></el-table-column>
                         <el-table-column v-if="platformTab === 'WordPress'" label="计算器数量" min-width="92"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_calculator_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 计算器数量`" @change="value => handleWordPressCount(scope.row, 'wp_calculator_count', value)" /></template></el-table-column>
-                        <el-table-column prop="industry" label="行业" min-width="90" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
+                        <el-table-column prop="industry" label="类型" min-width="90" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
                         <el-table-column prop="daily_clicks" label="日点击" min-width="96" sortable :sort-method="compareDailyClicks"><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
                         <el-table-column label="服务商" min-width="150" show-overflow-tooltip><template #default="scope"><span class="provider-cell" :title="scope.row.resource_names || '未关联'">{{ scope.row.resource_names || '未关联' }}</span></template></el-table-column>
-                        <el-table-column prop="registrar_date" label="注册时间" min-width="100" sortable><template #default="scope">{{ scope.row.registrar_date || '未记录' }}</template></el-table-column>
+                        <el-table-column prop="expiry_date" label="到期日期" min-width="100" sortable><template #default="scope"><span :class="expiryState(scope.row).className">{{ scope.row.expiry_date || '未记录' }}</span></template></el-table-column>
                         <el-table-column label="电脑" min-width="155"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.computer_name || ''" placeholder="选择 / 添加" filterable allow-create default-first-option clearable @change="value => handleComputerChange(scope.row, value)"><el-option v-for="computer in computerOptions" :key="computer" :label="computer" :value="computer" /></el-select></template></el-table-column>
                         <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" :title="`详情：${scope.row.domain}`" :aria-label="`详情：${scope.row.domain}`" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" :title="`修改：${scope.row.domain}`" :aria-label="`修改：${scope.row.domain}`" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" :title="`删除：${scope.row.domain}`" :aria-label="`删除：${scope.row.domain}`" @click="handleDelete(scope.row)" /></div></template></el-table-column>
                         <template #empty><div class="empty-state" v-if="!loading && !loadError"><template v-if="domains.length"><p>没有匹配的网站</p><span>调整搜索或清除来源条件后再试。</span><button type="button" class="table-action" @click="clearResultsFilter">清除搜索与来源条件</button></template><template v-else><p>还没有域名</p><span>新增或导入域名后，会在此显示。</span><button type="button" class="table-action" @click="handleAdd">新增域名</button></template></div><div v-else class="empty-state"><span>{{ loading ? '正在加载域名…' : '域名列表未能加载，请重试。' }}</span></div></template>
@@ -88,9 +88,9 @@ import { copyText } from '../utils/clipboard';
 
 interface DomainSortState { prop: string; order: 'ascending' | 'descending'; }
 
-const defaultTableSort: DomainSortState = { prop: 'site_name', order: 'ascending' };
+const defaultTableSort: DomainSortState = { prop: 'expiry_date', order: 'ascending' };
 const tableSortStorageKey = 'domain-manager.table-sort';
-const sortableTableProps = new Set(['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'registrar_date']);
+const sortableTableProps = new Set(['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'expiry_date']);
 const readTableSort = (): DomainSortState => {
     try {
         const raw = window.localStorage.getItem(tableSortStorageKey);
@@ -150,8 +150,8 @@ const adsenseQuickVisible = ref(false);
 const adsenseQuickDomain = ref<DomainData>();
 interface DashboardData { totals: Record<string, number>; seo: Array<{ id: number; domain: string; seo_last_date: string | null; days_since: number | null }>; clicks: Record<string, number>; providers: Array<{ provider: string; account_count: number; resource_count: number; linked_domain_count: number }>; owner_income: Array<{ owner: string; currency: string; account_count: number; current_income: number }>; platforms: Array<{ platform: string; count: number }>; quality: Record<string, number> }
 const dashboard = ref<DashboardData>({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [], platforms: [], quality: {} });
-const industryBaseOptions = ['计算器', '资讯站', '其他'];
-const industryOptions = computed(() => [...new Set([...industryBaseOptions, ...domains.value.map(domain => domain.industry).filter((value): value is string => Boolean(value))])]);
+const industryOptions = ['计算器', '资讯站', '其他'];
+const normalizeIndustry = (value: string | null | undefined) => value && industryOptions.includes(value) ? value : value ? '其他' : null;
 const sourceLinks = ref<Array<{ domain_id: number; resource_id: number; account_id?: number; resource_name?: string; account_name?: string }>>([]);
 const sourceLabel = computed(() => {
     if (route.query.adsense_account) return `AdSense：${adsenseAccounts.value.find(account => String(account.id) === route.query.adsense_account)?.name || route.query.adsense_account}`;
@@ -163,7 +163,7 @@ const clearResultsFilter = () => { searchText.value = ''; const query = { ...rou
 const clearSource = () => { const query = { ...route.query }; delete query.adsense_account; delete query.resource; delete query.provider_account; void router.push({ query }); };
 const contextError = ref('');
 const filteredDomains = computed(() => domains.value.filter(row => {
-    const haystack = `${row.domain} ${row.site_name || ''} ${row.industry || ''} ${row.registrar} ${row.memo} ${row.computer_name || ''} ${row.resource_names || ''} ${row.platform}`.toLowerCase();
+    const haystack = `${row.domain} ${row.site_name || ''} ${normalizeIndustry(row.industry) || ''} ${row.registrar} ${row.memo} ${row.computer_name || ''} ${row.resource_names || ''} ${row.platform}`.toLowerCase();
     if (searchText.value && !haystack.includes(searchText.value.trim().toLowerCase())) return false;
     if (platformTab.value !== 'all' && row.platform !== platformTab.value) return false;
     if (route.query.adsense_account && String(row.adsense_account_id) !== route.query.adsense_account) return false;
@@ -201,10 +201,22 @@ const seoState = (row: Pick<DomainData, 'seo_last_date'> & { domain?: string }) 
 };
 const seoNeedsAttention = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: string | null }) => ['never', 'overdue'].includes(seoState(row).kind);
 const hasRecentOperation = (row: Pick<DomainData, 'latest_operation_date'>) => Boolean(row.latest_operation_date && row.latest_operation_date <= localDate() && daysSince(row.latest_operation_date) <= 7);
+const expiryState = (row: Pick<DomainData, 'expiry_date'>) => {
+    if (!row.expiry_date) return { kind: 'unknown', className: 'expiry-unknown', days: null as number | null };
+    const [y, m, d] = row.expiry_date.split('-').map(Number);
+    const todayParts = localDate().split('-').map(Number);
+    const days = Math.floor((Date.UTC(y, m - 1, d) - Date.UTC(todayParts[0], todayParts[1] - 1, todayParts[2])) / 86400000);
+    if (days < 0) return { kind: 'expired', className: 'expiry-expired', days };
+    if (days <= 30) return { kind: 'expiring', className: 'expiry-expiring', days };
+    return { kind: 'normal', className: 'expiry-normal', days };
+};
 const tableRowClassName = ({ row }: { row: DomainData }) => {
     const classes: string[] = [];
-    if (seoNeedsAttention(row)) classes.push('row-seo-attention');
-    if (hasRecentOperation(row)) classes.push('row-recent-operation');
+    const expiry = expiryState(row);
+    if (expiry.kind === 'expired') classes.push('row-expired');
+    else if (expiry.kind === 'expiring') classes.push('row-expiring');
+    else if (hasRecentOperation(row)) classes.push('row-recent-operation');
+    else if (seoNeedsAttention(row)) classes.push('row-seo-attention');
     return classes.join(' ');
 };
 const clickRangeFromNumber = (value: number | null | undefined) => value == null ? null : value < 10 ? 'under10' : value < 30 ? '10to29' : value < 50 ? '30to49' : value < 100 ? '50to99' : 'over100';
@@ -350,7 +362,9 @@ const loadDomains = async () => {
     loading.value = true;
     loadError.value = '';
     try {
-        domains.value = queue.applyPendingDomains(await cachedGet<DomainData[]>('/api/domains'));
+        const rows = await cachedGet<DomainData[]>('/api/domains');
+        rows.forEach(row => { row.industry = normalizeIndustry(row.industry); });
+        domains.value = queue.applyPendingDomains(rows);
         computerOptions.value = [...new Set([...computerOptions.value, ...domains.value.map(row => row.computer_name).filter((value): value is string => Boolean(value))])];
         if (route.query.site) detailDomain.value = domains.value.find(row => row.domain === route.query.site);
         await applyTableSort();

@@ -3,11 +3,12 @@
   <WorkspaceHeading title="资源管理" subtitle="服务商、账号、资源与网站关联"><el-button :disabled="loading || saving" @click="refresh">刷新</el-button><el-button type="primary" @click="openAccountForm">新增账号</el-button><el-button v-if="activeTab === 'vps'" @click="openResourceForm">新增 VPS</el-button></WorkspaceHeading>
   <el-tabs :model-value="activeTab" @update:model-value="changeProvider"><el-tab-pane v-for="provider in providers" :key="provider.value" :name="provider.value" :label="provider.label" /></el-tabs>
   <div v-if="loadError || contextError" class="page-error" role="alert">{{ loadError || contextError }}<el-button v-if="loadError" @click="load(true)">重试</el-button><el-button v-else @click="router.push({ name: 'Resources', query: { provider: activeTab } })">返回当前服务商</el-button></div>
-  <section v-if="editor" class="page-panel">
-   <div class="panel-heading"><h2>{{ editorTitle }}</h2><span class="page-muted">{{ selectedAccount?.name || providerLabel(activeTab) }}</span></div>
-   <el-form v-if="editor === 'account'" label-position="top" class="page-form page-form-grid" @submit.prevent="saveAccount">
-    <el-form-item label="服务商"><span>{{ providerLabel(activeTab) }}</span></el-form-item><el-form-item label="账号名称" required><el-input v-model="accountForm.name" /></el-form-item><el-form-item label="登录邮箱"><el-input v-model="accountForm.login_email" /></el-form-item><el-form-item label="备注"><el-input v-model="accountForm.memo" type="textarea" :rows="2" /></el-form-item>
-    <div class="page-form-full page-actions"><el-button :disabled="saving" @click="cancelEditor">取消编辑</el-button><el-button type="primary" :loading="saving" native-type="submit">保存账号</el-button></div>
+  <section v-if="editor" class="page-panel resource-editor">
+   <div class="panel-heading"><div><h2>{{ editorTitle }}</h2><p class="page-muted">保存后用于资源归属、网站关联和数量统计。</p></div><span class="editor-context-badge">{{ selectedAccount?.name || providerLabel(activeTab) }}</span></div>
+   <el-form v-if="editor === 'account'" label-position="top" class="page-form resource-account-form" @submit.prevent="saveAccount">
+    <div class="editor-provider-context"><span>服务商</span><strong>{{ providerLabel(activeTab) }}</strong><small>账号名称和登录邮箱用于区分同一服务商下的多个账号。</small></div>
+    <div class="resource-account-grid"><el-form-item label="账号名称" required><el-input v-model="accountForm.name" placeholder="例如：个人 GitHub 主账号" /></el-form-item><el-form-item label="登录邮箱"><el-input v-model="accountForm.login_email" type="email" placeholder="用于识别登录入口" /></el-form-item><el-form-item class="resource-form-full" label="备注"><el-input v-model="accountForm.memo" type="textarea" :rows="3" placeholder="记录用途、权限范围或其他识别信息" /></el-form-item></div>
+    <div class="page-actions resource-editor-actions"><el-button :disabled="saving" @click="cancelEditor">取消编辑</el-button><el-button type="primary" :loading="saving" native-type="submit">保存账号</el-button></div>
    </el-form>
    <el-form v-if="editor === 'resource'" label-position="top" class="page-form page-form-grid" @submit.prevent="saveResource">
     <el-form-item label="资源名称" required><el-input v-model="resourceForm.name" /></el-form-item><el-form-item label="服务商账号"><el-select v-model="resourceForm.account_id" :clearable="activeTab === 'vps'"><el-option v-if="activeTab === 'vps'" label="不关联账号" :value="0" /><el-option v-for="account in accountsForProvider" :key="account.id" :label="account.name" :value="account.id || 0" /></el-select></el-form-item>

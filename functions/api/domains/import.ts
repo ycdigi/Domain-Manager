@@ -1,6 +1,6 @@
 import type { Env, ProviderType } from '../../types'
 import { verifyToken } from '../../utils/auth'
-import { dailyClicksRangeFromNumber, isValidDailyClicksRange, isValidDate, normalizeDomain } from '../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, domainTypes, isValidDailyClicksRange, isValidDate, normalizeDomain } from '../../utils/domain-validation'
 
 interface ResourceImport { provider: ProviderType; account?: string | null; resource: string; role: string }
 interface AiNoteImport { kind: 'AI提示词' | '想法说明'; content: string }
@@ -75,7 +75,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (item.memo != null && typeof item.memo !== 'string') return '备注格式无效'
             if (item.computer_name != null && (typeof item.computer_name !== 'string' || item.computer_name.length > 120)) return '电脑名称格式无效或过长'
             if (item.site_name != null && (typeof item.site_name !== 'string' || item.site_name.length > 200)) return '网站名称格式无效或过长'
-            if (item.industry != null && (typeof item.industry !== 'string' || item.industry.length > 100)) return '行业格式无效或过长'
+            if (item.industry != null && (typeof item.industry !== 'string' || !domainTypes.includes(item.industry as typeof domainTypes[number]))) return '网站类型只能是计算器、资讯站或其他'
             if (item.adsense_account != null && typeof item.adsense_account !== 'string') return 'AdSense 账号名称格式无效'
             const domain = normalizeDomain(item.domain)
             if (!/^(?=.{3,255}$)[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+$/.test(domain)) return '域名格式无效'

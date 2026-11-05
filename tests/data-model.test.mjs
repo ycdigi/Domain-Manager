@@ -174,13 +174,13 @@ test('domain quick editing exposes a narrow PATCH contract and SEO dual write', 
   assert.match(home, /seo_last_date: date/)
   assert.match(home, /sidebar-collapsed/)
   assert.match(home, /handleAdsenseSelect/)
-  assert.match(home, /registrar_date.*注册时间/)
+  assert.match(home, /expiry_date.*到期日期/)
 })
 
 test('WordPress content counts are editable in the ledger and PATCH with their statistics date', () => {
   const patch = fs.readFileSync(path.join(repo, 'functions/api/domains/[id].ts'), 'utf8')
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
-  assert.match(home, /label="文章数量"[\s\S]*?label="计算器数量"[\s\S]*?label="行业"[\s\S]*?label="日点击"/)
+  assert.match(home, /label="文章数量"[\s\S]*?label="计算器数量"[\s\S]*?label="类型"[\s\S]*?label="日点击"/)
   assert.match(home, /handleWordPressCount\(scope\.row, 'wp_calculator_count', value\)/)
   assert.match(home, /handleWordPressCount\(scope\.row, 'wp_article_count', value\)/)
   assert.match(home, /content_stats_updated_date: nextDate/)
@@ -199,7 +199,7 @@ test('domain table sorting is persisted and reapplied after data changes', () =>
   assert.match(home, /saveTableSort\(\{ \.\.\.defaultTableSort \}\);\s*void applyTableSort\(\)/)
   assert.match(home, /watch\(filteredDomains/)
   assert.doesNotMatch(home, /:default-sort=/)
-  for (const prop of ['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'registrar_date']) {
+  for (const prop of ['site_name', 'domain', 'industry', 'daily_clicks', 'platform', 'adsense_connected', 'expiry_date']) {
     assert.match(home, new RegExp(`sortableTableProps.*${prop}`))
   }
 })
@@ -492,4 +492,22 @@ test('queue reports blocked writes, overlays local values and retries without lo
   assert.deepEqual(await queue.retryFailed(), { pending:0, failed:0, synced:true })
   assert.equal(calls, 2)
   assert.equal(queue.syncing.value, false)
+})
+
+test('domain expiry presentation and fixed type choices are explicit', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const css = fs.readFileSync(path.join(repo, 'src/styles/home/home.css'), 'utf8')
+  const validation = fs.readFileSync(path.join(repo, 'functions/utils/domain-validation.ts'), 'utf8')
+  const resources = fs.readFileSync(path.join(repo, 'src/views/Resources.vue'), 'utf8')
+  assert.match(home, /prop="expiry_date" label="到期日期"/)
+  assert.match(home, /row-expired/)
+  assert.match(home, /row-expiring/)
+  assert.match(css, /row-expired[^}]*background: color-mix/)
+  assert.match(css, /row-expiring[^}]*background: color-mix/)
+  assert.match(home, /const industryOptions = \['计算器', '资讯站', '其他'\]/)
+  assert.doesNotMatch(home, /domains\.value\.map\(domain => domain\.industry\)/)
+  assert.match(validation, /domainTypes = \['计算器', '资讯站', '其他'\]/)
+  assert.match(validation, /网站类型只能是计算器、资讯站或其他/)
+  assert.match(resources, /editor-provider-context/)
+  assert.match(resources, /resource-account-grid/)
 })

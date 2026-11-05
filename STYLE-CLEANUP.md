@@ -126,3 +126,13 @@ npm run lint:cleanup
 | 重新加载直接覆盖本机未同步值 | 读取后应用 `applyPendingDomains()` | `writeQueue.ts`, `Home.vue` | 保留本地队列格式，增加视图叠加 | 队列单测与刷新 fixture |
 | 无变化仍刷新点击/内容统计日期 | 日期由 `dataFreshness.ts` 按实际值变化计算 | `DomainDialog.vue`, `Home.vue` | 删除重复的“每次提交即今天”规则 | 34 项数据测试 |
 | 收入、凭据、详情迟到响应可回填旧上下文 | 保存状态、原生禁用/ARIA、版本与上下文校验 | `Adsense.vue`, `StableNumberInput.vue`, `Resources.vue`, `DomainDetailDrawer.vue` | 保留接口，丢弃过期响应 | 延迟响应浏览器测试 |
+
+## 2026-11-06 到期状态、类型字段与账号表单
+
+| 旧规则/入口 | 新规则/新入口 | 使用模板/组件 | 删除/保留 | 验证方式 |
+| --- | --- | --- | --- | --- |
+| Home 以 `registrar_date` 显示“注册时间” | 以 `expiry_date` 显示“到期日期”，注册日期留在详情与导出 | `Home.vue`, `home.css` | 替换主表展示，不删除数据字段 | 到期字段测试与浏览器回归 |
+| SEO/近期操作背景可能覆盖到期风险 | `row-expired` / `row-expiring` 优先，分别使用强/弱浅红整行背景 | `Home.vue`, `home.css` | 保留原状态计算，调整优先级 | 过期、30 天内、普通行检查 |
+| 行业可动态扩展旧值 | 类型固定为计算器、资讯站、其他；旧值展示归入其他 | `Home.vue`, `DomainDialog.vue`, `domain-validation.ts`, import/AI API | 删除动态选项和自定义写入口；保留底层 `industry` 列兼容 | 35 项数据测试、API 校验 |
+| 资源账号表单把服务商作为普通字段并与备注并排 | 服务商上下文徽标、说明、双列核心字段、整行备注和独立操作区 | `Resources.vue`, `workspace.css` | 删除旧错位布局 | 桌面/移动工作区回归 |
+| 桌面沿用 13/14px 密集文本 | 1024px 以上提升正文、表格和控件字号；移动端不放大 | shared/base, home, workspace styles | 增加单一响应式字号规则，不追加组件覆盖 | build、Playwright 多尺寸 |

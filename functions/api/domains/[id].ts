@@ -1,6 +1,6 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { dailyClicksRangeFromNumber, isValidDate, normalizeDomain, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, isValidDate, normalizeDomain, normalizeDomainType, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
 
 export const onRequestPut: PagesFunction<Env> = async (context) => {
     try {
@@ -59,7 +59,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
             data.st_tgsend ?? 1,
             data.memo || '',
             data.site_name?.trim() || null,
-            data.industry?.trim() || null,
+            normalizeDomainType(data.industry?.trim()) || null,
             data.adsense_account_id || null,
             data.adsense_connected || '未知',
             data.adsense_opened_date || null,
@@ -134,6 +134,7 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         if ('computer_name' in fields && fields.computer_name != null && (typeof fields.computer_name !== 'string' || fields.computer_name.length > 120)) return Response.json({ status: 400, message: '电脑名称不能超过 120 个字符', data: null }, { status: 400 })
 
         const merged = { ...current, ...fields }
+        if (!Object.prototype.hasOwnProperty.call(fields, 'industry')) merged.industry = normalizeDomainType(current.industry)
         if (fields.platform && fields.platform !== '其他') merged.platform_other = null
         const validationError = validateDomain(merged)
         if (validationError) return Response.json({ status: 400, message: validationError, data: null }, { status: 400 })

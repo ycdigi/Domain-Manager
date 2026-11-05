@@ -3,7 +3,7 @@
         <el-form :disabled="saving" class="domain-edit-form" ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="top">
             <el-form-item label="域名" prop="domain"><el-input v-model="form.domain" placeholder="请输入域名" id="domain-input" autocomplete="off" clearable /></el-form-item>
             <el-form-item label="网站名称"><el-input v-model="form.site_name" placeholder="例如：电气计算器站" maxlength="200" show-word-limit clearable /></el-form-item>
-            <el-form-item label="行业"><el-select v-model="form.industry" placeholder="选择行业" filterable clearable><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></el-form-item>
+            <el-form-item label="类型"><el-select v-model="form.industry" placeholder="选择类型" clearable><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></el-form-item>
             <el-form-item label="域名商" prop="registrar"><el-input v-model="form.registrar" placeholder="请输入域名商" id="registrar-input" autocomplete="off" clearable /></el-form-item>
             <el-form-item label="域名商链接" prop="registrar_link"><el-input v-model="form.registrar_link" placeholder="请输入域名商链接" id="registrar-link-input" autocomplete="off" clearable /></el-form-item>
             <el-form-item label="注册日期" prop="registrar_date"><el-date-picker v-model="form.registrar_date" type="date" placeholder="选择注册日期" value-format="YYYY-MM-DD" id="registrar-date-input" autocomplete="off" clearable /></el-form-item>

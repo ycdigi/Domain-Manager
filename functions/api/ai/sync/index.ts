@@ -1,6 +1,6 @@
 import type { Env, Domain, DomainAiNoteKind, DomainOperationKind } from '../../../types'
 import { checkApiToken } from '../../../utils/auth'
-import { dailyClicksRangeFromNumber, isValidDate, isValidDailyClicksRange, normalizeDomain, todayShanghaiDate, validateDomain } from '../../../utils/domain-validation'
+import { dailyClicksRangeFromNumber, isValidDate, isValidDailyClicksRange, normalizeDomain, normalizeDomainType, todayShanghaiDate, validateDomain } from '../../../utils/domain-validation'
 
 type SyncFields = Partial<Pick<Domain, 'status' | 'site_name' | 'industry' | 'seo_last_date' | 'daily_clicks' | 'daily_clicks_range' | 'clicks_updated_date' | 'platform' | 'platform_other' | 'wp_calculator_count' | 'wp_article_count' | 'content_stats_updated_date' | 'adsense_connected' | 'adsense_opened_date' | 'memo'>> & {
     adsense_account?: string | null
@@ -72,6 +72,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             service_type: current.service_type,
             domain: normalizedDomain
         }
+        if (!has(fields, 'industry')) merged.industry = normalizeDomainType(current.industry)
         if (fields.platform && fields.platform !== 'WordPress') {
             merged.wp_calculator_count = null
             merged.wp_article_count = null

@@ -66,6 +66,12 @@ html.dm-ui .el-dialog .el-table .cell { overflow-wrap: anywhere; }
   html.dm-ui .el-dialog__headerbtn { min-width: var(--touch-target); min-height: var(--touch-target); }
   html.dm-ui .el-message-box { max-width: calc(100% - 24px); padding: var(--space-md); }
 }
+@media (min-width: 1024px) {
+  html.dm-ui body { font-size: 15px; }
+  html.dm-ui .el-button, html.dm-ui .el-input, html.dm-ui .el-select, html.dm-ui .el-form-item__label { font-size: 14px; }
+  html.dm-ui .el-table { font-size: 14px; }
+  html.dm-ui .el-table th.el-table__cell { font-size: 13px; }
+}
 @media (prefers-reduced-motion: reduce) {
   html.dm-ui *, html.dm-ui *::before, html.dm-ui *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }
 }
