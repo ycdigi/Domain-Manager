@@ -250,7 +250,7 @@ test('ledger uses search and platform tabs with WordPress-only counts', () => {
 
 test('ledger service provider cell can add an existing resource', () => {
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
-  assert.match(home, /添加资源|去添加/)
+  assert.match(home, /选择|先添加账号/)
   assert.match(home, /\/api\/resources\/links/)
   assert.match(home, /resourceOptionLabel/)
   assert.match(home, /resourceRole/)
@@ -259,8 +259,18 @@ test('ledger service provider cell can add an existing resource', () => {
 test('resource account cards expose the missing resource step', () => {
   const resources = fs.readFileSync(path.join(repo, 'src/views/Resources.vue'), 'utf8')
   assert.match(resources, /新增资源/)
-  assert.match(resources, /账号已存在，但还没有可绑定的网站资源/)
+  assert.match(resources, /账号已存在，但还没有具体资源/)
   assert.match(resources, /openResourceFormFor/)
+})
+
+test('provider account selection can create an account-level resource link', () => {
+  const links = fs.readFileSync(path.join(repo, 'functions/api/resources/links/index.ts'), 'utf8')
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  assert.match(links, /account_id\?: number/)
+  assert.match(links, /account:\$\{account\.id\}/)
+  assert.match(links, /账号归属/)
+  assert.match(home, /kind === 'account'/)
+  assert.match(home, /\/api\/resources\/accounts/)
 })
 
 test('copy actions share the clipboard fallback and keep domain copy local', () => {

@@ -40,7 +40,7 @@
                         <el-table-column prop="daily_clicks" label="日点击" min-width="96" sortable :sort-method="compareDailyClicks"><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_income_usd" label="AdSense收入" min-width="118" sortable><template #default="scope"><span v-if="scope.row.adsense_income_detail_count">USD {{ Number(scope.row.adsense_income_usd || 0).toFixed(2) }}</span><span v-else class="page-muted">未细化</span></template></el-table-column>
-                        <el-table-column label="服务商" min-width="180" show-overflow-tooltip><template #default="scope"><div class="provider-cell"><span :title="scope.row.resource_names || '未关联'">{{ scope.row.resource_names || '未关联' }}</span><el-select v-if="resourceOptions.length" class="provider-add-select" size="small" :model-value="undefined" placeholder="添加" :loading="resourceOptionsLoading" @change="value => handleResourceChange(scope.row, value)"><el-option v-for="resource in resourceOptions" :key="resource.id" :label="resourceOptionLabel(resource)" :value="resource.id" /></el-select><el-button v-else text size="small" @click="router.push({ name: 'Resources' })">先添加资源</el-button></div></template></el-table-column>
+                        <el-table-column label="服务商" min-width="180" show-overflow-tooltip><template #default="scope"><div class="provider-cell"><span :title="scope.row.resource_names || '未关联'">{{ scope.row.resource_names || '未关联' }}</span><el-select v-if="resourceOptions.length" class="provider-add-select" size="small" :model-value="undefined" placeholder="选择" :loading="resourceOptionsLoading" @change="value => handleResourceChange(scope.row, value)"><el-option v-for="resource in resourceOptions" :key="resource.value" :label="resourceOptionLabel(resource)" :value="resource.value" /></el-select><el-button v-else text size="small" @click="router.push({ name: 'Resources' })">先添加账号</el-button></div></template></el-table-column>
                         <el-table-column prop="expiry_date" label="到期日期" min-width="100" sortable><template #default="scope"><span :class="expiryState(scope.row).className">{{ scope.row.expiry_date || '未记录' }}</span></template></el-table-column>
                         <el-table-column label="电脑" min-width="155"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.computer_name || ''" placeholder="选择 / 添加" filterable allow-create default-first-option clearable @change="value => handleComputerChange(scope.row, value)"><el-option v-for="computer in computerOptions" :key="computer" :label="computer" :value="computer" /></el-select></template></el-table-column>
                         <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" :title="`详情：${scope.row.domain}`" :aria-label="`详情：${scope.row.domain}`" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" :title="`修改：${scope.row.domain}`" :aria-label="`修改：${scope.row.domain}`" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" :title="`删除：${scope.row.domain}`" :aria-label="`删除：${scope.row.domain}`" @click="handleDelete(scope.row)" /></div></template></el-table-column>
@@ -135,7 +135,7 @@ const detectProgress = ref({ total: 0, done: 0, changed: 0, failed: 0 });
 const domainSaving = ref(false);
 const quickFieldSaving = ref(false);
 const adsenseSaving = ref(false);
-interface ResourceOption { id: number; provider: string; name: string; account_name?: string | null; status?: string }
+interface ResourceOption { value: string; kind: 'resource' | 'account'; id: number; provider: string; name: string; account_id?: number; account_name?: string | null; identifier?: string | null; status?: string }
 const resourceOptions = ref<ResourceOption[]>([]);
 const resourceOptionsLoading = ref(false);
 const dialogVisible = ref(false);
@@ -186,12 +186,12 @@ const handleImport = () => { void router.push({ name: 'Data' }); };
 const handleComputerChange = async (row: DomainData, value: string | null) => { const name = value?.trim() || ''; if (!row.id || row.computer_name === name) return; const previous = row.computer_name; row.computer_name = name || null; if (name && !computerOptions.value.includes(name)) { computerOptions.value.push(name); localStorage.setItem(computerStorageKey, JSON.stringify(computerOptions.value)); } try { await api.patch(`/api/domains/${row.id}`, { computer_name: name || null }); } catch (error) { row.computer_name = previous || null; ElMessage.error(error instanceof Error ? error.message : '电脑信息保存失败'); } };
 const resourceOptionLabel = (resource: ResourceOption) => `${providerLabel(resource.provider)} · ${resource.account_name ? `${resource.account_name} / ` : ''}${resource.name}`;
 const resourceRole = (provider: string) => ({ github: '代码仓库', cloudflare: '部署平台', vhost: '虚拟主机', vps: 'VPS' }[provider] || '其他');
-const handleResourceChange = async (row: DomainData, resourceId: number | undefined) => {
-    if (!row.id || !resourceId) return;
-    const resource = resourceOptions.value.find(item => item.id === Number(resourceId));
+const handleResourceChange = async (row: DomainData, value: string | undefined) => {
+    if (!row.id || !value) return;
+    const resource = resourceOptions.value.find(item => item.value === value);
     if (!resource) return;
     try {
-        await api.post('/api/resources/links', { domain_id: row.id, resource_id: resource.id, role: resourceRole(resource.provider), is_primary: !row.resource_count });
+        await api.post('/api/resources/links', resource.kind === 'account' ? { domain_id: row.id, account_id: resource.account_id, role: '账号归属', is_primary: !row.resource_count } : { domain_id: row.id, resource_id: resource.id, role: resourceRole(resource.provider), is_primary: !row.resource_count });
         invalidateData('/api/domains', '/api/resources', '/api/resources/links', '/api/dashboard/summary');
         await loadDomains();
         ElMessage.success(`已关联资源：${resourceOptionLabel(resource)}`);
@@ -200,8 +200,10 @@ const handleResourceChange = async (row: DomainData, resourceId: number | undefi
 const loadResourceOptions = async (force = false) => {
     resourceOptionsLoading.value = true;
     try {
-        const rows = await cachedGet<ResourceOption[]>('/api/resources', force);
-        resourceOptions.value = rows.filter(resource => resource.status !== '停用');
+        const [resources, accounts] = await Promise.all([cachedGet<ResourceOption[]>('/api/resources', force), cachedGet<Array<{ id: number; provider: string; name: string; login_email?: string | null; status?: string }>>('/api/resources/accounts', force)]);
+        const actualResources = resources.filter(resource => resource.status !== '停用' && !resource.identifier?.startsWith('account:')).map(resource => ({ ...resource, value: `resource:${resource.id}`, kind: 'resource' as const }));
+        const accountOptions = accounts.filter(account => account.status !== '停用').map(account => ({ value: `account:${account.id}`, kind: 'account' as const, id: account.id, account_id: account.id, provider: account.provider, name: '账号归属', account_name: account.name, status: account.status }));
+        resourceOptions.value = [...actualResources, ...accountOptions];
     } catch { resourceOptions.value = []; }
     finally { resourceOptionsLoading.value = false; }
 };

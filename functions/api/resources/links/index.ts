@@ -20,11 +20,23 @@ export const onRequestGet: PagesFunction<Env> = async context => {
 export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
-        const data = await context.request.json() as Partial<DomainResourceLink>
-        if (!Number.isInteger(data.domain_id) || !Number.isInteger(data.resource_id) || !data.role?.trim()) return json(null, 400, '网站、资源和角色不能为空')
+        const data = await context.request.json() as Partial<DomainResourceLink> & { account_id?: number }
+        if (!Number.isInteger(data.domain_id) || !data.role?.trim() || (!Number.isInteger(data.resource_id) && !Number.isInteger(data.account_id))) return json(null, 400, '网站、账号或资源和角色不能为空')
+        let resourceId = data.resource_id
+        if (!resourceId && data.account_id) {
+            const account = await context.env.DB.prepare('SELECT id, provider, name FROM provider_accounts WHERE id = ?').bind(data.account_id).first<{ id: number; provider: string; name: string }>()
+            if (!account) return json(null, 400, '服务商账号不存在')
+            const existing = await context.env.DB.prepare("SELECT id FROM provider_resources WHERE account_id = ? AND identifier = ?").bind(account.id, `account:${account.id}`).first<{ id: number }>()
+            if (existing) resourceId = existing.id
+            else {
+                const created = await context.env.DB.prepare(`INSERT INTO provider_resources (account_id, provider, name, identifier, status, memo) VALUES (?, ?, ?, ?, '正常', ?) RETURNING id`)
+                    .bind(account.id, account.provider, `${account.name}（账号归属）`, `account:${account.id}`, '由账号绑定自动生成，可在后续补充具体 Pages、Zone 或服务器资源').run<{ id: number }>()
+                resourceId = created.results?.[0]?.id
+            }
+        }
         const [domain, resource] = await Promise.all([
             context.env.DB.prepare('SELECT id FROM domains WHERE id = ?').bind(data.domain_id).first(),
-            context.env.DB.prepare('SELECT id FROM provider_resources WHERE id = ?').bind(data.resource_id).first()
+            context.env.DB.prepare('SELECT id FROM provider_resources WHERE id = ?').bind(resourceId).first()
         ])
         if (!domain || !resource) return json(null, 400, '网站或资源不存在')
         if (data.is_primary) await context.env.DB.prepare('UPDATE domain_resources SET is_primary = 0 WHERE domain_id = ?').bind(data.domain_id).run()
@@ -33,7 +45,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             VALUES (?, ?, ?, ?, ?)
             ON CONFLICT(domain_id, resource_id, role) DO UPDATE SET is_primary = excluded.is_primary, memo = excluded.memo
             RETURNING *
-        `).bind(data.domain_id, data.resource_id, data.role.trim(), data.is_primary ? 1 : 0, data.memo || '').run<DomainResourceLink>()
+        `).bind(data.domain_id, resourceId, data.role.trim(), data.is_primary ? 1 : 0, data.memo || '').run<DomainResourceLink>()
         return json(result.results?.[0] || null, 201, '资源关联成功')
     } catch (error) { return json(null, 409, error instanceof Error ? error.message : '资源关联失败') }
 }
