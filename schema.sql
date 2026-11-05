@@ -50,6 +50,7 @@ CREATE TABLE IF NOT EXISTS adsense_accounts (
     currency TEXT NOT NULL DEFAULT 'USD',
     status TEXT NOT NULL DEFAULT '未知',
     publisher_id TEXT,
+    opened_date TEXT,
     memo TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

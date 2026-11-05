@@ -29,6 +29,7 @@ test('schema is repeatable and includes resource tables', () => {
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /industry/)
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /computer_name/)
     assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
+    assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /opened_date/)
   } finally {
     fs.rmSync(path.dirname(db), { recursive: true, force: true })
   }
@@ -399,10 +400,11 @@ test('v1.6 migration preserves legacy domains and adds site identity fields', ()
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/migration-v15.db'
   try {
     runSql(db, `CREATE TABLE domains (id INTEGER PRIMARY KEY AUTOINCREMENT, domain TEXT NOT NULL, registrar TEXT NOT NULL, registrar_link TEXT, registrar_date TEXT NOT NULL, expiry_date TEXT NOT NULL, service_type TEXT NOT NULL, status TEXT NOT NULL DEFAULT '离线', tgsend INTEGER DEFAULT 0, st_tgsend INTEGER DEFAULT 1, memo TEXT, created_at DATETIME DEFAULT CURRENT_TIMESTAMP); INSERT INTO domains(domain, registrar, registrar_date, expiry_date, service_type) VALUES ('legacy.example.com', 'test', '2025-01-01', '2026-12-31', '正常网站');`)
-    for (const version of ['v1.1.0', 'v1.2.0', 'v1.3.0', 'v1.4.0', 'v1.5.0', 'v1.6.0', 'v1.7.0', 'v1.8.0', 'v1.9.0']) runSql(db, fs.readFileSync(path.join(repo, `schema-migration-${version}.sql`), 'utf8'))
+    for (const version of ['v1.1.0', 'v1.2.0', 'v1.3.0', 'v1.4.0', 'v1.5.0', 'v1.6.0', 'v1.7.0', 'v1.8.0', 'v1.9.0', 'v1.10.0']) runSql(db, fs.readFileSync(path.join(repo, `schema-migration-${version}.sql`), 'utf8'))
     const row = runSql(db, "SELECT domain || '|' || platform FROM domains;").trim()
     assert.equal(row, 'legacy.example.com|其他')
     assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /publisher_id/)
+    assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /opened_date/)
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /site_name/)
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /industry/)
     assert.match(runSql(db, 'PRAGMA table_info(domains);'), /daily_clicks_range/)
@@ -558,9 +560,23 @@ test('v1.9 migration adds monthly transfer metadata and optional site income bre
   }
 })
 
+test('v1.10 migration adds optional AdSense account opening dates', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/income-v110.db'
+  try {
+    runSql(db, `CREATE TABLE adsense_accounts (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, owner TEXT NOT NULL, publisher_id TEXT); INSERT INTO adsense_accounts(name, owner) VALUES ('main', 'self');`)
+    runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.10.0.sql'), 'utf8'))
+    assert.match(runSql(db, 'PRAGMA table_info(adsense_accounts);'), /opened_date/)
+    runSql(db, "UPDATE adsense_accounts SET opened_date='2026-01-15' WHERE id=1;")
+    assert.equal(runSql(db, 'SELECT opened_date FROM adsense_accounts WHERE id=1;').trim(), '2026-01-15')
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
 test('AdSense page exposes USD/CNY transfer date and optional site breakdown', () => {
   const page = fs.readFileSync(path.join(repo, 'src/views/Adsense.vue'), 'utf8')
   const income = fs.readFileSync(path.join(repo, 'functions/api/adsense/income/index.ts'), 'utf8')
+  const accounts = fs.readFileSync(path.join(repo, 'functions/api/adsense/accounts/index.ts'), 'utf8')
   assert.match(page, /美元金额（USD）/)
   assert.match(page, /人民币金额（CNY，可空）/)
   assert.match(page, /转账日期（可空）/)
@@ -569,6 +585,13 @@ test('AdSense page exposes USD/CNY transfer date and optional site breakdown', (
   assert.match(page, /offset < 6/)
   assert.match(page, /income-heading-month/)
   assert.match(page, /changeMonthFromEvent/)
+  assert.match(page, /归属人累计收入/)
+  assert.match(page, /累计 USD/)
+  assert.match(page, /累计人民币/)
+  assert.match(page, /最早开通日期/)
+  assert.match(accounts, /income_usd_total/)
+  assert.match(accounts, /income_cny_total/)
+  assert.match(accounts, /opened_date/)
   assert.match(income, /adsense_income_domains/)
   assert.match(income, /amount_cny/)
   assert.match(income, /transfer_date/)

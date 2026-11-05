@@ -2,12 +2,22 @@
  <div class="workspace-page">
   <WorkspaceHeading title="AdSense" subtitle="账号、归属人和月收入"><el-button :disabled="loading || saving" @click="load(true)">刷新</el-button><el-button @click="exportIncome">导出收入</el-button><el-button type="primary" @click="editAccount()">新增账号</el-button></WorkspaceHeading>
   <div v-if="error || contextError" class="page-error" role="alert">{{ error || contextError }}<el-button v-if="error" @click="load(true)">重试</el-button><el-button v-else @click="router.push({ name: 'Adsense' })">查看全部账号</el-button></div>
-  <section class="page-panel"><p class="page-muted month-summary">当前汇总月份：{{ month }}。选择账号后，可在“月收入”标题处切换最近 6 个月。</p><ul class="page-list"><li v-for="item in ownerTotals" :key="item.key"><span>{{ item.owner }} · USD</span><strong>{{ item.amount.toFixed(2) }}</strong></li></ul><p v-if="!ownerTotals.length" class="page-muted">暂无账号收入。</p></section>
+  <section class="page-panel">
+   <div class="panel-heading"><div><h2>归属人累计收入</h2><p class="page-muted">汇总所有已记录月份；月份选择只影响选中账号的明细。</p></div><span class="page-muted">{{ ownerTotals.length }} 位归属人</span></div>
+   <el-table v-if="ownerTotals.length" :data="ownerTotals" size="small" class="owner-summary-table">
+    <el-table-column prop="owner" label="归属人" min-width="120" />
+    <el-table-column label="累计 USD" min-width="120"><template #default="scope">USD {{ scope.row.usd.toFixed(2) }}</template></el-table-column>
+    <el-table-column label="累计人民币" min-width="130"><template #default="scope">{{ scope.row.cny == null ? '未记录' : `CNY ${scope.row.cny.toFixed(2)}` }}</template></el-table-column>
+    <el-table-column prop="siteCount" label="站点数量" min-width="100" />
+    <el-table-column label="最早开通日期" min-width="130"><template #default="scope">{{ scope.row.openedDate || '未记录' }}</template></el-table-column>
+   </el-table>
+   <p v-else class="page-muted">暂无 AdSense 账号收入。</p>
+  </section>
   <section v-if="editing" class="page-panel">
    <div class="panel-heading"><h2>{{ editingId ? `编辑账号：${selected?.name || accountForm.name}` : '新增 AdSense 账号' }}</h2></div>
    <el-form class="page-form page-form-grid" label-position="top" :model="accountForm" @submit.prevent="saveAccount">
     <el-form-item label="账号名称" required><el-input v-model="accountForm.name" maxlength="200" /></el-form-item><el-form-item label="归属人" required><el-input v-model="accountForm.owner" maxlength="200" /></el-form-item>
-    <el-form-item label="Publisher ID"><el-input v-model="accountForm.publisher_id" placeholder="pub-xxxxxxxxxxxxxxxx" /></el-form-item>
+    <el-form-item label="Publisher ID"><el-input v-model="accountForm.publisher_id" placeholder="pub-xxxxxxxxxxxxxxxx" /></el-form-item><el-form-item label="账号开通日期"><el-date-picker v-model="accountForm.opened_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
     <el-form-item label="货币"><el-select v-model="accountForm.currency"><el-option v-for="currency in ['USD','CNY','EUR','OTHER']" :key="currency" :label="currency" :value="currency" /></el-select></el-form-item>
     <el-form-item label="账号状态"><el-select v-model="accountForm.status"><el-option v-for="status in ['正常','暂停','未知']" :key="status" :label="status" :value="status" /></el-select></el-form-item>
     <el-form-item label="备注"><el-input v-model="accountForm.memo" /></el-form-item>
@@ -16,7 +26,7 @@
   </section>
   <div class="page-columns">
    <section class="page-panel" v-loading="loading"><div class="panel-heading"><h2>账号列表</h2><span class="page-muted">{{ accounts.length }} 个账号</span></div>
-    <ul class="page-list"><li v-for="account in accounts" :key="account.id"><div><button type="button" class="page-link" :aria-current="selected?.id === account.id ? 'true' : undefined" @click="selectAccount(account.id)">{{ account.name }}</button><p class="page-muted">{{ account.owner }} · {{ account.publisher_id || '未记录 Publisher ID' }}</p><span class="page-muted">{{ account.status }} · 账号货币 {{ account.currency }} · USD {{ Number(account.current_income || 0).toFixed(2) }}</span></div><button type="button" class="page-link" @click="showSites(account.id)">{{ account.linked_domains || 0 }} 个网站</button></li></ul><p v-if="!loading && !accounts.length" class="page-empty">还没有 AdSense 账号。</p>
+    <ul class="page-list"><li v-for="account in accounts" :key="account.id"><div><button type="button" class="page-link" :aria-current="selected?.id === account.id ? 'true' : undefined" @click="selectAccount(account.id)">{{ account.name }}</button><p class="page-muted">{{ account.owner }} · {{ account.publisher_id || '未记录 Publisher ID' }}</p><span class="page-muted">{{ account.status }} · 账号货币 {{ account.currency }} · 累计 USD {{ Number(account.income_usd_total || 0).toFixed(2) }} · 累计 CNY {{ account.income_cny_total == null ? '未记录' : Number(account.income_cny_total).toFixed(2) }} · 开通 {{ account.opened_date || '未记录' }}</span></div><button type="button" class="page-link" @click="showSites(account.id)">{{ account.linked_domains || 0 }} 个网站</button></li></ul><p v-if="!loading && !accounts.length" class="page-empty">还没有 AdSense 账号。</p>
    </section>
    <section class="page-panel">
     <template v-if="selected">
@@ -48,16 +58,16 @@ import { api } from '../utils/request'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { downloadIncome } from '../utils/downloads'
 import type { DomainData } from '../api/domains'
-interface Account { id?: number; name: string; owner: string; publisher_id?: string | null; currency: string; status: string; memo: string; linked_domains?: number; current_income?: number }
+interface Account { id?: number; name: string; owner: string; publisher_id?: string | null; opened_date?: string | null; currency: string; status: string; memo: string; linked_domains?: number; current_income?: number; income_usd_total?: number; income_cny_total?: number | null }
 interface Income { id?: number; adsense_account_id: number; income_month: string; amount: number; amount_usd?: number; amount_cny?: number | null; transfer_date?: string | null; memo: string; site_amounts?: Array<{ domain_id: number; amount_usd: number }> }
 const route = useRoute(); const router = useRouter()
 const month = computed(() => /^\d{4}-(0[1-9]|1[0-2])$/.test(queryText(route.query.month)) ? queryText(route.query.month) : localMonth())
 const accounts = ref<Account[]>([]); const sites = ref<DomainData[]>([]); const loading = ref(false); const saving = ref(false); const error = ref('')
 const selected = computed(() => accounts.value.find(account => String(account.id) === route.query.account))
 const contextError = computed(() => !loading.value && route.query.account && !selected.value ? '指定的 AdSense 账号不存在。' : route.query.month && month.value !== route.query.month ? '月份格式无效，请使用 YYYY-MM。' : '')
-const ownerTotals = computed(() => { const totals = new Map<string, { key: string; owner: string; amount: number }>(); for (const account of accounts.value) { const key = account.owner; const item = totals.get(key) || { key, owner: account.owner, amount: 0 }; item.amount += Number(account.current_income || 0); totals.set(key, item) } return [...totals.values()] })
+const ownerTotals = computed(() => { const totals = new Map<string, { key: string; owner: string; usd: number; cny: number | null; siteCount: number; openedDate: string | null }>(); for (const account of accounts.value) { const key = account.owner.trim() || '未记录'; const item = totals.get(key) || { key, owner: key, usd: 0, cny: null, siteCount: 0, openedDate: null }; item.usd += Number(account.income_usd_total || 0); if (account.income_cny_total != null) item.cny = (item.cny || 0) + Number(account.income_cny_total); item.siteCount += Number(account.linked_domains || 0); if (account.opened_date && (!item.openedDate || account.opened_date < item.openedDate)) item.openedDate = account.opened_date; totals.set(key, item) } return [...totals.values()].sort((a, b) => b.usd - a.usd || a.owner.localeCompare(b.owner)) })
 const linkedSites = computed(() => sites.value.filter(site => site.adsense_account_id === selected.value?.id))
-const emptyAccount = () => ({ name: '', owner: '', publisher_id: '', currency: 'USD', status: '未知', memo: '' })
+const emptyAccount = () => ({ name: '', owner: '', publisher_id: '', opened_date: '', currency: 'USD', status: '未知', memo: '' })
 const accountForm = ref(emptyAccount()); const editing = ref(false); const editingId = ref<number>(); const accountBaseline = ref('')
 const incomeRows = ref<Income[]>([]); const incomeLoading = ref(false); const incomeLoaded = ref(false); const incomeError = ref(''); const incomeForm = ref<{ amount_usd: number | undefined; amount_cny: number | undefined; transfer_date: string; memo: string; siteAmounts: Record<string, number | undefined> }>({ amount_usd: undefined, amount_cny: undefined, transfer_date: '', memo: '', siteAmounts: {} }); const incomeBaseline = ref('')
 const monthOptions = computed(() => { const base = localMonth().split('-').map(Number); const months = new Set<string>(); for (let offset = 0; offset < 6; offset++) { const date = new Date(base[0], base[1] - 1 - offset, 1); months.add(`${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`) } incomeRows.value.forEach(row => months.add(row.income_month)); return [...months].sort((a, b) => b.localeCompare(a)).map(value => ({ value, label: value === month.value ? `${value}（当前）` : incomeRows.value.some(row => row.income_month === value) ? `${value}（已有记录）` : value })) })
@@ -77,7 +87,7 @@ const loadIncome = async (force = false) => {
 const load = async (force = false) => {
  if (force && !(await canDiscard())) return
  const version = ++loadVersion; loading.value = true; error.value = ''
- try { const [data, domains] = await Promise.all([cachedGet<Account[]>(`/api/adsense/accounts?month=${month.value}`, force), cachedGet<DomainData[]>('/api/domains')]); if (version !== loadVersion) return; accounts.value = data; sites.value = domains; await loadIncome(force) }
+ try { const [data, domains] = await Promise.all([cachedGet<Account[]>('/api/adsense/accounts', force), cachedGet<DomainData[]>('/api/domains')]); if (version !== loadVersion) return; accounts.value = data; sites.value = domains; await loadIncome(force) }
  catch (e) { if (version === loadVersion) error.value = e instanceof Error ? e.message : '账号读取失败' }
  finally { if (version === loadVersion) loading.value = false }
 }
@@ -87,7 +97,7 @@ const changeMonth = (value: string) => { if (/^\d{4}-(0[1-9]|1[0-2])$/.test(valu
 const changeMonthFromEvent = (event: Event) => changeMonth((event.target as HTMLSelectElement).value)
 const showSites = (id?: number) => { void router.push({ name: 'Home', query: { adsense_account: String(id) } }) }
 const openSite = (domain: string) => { void router.push({ name: 'Home', query: { site: domain } }) }
-const editAccount = async (account?: Account) => { if (!(await canDiscard())) return; editingId.value = account?.id; accountForm.value = account ? { name: account.name, owner: account.owner, publisher_id: account.publisher_id || '', currency: account.currency, status: account.status, memo: account.memo || '' } : emptyAccount(); accountBaseline.value = JSON.stringify(accountForm.value); editing.value = true }
+const editAccount = async (account?: Account) => { if (!(await canDiscard())) return; editingId.value = account?.id; accountForm.value = account ? { name: account.name, owner: account.owner, publisher_id: account.publisher_id || '', opened_date: account.opened_date || '', currency: account.currency, status: account.status, memo: account.memo || '' } : emptyAccount(); accountBaseline.value = JSON.stringify(accountForm.value); editing.value = true }
 const cancelEdit = async () => { if (await canDiscard()) editing.value = false }
 const saveAccount = async () => {
  if (saving.value) return

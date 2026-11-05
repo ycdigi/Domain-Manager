@@ -11,8 +11,6 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         const params = new URL(context.request.url).searchParams
         const todayParam = params.get('today')
         const today = todayParam && isValidDate(todayParam) ? todayParam : new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-        const monthParam = params.get('month')
-        const month = monthParam && /^\d{4}-(0[1-9]|1[0-2])$/.test(monthParam) ? monthParam : today.slice(0, 7)
         const [{ results: totals }, { results: seo }, { results: clicks }, { results: providers }, { results: ownerIncome }, { results: platforms }, { results: quality }] = await Promise.all([
             db.prepare(`SELECT COUNT(*) AS total_domains,
                 SUM(CASE WHEN expiry_date >= ? AND expiry_date <= date(?, '+30 day') THEN 1 ELSE 0 END) AS expiring_domains,
@@ -43,11 +41,28 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                     COALESCE(r.resource_count, 0) AS resource_count, COALESCE(r.linked_domain_count, 0) AS linked_domain_count
                 FROM providers p LEFT JOIN account_counts a ON a.provider = p.provider
                 LEFT JOIN resource_counts r ON r.provider = p.provider ORDER BY p.provider`).all(),
-            db.prepare(`SELECT a.owner, 'USD' AS currency, COUNT(DISTINCT a.id) AS account_count,
-                COALESCE(SUM(CASE WHEN i.amount_usd = 0 AND i.amount <> 0 THEN i.amount ELSE i.amount_usd END), 0) AS current_income
-                FROM adsense_accounts a
-                LEFT JOIN adsense_income i ON i.adsense_account_id = a.id AND i.income_month = ?
-                GROUP BY a.owner ORDER BY current_income DESC, a.owner COLLATE NOCASE`).bind(month).all()
+            db.prepare(`WITH account_totals AS (
+                    SELECT a.id, a.owner, a.opened_date,
+                        COALESCE((SELECT SUM(CASE WHEN i.amount_usd = 0 AND i.amount <> 0 THEN i.amount ELSE i.amount_usd END)
+                            FROM adsense_income i WHERE i.adsense_account_id = a.id), 0) AS income_usd_total,
+                        (SELECT SUM(i.amount_cny) FROM adsense_income i WHERE i.adsense_account_id = a.id) AS income_cny_total
+                    FROM adsense_accounts a
+                ), owner_totals AS (
+                    SELECT owner, COUNT(*) AS account_count,
+                        SUM(income_usd_total) AS income_usd_total,
+                        SUM(income_cny_total) AS income_cny_total,
+                        MIN(opened_date) AS opened_date
+                    FROM account_totals GROUP BY owner
+                ), site_totals AS (
+                    SELECT a.owner, COUNT(DISTINCT d.id) AS site_count
+                    FROM adsense_accounts a LEFT JOIN domains d ON d.adsense_account_id = a.id
+                    GROUP BY a.owner
+                )
+                SELECT o.owner, 'USD' AS currency, o.account_count,
+                    COALESCE(o.income_usd_total, 0) AS income_usd_total,
+                    o.income_cny_total, COALESCE(s.site_count, 0) AS site_count, o.opened_date
+                FROM owner_totals o LEFT JOIN site_totals s ON s.owner = o.owner
+                ORDER BY income_usd_total DESC, o.owner COLLATE NOCASE`).all()
             ,db.prepare(`SELECT platform, COUNT(*) AS count FROM domains GROUP BY platform ORDER BY platform`).all(),
             db.prepare(`SELECT
                 SUM(CASE WHEN d.adsense_connected = '已开通' AND d.adsense_account_id IS NULL THEN 1 ELSE 0 END) AS adsense_missing_account,

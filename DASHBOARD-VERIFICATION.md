@@ -81,3 +81,9 @@
 - 网站台账新增“AdSense收入”列，仅汇总 `adsense_income_domains` 中明确分配到该站的累计 USD；无站点明细显示“未细化”。USD/CNY 和网站明细输入均支持最多两位小数，服务端同步校验。
 - 新增 `schema-migration-v1.9.0.sql`，迁移旧 `amount` 到 `amount_usd`，创建网站收入明细表；`schema.sql` 已包含新库结构。
 - `npm run build`、`npm run test:auth`、`TMPDIR=/tmp npm run test:data`（37/37）、`npm run lint:cleanup` 和 `git diff --check` 均通过；未写入生产 D1。
+
+## AdSense 归属人累计总览验收（2026-11-06）
+
+- 账号列表上方按归属人汇总全部历史月份，显示累计 USD、累计人民币、去重站点数量和最早账号开通日期。
+- 选中账号后的月份选择只影响该账号的月收入编辑与历史明细，不会改变归属人累计总览口径。
+- `v1.10.0` 为 `adsense_accounts.opened_date` 增量迁移；旧账号数据保留且开通日期为空。

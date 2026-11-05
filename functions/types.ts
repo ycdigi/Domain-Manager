@@ -98,10 +98,13 @@ export interface AdsenseAccount {
     currency: string
     status: string
     publisher_id?: string | null
+    opened_date?: string | null
     memo: string
     created_at?: string
     linked_domains?: number
     current_income?: number
+    income_usd_total?: number
+    income_cny_total?: number | null
 }
 
 export interface AdsenseIncome {
