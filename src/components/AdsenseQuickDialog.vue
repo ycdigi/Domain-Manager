@@ -1,6 +1,6 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="domain ? `补充 AdSense 信息 · ${domain}` : '补充 AdSense 信息'" width="420px" :close-on-click-modal="false">
-    <el-form ref="formRef" :model="form" :rules="rules" label-width="92px" @submit.prevent="submit" label-position="top">
+  <el-dialog v-model="dialogVisible" :title="domain ? `补充 AdSense 信息 · ${domain}` : '补充 AdSense 信息'" width="420px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+    <el-form :disabled="saving" ref="formRef" :model="form" :rules="rules" label-width="92px" @submit.prevent="submit" label-position="top">
       <el-form-item label="AdSense账号" prop="adsense_account_id">
         <el-select v-model="form.adsense_account_id" placeholder="选择关联账号" clearable>
           <el-option v-for="account in accounts" :key="account.id" :label="`${account.name} · ${account.owner}`" :value="account.id || 0" />
@@ -12,8 +12,8 @@
     </el-form>
     <template #footer>
       <span class="dialog-footer">
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submit">保存</el-button>
+        <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
       </span>
     </template>
   </el-dialog>
@@ -26,7 +26,7 @@ import type { FormInstance, FormRules } from 'element-plus'
 interface AccountOption { id?: number; name: string; owner: string }
 interface AdsenseQuickValue { adsense_account_id: number; adsense_opened_date: string }
 
-const props = defineProps<{ visible: boolean; domain?: string | null; accounts: AccountOption[]; accountId?: number | null; openedDate?: string | null; registrarDate?: string | null }>()
+const props = defineProps<{ saving?: boolean; visible: boolean; domain?: string | null; accounts: AccountOption[]; accountId?: number | null; openedDate?: string | null; registrarDate?: string | null }>()
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'save', value: AdsenseQuickValue): void }>()
 const dialogVisible = ref(props.visible)
 const formRef = ref<FormInstance>()
@@ -43,7 +43,7 @@ watch(() => props.visible, value => {
 watch(dialogVisible, value => emit('update:visible', value))
 
 const submit = async () => {
-  if (!formRef.value) return
+  if (props.saving || !formRef.value) return
   await formRef.value.validate(valid => { if (valid) emit('save', { ...form.value }) })
 }
 </script>

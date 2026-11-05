@@ -5,6 +5,7 @@
                 <WorkspaceHeading :title="platformTab === 'all' ? '全部网站' : `${platformTab} 网站`" :subtitle="loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名`" />
                 <div class="ledger-actions" aria-label="域名管理操作">
                     <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
+                    <el-button :disabled="loading || !!loadError || detecting || !filteredDomains.length" :loading="detecting" @click="handleDetect">检测网站状态（{{ filteredDomains.length }}）</el-button>
                     <el-button type="primary" :icon="Plus" @click="handleAdd">新增域名</el-button>
                     <el-button :icon="Upload" @click="handleImport">导入</el-button>
                     <el-button :icon="Download" @click="handleExport">导出</el-button>
@@ -26,13 +27,13 @@
                         <el-tag v-if="sourceLabel" closable @close="clearSource">{{ sourceLabel }}</el-tag>
                         <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、行业、备注" clearable /></div>
                     </div>
+                    <div v-if="detectProgress.total" class="detection-progress" role="status">已检测 {{ detectProgress.done }} / {{ detectProgress.total }} · 状态变化 {{ detectProgress.changed }} · 检测失败 {{ detectProgress.failed }}<span v-if="!detecting"> · {{ queue.pending.value.length ? '部分结果待同步' : '已同步' }}</span></div>
                     <div v-if="contextError" class="load-error" role="alert">{{ contextError }}</div>
                     <div v-if="loadError" class="load-error" role="alert"><span>{{ loadError }}</span><el-button @click="loadDomains">重试</el-button></div>
                     <el-table ref="tableRef" :data="filteredDomains" v-loading="loading" element-loading-text="正在加载域名…" class="custom-table" :row-class-name="tableRowClassName" @sort-change="handleTableSortChange">
                         <el-table-column prop="site_name" label="网站名称" min-width="170" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" :title="scope.row.site_name || '未命名'" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
-                        <el-table-column prop="domain" label="域名" min-width="200" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link" :title="scope.row.domain" :aria-label="`打开 ${scope.row.domain}`">{{ scope.row.domain }}</a><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
+                        <el-table-column prop="domain" label="域名" min-width="200" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link" :title="scope.row.domain" :aria-label="`打开 ${scope.row.domain}`">{{ scope.row.domain }}</a><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click.stop="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
                         <el-table-column v-if="platformTab === 'all'" prop="platform" label="技术栈" min-width="90" sortable><template #default="scope">{{ platformText(scope.row) }}</template></el-table-column>
-                        <el-table-column label="SEO" width="54"><template #default="scope"><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div></template></el-table-column>
                         <el-table-column v-if="platformTab === 'WordPress'" label="文章数量" min-width="82"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /></template></el-table-column>
                         <el-table-column v-if="platformTab === 'WordPress'" label="计算器数量" min-width="92"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_calculator_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 计算器数量`" @change="value => handleWordPressCount(scope.row, 'wp_calculator_count', value)" /></template></el-table-column>
                         <el-table-column prop="industry" label="行业" min-width="90" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
@@ -42,7 +43,7 @@
                         <el-table-column prop="registrar_date" label="注册时间" min-width="100" sortable><template #default="scope">{{ scope.row.registrar_date || '未记录' }}</template></el-table-column>
                         <el-table-column label="电脑" min-width="155"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.computer_name || ''" placeholder="选择 / 添加" filterable allow-create default-first-option clearable @change="value => handleComputerChange(scope.row, value)"><el-option v-for="computer in computerOptions" :key="computer" :label="computer" :value="computer" /></el-select></template></el-table-column>
                         <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" :title="`详情：${scope.row.domain}`" :aria-label="`详情：${scope.row.domain}`" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" :title="`修改：${scope.row.domain}`" :aria-label="`修改：${scope.row.domain}`" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" :title="`删除：${scope.row.domain}`" :aria-label="`删除：${scope.row.domain}`" @click="handleDelete(scope.row)" /></div></template></el-table-column>
-                        <template #empty><div class="empty-state" v-if="!loading && !loadError"><p>还没有域名</p><span>新增或导入域名后，会在此显示。</span><button type="button" class="table-action" @click="handleAdd">新增域名</button></div><div v-else class="empty-state"><span>{{ loading ? '正在加载域名…' : '域名列表未能加载，请重试。' }}</span></div></template>
+                        <template #empty><div class="empty-state" v-if="!loading && !loadError"><template v-if="domains.length"><p>没有匹配的网站</p><span>调整搜索或清除来源条件后再试。</span><button type="button" class="table-action" @click="clearResultsFilter">清除搜索与来源条件</button></template><template v-else><p>还没有域名</p><span>新增或导入域名后，会在此显示。</span><button type="button" class="table-action" @click="handleAdd">新增域名</button></template></div><div v-else class="empty-state"><span>{{ loading ? '正在加载域名…' : '域名列表未能加载，请重试。' }}</span></div></template>
                     </el-table>
                     <p class="table-scroll-hint">左右滑动查看全部字段和操作。</p>
                 </section>
@@ -58,10 +59,10 @@
             </div>
         </main>
 
-        <DomainDialog v-model:visible="dialogVisible" :is-edit="isEdit" :edit-data="editData" :accounts="adsenseAccounts" @submit="handleDialogSubmit" />
+        <DomainDialog v-model:visible="dialogVisible" :saving="domainSaving" :is-edit="isEdit" :edit-data="editData" :accounts="adsenseAccounts" @submit="handleDialogSubmit" />
         <DomainDetailDrawer v-model:visible="detailVisible" :domain="detailDomain" @changed="refreshDomainDetails" @edit="handleDetailEdit" />
-        <QuickFieldDialog v-model:visible="quickFieldVisible" :title="quickFieldTitle" :context="quickFieldDomain?.domain" :label="quickFieldLabel" :value="quickFieldValue" :placeholder="quickFieldPlaceholder" :maxlength="quickFieldMode === 'platform_other' ? 100 : 200" @save="saveQuickField" />
-        <AdsenseQuickDialog v-model:visible="adsenseQuickVisible" :domain="adsenseQuickDomain?.domain" :accounts="adsenseAccounts" :account-id="adsenseQuickDomain?.adsense_account_id" :opened-date="adsenseQuickDomain?.adsense_opened_date" :registrar-date="adsenseQuickDomain?.registrar_date" @save="saveAdsenseQuick" />
+        <QuickFieldDialog v-model:visible="quickFieldVisible" :saving="quickFieldSaving" :title="quickFieldTitle" :context="quickFieldDomain?.domain" :label="quickFieldLabel" :value="quickFieldValue" :placeholder="quickFieldPlaceholder" :maxlength="quickFieldMode === 'platform_other' ? 100 : 200" @save="saveQuickField" />
+        <AdsenseQuickDialog v-model:visible="adsenseQuickVisible" :saving="adsenseSaving" :domain="adsenseQuickDomain?.domain" :accounts="adsenseAccounts" :account-id="adsenseQuickDomain?.adsense_account_id" :opened-date="adsenseQuickDomain?.adsense_opened_date" :registrar-date="adsenseQuickDomain?.registrar_date" @save="saveAdsenseQuick" />
     </div>
 </template>
 
@@ -128,6 +129,11 @@ const loading = ref(false);
 const loadError = ref('');
 const overviewError = ref('');
 const refreshing = ref(false);
+const detecting = ref(false);
+const detectProgress = ref({ total: 0, done: 0, changed: 0, failed: 0 });
+const domainSaving = ref(false);
+const quickFieldSaving = ref(false);
+const adsenseSaving = ref(false);
 const dialogVisible = ref(false);
 const isEdit = ref(false);
 const editData = ref<DomainData>();
@@ -153,6 +159,7 @@ const sourceLabel = computed(() => {
     if (route.query.provider_account) return `资源账号：${sourceLinks.value.find(link => String(link.account_id) === route.query.provider_account)?.account_name || route.query.provider_account}`;
     return '';
 });
+const clearResultsFilter = () => { searchText.value = ''; const query = { ...route.query }; delete query.q; delete query.adsense_account; delete query.resource; delete query.provider_account; void router.replace({ query }); };
 const clearSource = () => { const query = { ...route.query }; delete query.adsense_account; delete query.resource; delete query.provider_account; void router.push({ query }); };
 const contextError = ref('');
 const filteredDomains = computed(() => domains.value.filter(row => {
@@ -185,12 +192,12 @@ const handleTableSortChange = ({ prop, order }: { prop: string; order: 'ascendin
 const daysSince = (date: string) => { const [y,m,d] = date.split('-').map(Number); const today = localDate().split('-').map(Number); return Math.max(0, Math.floor((Date.UTC(today[0], today[1] - 1, today[2]) - Date.UTC(y, m - 1, d)) / 86400000)); };
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const toggleSidebar = () => { sidebarCollapsed.value = !sidebarCollapsed.value; };
-const seoState = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: string | null }) => {
-    if (!row.seo_last_date) return { kind: 'never', actionable: true, label: '未优化', title: '从未优化，点击记录今天' };
+const seoState = (row: Pick<DomainData, 'seo_last_date'> & { domain?: string }) => {
+    if (!row.seo_last_date) return { kind: 'never', actionable: true, label: '未优化', title: `${'domain' in row ? row.domain + '：' : ''}从未优化，点击记录今天` };
     const days = daysSince(row.seo_last_date);
-    if (days <= 15) return { kind: 'recent', actionable: false, label: `${days} 天前`, title: `最近 ${days} 天前优化，第 15 天内不可重复操作` };
-    if (days <= 30) return { kind: 'stale', actionable: true, label: `${days} 天前`, title: `最近 ${days} 天前优化，可以再次安排` };
-    return { kind: 'overdue', actionable: true, label: `${days} 天前`, title: `已经 ${days} 天未优化，建议优先处理` };
+    if (days <= 15) return { kind: 'recent', actionable: false, label: `${days} 天前`, title: `${row.domain || '网站'} · ${row.seo_last_date}：最近 ${days} 天前优化，第 15 天内不可重复操作` };
+    if (days <= 30) return { kind: 'stale', actionable: true, label: `${days} 天前`, title: `${row.domain || '网站'} · ${row.seo_last_date}：最近 ${days} 天前优化，可以再次安排` };
+    return { kind: 'overdue', actionable: true, label: `${days} 天前`, title: `${row.domain || '网站'} · ${row.seo_last_date}：已经 ${days} 天未优化，建议优先处理` };
 };
 const seoNeedsAttention = (row: Pick<DomainData, 'seo_last_date'> | { seo_last_date: string | null }) => ['never', 'overdue'].includes(seoState(row).kind);
 const hasRecentOperation = (row: Pick<DomainData, 'latest_operation_date'>) => Boolean(row.latest_operation_date && row.latest_operation_date <= localDate() && daysSince(row.latest_operation_date) <= 7);
@@ -204,8 +211,29 @@ const clickRangeFromNumber = (value: number | null | undefined) => value == null
 const clickRangeRank = (row: DomainData) => ({ under10: 1, '10to29': 2, '30to49': 3, '50to99': 4, over100: 5 } as Record<string, number>)[row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks) || ''] || 0;
 const compareDailyClicks = (a: DomainData, b: DomainData) => clickRangeRank(a) - clickRangeRank(b);
 const copyDomain = async (domain: string) => { try { await copyText(domain); ElMessage.success(`已复制域名：${domain}`); } catch { ElMessage.error('复制失败，请手动复制'); } };
-const handleSeoToday = async (row: DomainData) => { if (!row.id || !seoState(row).actionable) return; const date = localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }); queue.enqueue({ type: 'domain_operation_add', domain_id: row.id, operation_date: date, operation_kind: 'SEO' }); row.seo_last_date = date; row.latest_operation_date = date; await queue.flush(); invalidateData('/api/dashboard/summary'); await loadDashboard(); await applyTableSort(); ElMessage.success('已记录今天的 SEO 优化'); } catch(error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 日期已加入待同步队列'); } };
-const handleDailyClicks = async (row: DomainData, value: string | null) => { if (!row.id) return; const previous = row.daily_clicks_range; row.daily_clicks_range = value as DomainData['daily_clicks_range']; row.daily_clicks = null; row.clicks_updated_date = value == null ? null : localDate(); try { queue.enqueue({ type: 'domain_patch', id: row.id, fields: { daily_clicks: null, daily_clicks_range: value, clicks_updated_date: row.clicks_updated_date } }); await queue.flush(); invalidateData('/api/dashboard/summary'); await loadDashboard(); await applyTableSort(); } catch (error) { row.daily_clicks_range = previous; ElMessage.error(error instanceof Error ? error.message : '日点击区间已加入待同步队列'); } };
+const reportQueued = (message: string, pending: boolean) => pending ? ElMessage.warning('修改已保存在本机，尚未同步；请查看同步状态') : ElMessage.success(message);
+const handleSeoToday = async (row: DomainData) => {
+    if (!row.id || !seoState(row).actionable) return;
+    const date = localDate();
+    try {
+        queue.enqueueMany([{ type: 'domain_patch', id: row.id, fields: { seo_last_date: date } }, { type: 'domain_operation_add', domain_id: row.id, operation_date: date, operation_kind: 'SEO' }]);
+        row.seo_last_date = date; row.latest_operation_date = date;
+        await queue.flush();
+        reportQueued('已记录今天的 SEO 优化', queue.pending.value.some(item => item.operation.id === row.id || item.operation.domain_id === row.id));
+        await loadDashboard(); await applyTableSort();
+    } catch (error) { ElMessage.error(error instanceof Error ? error.message : 'SEO 操作未能加入队列'); }
+};
+const handleDailyClicks = async (row: DomainData, value: string | null) => {
+    if (!row.id) return;
+    const range = value || null;
+    if ((row.daily_clicks_range || clickRangeFromNumber(row.daily_clicks)) === range) return;
+    try {
+        const fields = { daily_clicks: null, daily_clicks_range: range, clicks_updated_date: range ? localDate() : null };
+        queue.enqueue({ type: 'domain_patch', id: row.id, fields }); Object.assign(row, fields);
+        await queue.flush(); reportQueued('日点击区间已保存', queue.pending.value.some(item => item.operation.id === row.id));
+        await loadDashboard(); await applyTableSort();
+    } catch (error) { ElMessage.error(error instanceof Error ? error.message : '修改未能加入队列'); }
+};
 const markSeoById = (id: number) => { const row = domains.value.find(item => item.id === id); if (row) void handleSeoToday(row); };
 const providerLabel = (value: string) => ({ github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }[value] || value);
 const platformText = (row: DomainData) => row.platform === '其他' ? (row.platform_other || '其他') : row.platform;
@@ -237,7 +265,7 @@ const handleWordPressCount = async (row: DomainData, field: 'wp_calculator_count
     if (row[field] === nextValue) return;
     const previousValue = row[field];
     const previousDate = row.content_stats_updated_date;
-    const nextDate = row.wp_calculator_count == null && row.wp_article_count == null && nextValue == null ? null : localDate();
+    const nextDate = (field === 'wp_calculator_count' ? nextValue : row.wp_calculator_count) == null && (field === 'wp_article_count' ? nextValue : row.wp_article_count) == null ? null : localDate();
     row[field] = nextValue;
     row.content_stats_updated_date = nextDate;
     try {
@@ -259,7 +287,8 @@ const handleAdsenseSelect = (row: DomainData, value: '未知' | '已开通' | '�
     void saveAdsenseStatus(row, value);
 };
 const saveAdsenseStatus = async (row: DomainData, status: '未知' | '已开通' | '未开通', extra: { adsense_account_id?: number | null; adsense_opened_date?: string | null } = {}) => {
-    if (!row.id) return;
+    if (!row.id || adsenseSaving.value) return;
+    adsenseSaving.value = true;
     const previous = { adsense_connected: row.adsense_connected, adsense_account_id: row.adsense_account_id, adsense_opened_date: row.adsense_opened_date };
     row.adsense_connected = status;
     if (extra.adsense_account_id !== undefined) row.adsense_account_id = extra.adsense_account_id;
@@ -273,7 +302,7 @@ const saveAdsenseStatus = async (row: DomainData, status: '未知' | '已开通'
     } catch (error) {
         Object.assign(row, previous);
         ElMessage.error(error instanceof Error ? error.message : 'AdSense 状态保存失败');
-    }
+    } finally { adsenseSaving.value = false; }
 };
 const saveAdsenseQuick = async (value: { adsense_account_id: number; adsense_opened_date: string }) => {
     const row = adsenseQuickDomain.value;
@@ -281,10 +310,10 @@ const saveAdsenseQuick = async (value: { adsense_account_id: number; adsense_ope
 };
 const openQuickField = (row: DomainData, mode: 'site_name' | 'platform_other') => { quickFieldDomain.value = row; quickFieldMode.value = mode; quickFieldVisible.value = true; };
 const saveQuickField = async (value: string | null) => {
-    const row = quickFieldDomain.value; if (!row?.id) return;
+    const row = quickFieldDomain.value; if (!row?.id || quickFieldSaving.value) return; quickFieldSaving.value = true;
     const field = quickFieldMode.value; const oldValue = row[field]; row[field] = value as never;
     try { await api.patch(`/api/domains/${row.id}`, { [field]: value }); quickFieldVisible.value = false; await applyTableSort(); }
-    catch (error) { row[field] = oldValue as never; ElMessage.error(error instanceof Error ? error.message : '保存失败'); }
+    catch (error) { row[field] = oldValue as never; ElMessage.error(error instanceof Error ? error.message : '保存失败'); } finally { quickFieldSaving.value = false; }
 };
 const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await cachedGet(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); return true; } catch(error) { console.error('获取 AdSense 账号失败:', error); return false; } };
 const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await cachedGet(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); return true; } catch (error) { console.error('获取首页概览失败:', error); return false; } };
@@ -303,6 +332,7 @@ const handleDelete = async (row: DomainData) => {
 };
 
 const handleDialogSubmit = async (formData: Omit<DomainData, 'id' | 'created_at'>) => {
+    if (domainSaving.value) return; domainSaving.value = true;
     try {
         if (isEdit.value && editData.value?.id) {
             await updateDomain(editData.value.id, formData);
@@ -313,14 +343,14 @@ const handleDialogSubmit = async (formData: Omit<DomainData, 'id' | 'created_at'
         invalidateData('/api/domains', '/api/adsense/accounts', '/api/dashboard/summary');
         await loadDomains();
         await loadOverview();
-    } catch (error: unknown) { ElMessage.error(error instanceof Error ? error.message : '操作失败'); }
+    } catch (error: unknown) { ElMessage.error(error instanceof Error ? error.message : '操作失败'); } finally { domainSaving.value = false; }
 };
 
 const loadDomains = async () => {
     loading.value = true;
     loadError.value = '';
     try {
-        domains.value = await cachedGet<DomainData[]>('/api/domains');
+        domains.value = queue.applyPendingDomains(await cachedGet<DomainData[]>('/api/domains'));
         computerOptions.value = [...new Set([...computerOptions.value, ...domains.value.map(row => row.computer_name).filter((value): value is string => Boolean(value))])];
         if (route.query.site) detailDomain.value = domains.value.find(row => row.domain === route.query.site);
         await applyTableSort();
@@ -336,42 +366,41 @@ watch(filteredDomains, () => { void applyTableSort(); });
 
 const handleRefresh = async () => {
     if (refreshing.value) return;
-    refreshing.value = true;
+    const scroll = window.scrollY; refreshing.value = true;
+    try { await reloadAll(); await nextTick(); window.scrollTo(0, scroll); }
+    finally { refreshing.value = false; }
+};
+const handleDetect = async () => {
+    if (detecting.value) return;
+    const targets = filteredDomains.value.map(row => ({ id: row.id, domain: row.domain }));
+    detecting.value = true; detectProgress.value = { total: targets.length, done: 0, changed: 0, failed: 0 };
     try {
-        const checkDomainStatus = async (domain: string): Promise<string> => {
-            try {
-                const result = await api.post<{ status: string }>('/api/domains/check', { domain });
-                if (!['在线', '离线'].includes(result.status)) throw new Error('状态检查结果无效');
-                return result.status;
-            } catch (error) { throw error; }
-        };
-        let checkedCount = 0;
-        let changedCount = 0;
-        for (let index = 0; index < domains.value.length; index += 4) {
-            const group = domains.value.slice(index, index + 4);
-            const checked = await Promise.all(group.map(async item => ({ item, status: await checkDomainStatus(item.domain) })));
-            checked.forEach(({ item, status }) => {
-                if (item.id) {
-                    const checkedDate = localDate();
-                    const needsWrite = item.status !== status || item.last_status_check_at?.slice(0, 10) !== checkedDate;
-                    if (needsWrite) queue.enqueue({ type: 'domain_patch', id: item.id, fields: { status, last_status_check_at: checkedDate } });
-                    checkedCount += 1;
-                    if (item.status !== status) changedCount += 1;
-                }
-                item.status = status;
-            });
+        for (let index = 0; index < targets.length; index += 4) {
+            await Promise.all(targets.slice(index, index + 4).map(async target => {
+                try {
+                    const result = await api.post<{ status: string }>('/api/domains/check', { domain: target.domain });
+                    if (!['在线', '离线'].includes(result.status)) throw new Error('状态检查结果无效');
+                    const row = domains.value.find(item => item.id === target.id);
+                    if (row && target.id) {
+                        const checkedDate = localDate();
+                        if (row.status !== result.status || row.last_status_check_at?.slice(0,10) !== checkedDate) {
+                            queue.enqueue({ type: 'domain_patch', id: target.id, fields: { status: result.status, last_status_check_at: checkedDate } });
+                            if (row.status !== result.status) detectProgress.value.changed++;
+                            row.status = result.status; row.last_status_check_at = checkedDate;
+                        }
+                    }
+                } catch { detectProgress.value.failed++; }
+                finally { detectProgress.value.done++; }
+            }));
             if (queue.pending.value.length >= 175) await queue.flush();
         }
-        await queue.flush();
-        await reloadAll();
-        ElMessage.success(`已检查 ${checkedCount} 个网站，${changedCount} 个状态发生变化`);
-    } catch (error: unknown) {
-        ElMessage.error(error instanceof Error ? error.message : '刷新状态失败');
-    } finally {
-        refreshing.value = false;
-    }
+        const result = await queue.flush();
+        if (result.pending) ElMessage.warning('检测已完成，部分修改仍待同步');
+        else if (detectProgress.value.failed) ElMessage.warning(`检测完成，${detectProgress.value.failed} 个网站检测失败，原状态保留`);
+        else ElMessage.success('当前结果检测完成并已同步');
+        await loadDashboard();
+    } finally { detecting.value = false; }
 };
-
 const handleExport = async () => { try { await downloadExcel(); ElMessage.success('导出成功'); } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败'); } };
 const restoreContext = async () => {
     contextError.value = '';

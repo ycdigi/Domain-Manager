@@ -1,14 +1,14 @@
 <template>
-  <el-dialog v-model="dialogVisible" :title="context ? `${title} · ${context}` : title" width="420px" :close-on-click-modal="false">
-    <el-form @submit.prevent="submit" label-position="top">
+  <el-dialog v-model="dialogVisible" :title="context ? `${title} · ${context}` : title" width="420px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+    <el-form :disabled="saving" @submit.prevent="submit" label-position="top">
       <el-form-item :label="label">
         <el-input v-model="draft" :placeholder="placeholder" :maxlength="maxlength" show-word-limit clearable autofocus />
       </el-form-item>
     </el-form>
     <template #footer>
       <span class="dialog-footer">
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="submit">保存</el-button>
+        <el-button :disabled="saving" @click="dialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
       </span>
     </template>
   </el-dialog>
@@ -18,7 +18,7 @@
 import { ref, watch } from 'vue'
 
 const props = withDefaults(defineProps<{
-  visible: boolean
+  saving?: boolean; visible: boolean
   title: string
   context?: string | null
   label: string
@@ -32,5 +32,5 @@ const draft = ref(props.value || '')
 
 watch(() => props.visible, value => { dialogVisible.value = value; if (value) draft.value = props.value || '' })
 watch(dialogVisible, value => emit('update:visible', value))
-const submit = () => { emit('save', draft.value.trim() || null) }
+const submit = () => { if (props.saving) return; emit('save', draft.value.trim() || null) }
 </script>

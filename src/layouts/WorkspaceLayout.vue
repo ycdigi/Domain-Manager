@@ -5,6 +5,12 @@
       <WorkspaceNavigation :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" mobile @select="selectPlatform" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
     </el-drawer>
     <main class="workspace-content">
+      <section v-if="queue.pending.value.length || queue.syncing.value" class="sync-status" aria-label="同步状态" aria-live="polite">
+        <span>{{ queue.syncing.value ? '同步中' : '本机待同步' }} · {{ queue.pending.value.length }} 项<span v-if="queue.failedCount.value"> · 失败 {{ queue.failedCount.value }} 项</span></span>
+        <button type="button" class="page-link" :aria-expanded="showSyncDetails" @click="showSyncDetails = !showSyncDetails">{{ showSyncDetails ? '收起详情' : '查看详情' }}</button>
+        <el-button size="small" :disabled="queue.syncing.value" @click="syncNow">{{ queue.failedCount.value ? '重试失败任务' : '立即同步' }}</el-button>
+        <ul v-if="showSyncDetails" class="sync-details"><li v-for="item in queue.pending.value" :key="item.queueId">{{ taskLabel(item.operation.id || item.operation.domain_id) }} · {{ item.operation.type }} · {{ item.blocked ? item.error : '等待同步' }}</li></ul>
+      </section>
       <router-view v-slot="{ Component }"><keep-alive include="Home"><component :is="Component" /></keep-alive></router-view>
     </main>
   </div>
@@ -16,10 +22,14 @@ import { ElMessage } from 'element-plus'
 import WorkspaceNavigation from '../components/WorkspaceNavigation.vue'
 import { cachedValue, cachedGet, queryText } from '../utils/workspaceCache'
 import { downloadJsonBackup } from '../utils/downloads'
+import { getWriteQueue } from '../utils/writeQueue'
 import { logoutWorkspace } from '../router'
 import type { DomainData } from '../api/domains'
 import '../styles/workspace/workspace.css'
 const route = useRoute(); const router = useRouter()
+const queue = getWriteQueue(); const showSyncDetails = ref(false)
+const syncNow = async () => { try { const result = await queue.retryFailed(); if (result.synced) ElMessage.success('所有任务已同步'); else ElMessage.warning('部分任务仍待同步，请查看详情') } catch { ElMessage.error('同步未完成，请重试') } }
+const taskLabel = (id?: number) => (domains.value || []).find((row: DomainData) => row.id === id)?.domain || `记录 #${id || '未知'}`
 const navigationMobileOpen = ref(false); const navigationCollapsed = ref(false)
 const navigationStorageKey = 'domain-manager.navigation-collapsed'
 try { navigationCollapsed.value = localStorage.getItem(navigationStorageKey) === 'true' } catch { /* use expanded navigation */ }

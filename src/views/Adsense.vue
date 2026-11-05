@@ -23,9 +23,9 @@
      <div class="panel-heading"><div><h2>{{ selected.name }}</h2><p class="page-muted">{{ selected.owner }} · {{ selected.publisher_id || '未记录 Publisher ID' }} · {{ selected.currency }}</p></div><div class="page-actions"><el-button :disabled="saving" @click="editAccount(selected)">编辑账号</el-button><el-button type="warning" :disabled="saving || selected.status === '暂停'" @click="disableAccount">停用</el-button></div></div>
      <div class="panel-heading"><h2>{{ month }} 月收入</h2><span class="page-muted">{{ existingIncome ? '修改已有记录' : '新增该月记录' }}</span></div>
      <div v-if="incomeError" class="page-error" role="alert">{{ incomeError }}<el-button @click="loadIncome(true)">重试</el-button></div>
-     <el-form v-if="incomeLoaded && !incomeLoading" label-position="top" :aria-busy="incomeLoading" @submit.prevent="saveIncome">
-      <el-form-item :label="`金额（${selected.currency}）`"><el-input-number v-model="incomeForm.amount" :disabled="incomeLoading || !!incomeError || saving" :min="0" :precision="2" :controls="false" /></el-form-item>
-      <el-form-item label="收入备注"><el-input v-model="incomeForm.memo" :disabled="incomeLoading || !!incomeError || saving" /></el-form-item>
+     <el-form label-position="top" :aria-busy="incomeLoading" @submit.prevent="saveIncome">
+      <el-form-item :label="`金额（${selected.currency}）`"><StableNumberInput v-model="incomeForm.amount" :disabled="incomeLoading || !incomeLoaded || !!incomeError || saving" :min="0" :precision="2" :controls="false" /></el-form-item>
+      <el-form-item label="收入备注"><el-input v-model="incomeForm.memo" :disabled="incomeLoading || !incomeLoaded || !!incomeError || saving" /></el-form-item>
       <div class="page-actions"><el-button type="primary" native-type="submit" :loading="saving" :disabled="incomeLoading || !!incomeError || !incomeLoaded">保存本月收入</el-button><el-button :disabled="!incomeDirty || saving" @click="resetIncome">放弃修改</el-button></div>
      </el-form>
      <h3>收入历史</h3><el-table :data="incomeRows" size="small"><el-table-column prop="income_month" label="月份" min-width="100"><template #default="scope"><button class="page-link" @click="changeMonth(scope.row.income_month)">{{ scope.row.income_month }}</button></template></el-table-column><el-table-column prop="amount" label="金额" min-width="90" /><el-table-column prop="memo" label="备注" min-width="120" show-overflow-tooltip /></el-table>
@@ -39,6 +39,7 @@
 import { ref, computed, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import StableNumberInput from '../components/StableNumberInput.vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { cachedGet, invalidateData, localMonth, queryText } from '../utils/workspaceCache'

@@ -1,6 +1,6 @@
 <template>
-    <el-dialog v-model="dialogVisible" :title="isEdit ? `修改域名 · ${editData?.domain || ''}` : '新建域名'" width="600px" :close-on-click-modal="false">
-        <el-form class="domain-edit-form" ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="top">
+    <el-dialog v-model="dialogVisible" :title="isEdit ? `修改域名 · ${editData?.domain || ''}` : '新建域名'" width="600px" :close-on-click-modal="false" :close-on-press-escape="!saving" :show-close="!saving">
+        <el-form :disabled="saving" class="domain-edit-form" ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="top">
             <el-form-item label="域名" prop="domain"><el-input v-model="form.domain" placeholder="请输入域名" id="domain-input" autocomplete="off" clearable /></el-form-item>
             <el-form-item label="网站名称"><el-input v-model="form.site_name" placeholder="例如：电气计算器站" maxlength="200" show-word-limit clearable /></el-form-item>
             <el-form-item label="行业"><el-select v-model="form.industry" placeholder="选择行业" filterable clearable><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></el-form-item>
@@ -26,17 +26,18 @@
             <el-form-item label="SEO记录"><el-checkbox v-model="optimizeToday">今天已优化（提交后记录今天）</el-checkbox><span v-if="form.seo_last_date" class="form-hint">最近：{{ form.seo_last_date }}</span></el-form-item>
             <el-form-item label="备注" prop="memo"><el-input v-model="form.memo" type="textarea" :rows="3" placeholder="请输入备注" id="memo-input" autocomplete="off" clearable /></el-form-item>
         </el-form>
-        <template #footer><span class="dialog-footer"><el-button @click="handleCancel">取消</el-button><el-button type="primary" @click="handleSubmit">确定</el-button></span></template>
+        <template #footer><span class="dialog-footer"><el-button :disabled="saving" @click="handleCancel">取消</el-button><el-button type="primary" :loading="saving" @click="handleSubmit">确定</el-button></span></template>
     </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { clicksDate, contentDate } from '../utils/dataFreshness'
 import type { DomainData } from '../api/domains'
 interface AdsenseAccountOption { id?: number; name: string; owner: string }
 interface DomainForm extends Omit<DomainData, 'adsense_account_id' | 'adsense_opened_date' | 'seo_last_date' | 'daily_clicks' | 'daily_clicks_range' | 'clicks_updated_date' | 'last_status_check_at' | 'platform_other' | 'wp_calculator_count' | 'wp_article_count' | 'content_stats_updated_date' | 'site_name' | 'industry'> { site_name?: string; industry?: string; adsense_account_id?: number; adsense_opened_date?: string; seo_last_date?: string; daily_clicks?: number; daily_clicks_range?: Exclude<DomainData['daily_clicks_range'], null>; clicks_updated_date?: string | null; last_status_check_at?: string | null; platform_other?: string; wp_calculator_count?: number; wp_article_count?: number; content_stats_updated_date?: string }
-const props = defineProps<{ visible: boolean; isEdit: boolean; editData?: DomainData; accounts: AdsenseAccountOption[] }>()
+const props = defineProps<{ saving?: boolean; visible: boolean; isEdit: boolean; editData?: DomainData; accounts: AdsenseAccountOption[] }>()
 const emit = defineEmits(['update:visible', 'submit'])
 const dialogVisible = ref(props.visible)
 const formRef = ref<FormInstance>()
@@ -50,11 +51,12 @@ const rules = computed<FormRules>(() => ({
     adsense_connected: [{ validator: (_rule, value, callback) => value === '已开通' && (!form.value.adsense_opened_date || !form.value.adsense_account_id) ? callback(new Error('已开通时必须选择账号和开通日期')) : callback(), trigger: ['change'] }],
     content_stats_updated_date: [{ validator: (_rule, value, callback) => form.value.platform === 'WordPress' && (form.value.wp_calculator_count != null || form.value.wp_article_count != null) && !value ? callback(new Error('填写 WordPress 数量时必须选择统计日期')) : callback(), trigger: ['change'] }]
 }))
-watch(() => props.visible, value => { dialogVisible.value = value; if (value && !props.isEdit) { form.value = { ...defaultForm }; optimizeToday.value = false } })
+watch(() => props.visible, value => { dialogVisible.value = value; if (value) { if (props.isEdit && props.editData) setEditData(props.editData); else form.value = { ...defaultForm }; optimizeToday.value = false } })
 watch(dialogVisible, value => { emit('update:visible', value); if (!value) formRef.value?.resetFields() })
-watch(() => props.editData, value => { if (value) { form.value = { ...defaultForm, ...value, adsense_account_id: value.adsense_account_id || undefined, adsense_opened_date: value.adsense_opened_date || '', seo_last_date: value.seo_last_date || '', daily_clicks: value.daily_clicks ?? undefined } as DomainForm; optimizeToday.value = false } }, { immediate: true })
+const setEditData = (value: DomainData) => { form.value = { ...defaultForm, ...value, adsense_account_id: value.adsense_account_id || undefined, adsense_opened_date: value.adsense_opened_date || '', seo_last_date: value.seo_last_date || '', daily_clicks: value.daily_clicks ?? undefined, daily_clicks_range: value.daily_clicks_range || (value.daily_clicks == null ? undefined : value.daily_clicks < 10 ? 'under10' : value.daily_clicks < 30 ? '10to29' : value.daily_clicks < 50 ? '30to49' : value.daily_clicks < 100 ? '50to99' : 'over100') } as DomainForm; optimizeToday.value = false }
+watch(() => props.editData, value => { if (value) setEditData(value) }, { immediate: true })
 const handleCancel = () => { dialogVisible.value = false; formRef.value?.resetFields() }
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
-const handleSubmit = async () => { if (!formRef.value) return; await formRef.value.validate((valid, fields) => { if (!valid) { console.error('表单验证失败:', fields); return }; const isWordPress = form.value.platform === 'WordPress'; const payload = { ...form.value, site_name: form.value.site_name?.trim() || null, industry: form.value.industry?.trim() || null, adsense_account_id: form.value.adsense_account_id || null, adsense_opened_date: form.value.adsense_opened_date || null, seo_last_date: optimizeToday.value ? localDate() : (form.value.seo_last_date || null), daily_clicks: null, daily_clicks_range: form.value.daily_clicks_range || null, clicks_updated_date: form.value.daily_clicks_range ? localDate() : null, platform_other: form.value.platform === '其他' ? (form.value.platform_other || null) : null, wp_calculator_count: isWordPress ? (form.value.wp_calculator_count ?? null) : null, wp_article_count: isWordPress ? (form.value.wp_article_count ?? null) : null, content_stats_updated_date: isWordPress ? (form.value.content_stats_updated_date || null) : null }; emit('submit', payload) }) }
+const handleSubmit = async () => { if (props.saving || !formRef.value) return; form.value.content_stats_updated_date = form.value.platform === 'WordPress' ? (contentDate(form.value.wp_calculator_count, form.value.wp_article_count, props.editData?.wp_calculator_count, props.editData?.wp_article_count, props.editData?.content_stats_updated_date, localDate()) || '') : ''; await formRef.value.validate((valid, fields) => { if (!valid) { console.error('表单验证失败:', fields); return }; const isWordPress = form.value.platform === 'WordPress'; const payload = { ...form.value, site_name: form.value.site_name?.trim() || null, industry: form.value.industry?.trim() || null, adsense_account_id: form.value.adsense_account_id || null, adsense_opened_date: form.value.adsense_opened_date || null, seo_last_date: optimizeToday.value ? localDate() : (form.value.seo_last_date || null), daily_clicks: null, daily_clicks_range: form.value.daily_clicks_range || null, clicks_updated_date: clicksDate(form.value.daily_clicks_range, props.editData?.daily_clicks_range || (props.editData?.daily_clicks == null ? null : props.editData.daily_clicks < 10 ? 'under10' : props.editData.daily_clicks < 30 ? '10to29' : props.editData.daily_clicks < 50 ? '30to49' : props.editData.daily_clicks < 100 ? '50to99' : 'over100'), props.editData?.clicks_updated_date, localDate()), platform_other: form.value.platform === '其他' ? (form.value.platform_other || null) : null, wp_calculator_count: isWordPress ? (form.value.wp_calculator_count ?? null) : null, wp_article_count: isWordPress ? (form.value.wp_article_count ?? null) : null, content_stats_updated_date: isWordPress ? contentDate(form.value.wp_calculator_count, form.value.wp_article_count, props.editData?.wp_calculator_count, props.editData?.wp_article_count, props.editData?.content_stats_updated_date, localDate()) : null }; emit('submit', payload) }) }
 </script>
 <style scoped src="../styles/dialogs/domain.css"></style>

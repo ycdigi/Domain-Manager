@@ -115,3 +115,14 @@ npm run lint:cleanup
 | 管理保存整体 reloadAll | 会话读缓存 + 关联失效 | 按原 GET 接口缓存与去重；变更仅标记受影响数据，凭据不缓存 |
 
 已确认源代码无旧组件导入；动态 Element Plus 类、域名短表单与详情样式继续保留。测试引用随迁移指向页面实现，新增缓存行为与路由去重实现检查。
+
+## 2026-11-06 操作反馈与表格动作清理
+
+| 旧规则/入口 | 新规则/新入口 | 使用模板/组件 | 删除/保留 | 验证方式 |
+| --- | --- | --- | --- | --- |
+| Home 独立 SEO 表头与单独 SEO 列 | SEO 状态按钮/锁定图标放入域名单元格，复制按钮紧随其后 | `src/views/Home.vue`, `home.css` | 删除独立列，保留 15 天状态逻辑 | 结构检查、Playwright SEO/复制交互 |
+| 刷新按钮隐式触发状态检测 | 刷新只读数据；独立“检测网站状态（N）”固定当前结果并限并发 4 | `Home.vue`, `/api/domains/check` | 保留既有单域检查路由，拆分用户意图 | fixture 请求断言、失败继续检查 |
+| 队列调用方无成功/待同步区分 | `FlushResult`、全局同步状态、失败重试和待同步视图覆盖 | `writeQueue.ts`, `WorkspaceLayout.vue` | 替换提示逻辑，不新增第二套队列 | 数据测试、离线/失败/重试浏览器测试 |
+| 重新加载直接覆盖本机未同步值 | 读取后应用 `applyPendingDomains()` | `writeQueue.ts`, `Home.vue` | 保留本地队列格式，增加视图叠加 | 队列单测与刷新 fixture |
+| 无变化仍刷新点击/内容统计日期 | 日期由 `dataFreshness.ts` 按实际值变化计算 | `DomainDialog.vue`, `Home.vue` | 删除重复的“每次提交即今天”规则 | 34 项数据测试 |
+| 收入、凭据、详情迟到响应可回填旧上下文 | 保存状态、原生禁用/ARIA、版本与上下文校验 | `Adsense.vue`, `StableNumberInput.vue`, `Resources.vue`, `DomainDetailDrawer.vue` | 保留接口，丢弃过期响应 | 延迟响应浏览器测试 |

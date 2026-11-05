@@ -1,5 +1,6 @@
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuth } from './auth'
+import { invalidateData } from './workspaceCache'
 import { api, ApiError } from './request'
 
 type OperationData = {
@@ -22,7 +23,11 @@ const pending = ref<QueueItem[]>([])
 const inFlight = new Set<string>()
 let initialized = false
 let flushTimer: number | undefined
-let activeFlush: Promise<void> | undefined
+export type FlushResult = { pending: number; failed: number; synced: boolean }
+const syncing = ref(false)
+const failedCount = computed(() => pending.value.filter(item => item.blocked).length)
+const result = (): FlushResult => ({ pending: pending.value.length, failed: failedCount.value, synced: pending.value.length === 0 })
+let activeFlush: Promise<FlushResult> | undefined
 let listenersInstalled = false
 
 const initialize = () => {
@@ -71,6 +76,26 @@ const enqueue = (operation: OperationData) => {
     schedule()
 }
 
+const enqueueMany = (operations: OperationData[]) => {
+    initialize()
+    // Validate capacity before mutating so SEO date/history remain a single user action.
+    const newKeys = new Set(operations.map(keyOf).filter(key => !pending.value.some(item => keyOf(item.operation) === key && !inFlight.has(item.queueId))))
+    if (pending.value.length + newKeys.size > MAX_ITEMS) throw new Error('待同步任务已达到上限，请先完成同步')
+    operations.forEach(enqueue)
+}
+export const applyPendingDomains = <T extends { id?: number }>(rows: T[]): T[] => {
+    initialize()
+    return rows.map(row => {
+        const copy = { ...row } as T & Record<string, unknown>
+        for (const item of pending.value) {
+            const op = item.operation
+            if (op.type === 'domain_patch' && op.id === row.id) Object.assign(copy, op.fields)
+            if (op.type === 'domain_operation_add' && op.domain_id === row.id && op.operation_date && (!copy.latest_operation_date || String(copy.latest_operation_date) < op.operation_date)) Object.assign(copy, { latest_operation_date: op.operation_date })
+        }
+        return copy
+    })
+}
+
 const runFlush = async () => {
     initialize()
     if (!pending.value.length) return
@@ -88,6 +113,7 @@ const runFlush = async () => {
                     const ids = new Set(chunk.map(item => item.queueId))
                     pending.value = pending.value.filter(item => !ids.has(item.queueId))
                     persist()
+                    invalidateData('/api/domains', '/api/dashboard/summary', '/api/resources/links', '/api/resources/accounts', '/api/resources')
                     completed = true
                 } catch (error) {
                     const retryable = error instanceof ApiError ? error.status >= 500 || error.status === 0 : true
@@ -113,14 +139,15 @@ const runFlush = async () => {
 
 const flush = () => {
     if (activeFlush) return activeFlush
-    activeFlush = runFlush().finally(() => { activeFlush = undefined })
+    syncing.value = true
+    activeFlush = runFlush().then(result).finally(() => { activeFlush = undefined; syncing.value = false })
     return activeFlush
 }
 
 const retryFailed = () => {
     pending.value.forEach(item => { item.blocked = false; delete item.error })
     persist()
-    schedule()
+    return flush()
 }
 
 const schedule = () => {
@@ -136,5 +163,5 @@ export const getWriteQueue = () => {
         window.addEventListener('online', () => { void flush().catch(() => {}) })
         window.addEventListener('focus', () => { void flush().catch(() => {}) })
     }
-    return { pending, enqueue, flush, retryFailed }
+    return { pending, syncing, failedCount, enqueue, enqueueMany, flush, retryFailed, applyPendingDomains }
 }

@@ -446,3 +446,50 @@ test('session read cache deduplicates requests, invalidates dependencies and ret
   assert.equal(calls, 3)
   exports.clearWorkspaceCache(); const fresh = exports.cachedGet('/api/domains'); resolveRead([]); await fresh; assert.equal(calls, 4)
 })
+
+test('data freshness changes only when measured values change', async () => {
+  const ts = await import('typescript')
+  const code = ts.transpileModule(fs.readFileSync(path.join(repo, 'src/utils/dataFreshness.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  const exports = {}; new Function('exports', code)(exports)
+  const today = '2026-11-05', previous = '2026-10-01'
+  assert.equal(exports.clicksDate('30to49', '30to49', previous, today), previous)
+  assert.equal(exports.clicksDate('50to99', '30to49', previous, today), today)
+  assert.equal(exports.clicksDate(null, '30to49', previous, today), null)
+  assert.equal(exports.contentDate(3, 5, 3, 5, previous, today), previous)
+  assert.equal(exports.contentDate(4, 5, 3, 5, previous, today), today)
+  assert.equal(exports.contentDate(null, null, 3, 5, previous, today), null)
+})
+
+test('SEO actions keep 15/16 and 30/31 day boundaries', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const body = home.slice(home.indexOf('const seoState ='), home.indexOf('const seoNeedsAttention')).split('=> {')[1].replace(/};\s*$/, '')
+  const action = new Function('row', 'daysSince', body)
+  assert.equal(action({ seo_last_date: null }, () => 0).actionable, true)
+  for (const days of [0, 15, 16, 30, 31]) {
+    const value = action({ domain: 'example.com', seo_last_date: '2026-10-01' }, () => days)
+    assert.equal(value.actionable, days > 15)
+    assert.equal(value.kind, days <= 15 ? 'recent' : days <= 30 ? 'stale' : 'overdue')
+    assert.match(value.title, /example.com/)
+  }
+})
+
+test('queue reports blocked writes, overlays local values and retries without losing edits', async () => {
+  const ts = await import('typescript')
+  const code = ts.transpileModule(fs.readFileSync(path.join(repo, 'src/utils/writeQueue.ts'), 'utf8'), { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022 } }).outputText
+  let failed = true, calls = 0; const storage = new Map(); const exports = {}
+  class ApiError extends Error { status = 400 }
+  const fakeWindow = { setTimeout: () => 1, clearTimeout: () => {}, addEventListener: () => {} }
+  const request = { api: { post: async () => { calls++; if (failed) throw new ApiError('blocked') } }, ApiError }
+  new Function('require','exports','window','localStorage', code)(name => name === 'vue' ? { ref: value => ({ value }), computed: getter => ({ get value() { return getter() } }) } : name === './auth' ? { useAuth: () => ({ getAuthToken: () => ({ token: 'fixture' }) }) } : name === './workspaceCache' ? { invalidateData: () => {} } : request, exports, fakeWindow, { getItem: key => storage.get(key) || null, setItem: (key,value) => storage.set(key,value) })
+  const queue = exports.getWriteQueue()
+  queue.enqueueMany([{ type:'domain_patch', id:1, fields:{ seo_last_date:'2026-11-05' } }, { type:'domain_operation_add', domain_id:1, operation_date:'2026-11-05', operation_kind:'SEO' }])
+  assert.deepEqual(await queue.flush(), { pending:2, failed:2, synced:false })
+  assert.equal(queue.applyPendingDomains([{ id:1, seo_last_date:null }])[0].seo_last_date, '2026-11-05')
+  queue.enqueue({ type:'domain_patch', id:1, fields:{ daily_clicks_range:'50to99' } })
+  assert.equal(queue.pending.value.length, 2)
+  assert.equal(queue.applyPendingDomains([{ id:1 }])[0].daily_clicks_range, '50to99')
+  failed = false
+  assert.deepEqual(await queue.retryFailed(), { pending:0, failed:0, synced:true })
+  assert.equal(calls, 2)
+  assert.equal(queue.syncing.value, false)
+})

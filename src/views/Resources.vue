@@ -77,8 +77,9 @@ const editorTitle = computed(() => editor.value === 'account' ? (editingAccount.
 const snapshot = () => JSON.stringify(editor.value === 'account' ? accountForm.value : editor.value === 'resource' ? resourceForm.value : editor.value === 'link' ? linkForm.value : credentialForm.value)
 const dirty = computed(() => Boolean(editor.value) && snapshot() !== baseline.value)
 const { canDiscard } = useUnsavedChanges(dirty)
-const markEditor = (value: Editor) => { editor.value = value; baseline.value = snapshot() }
-const clearRevealed = () => { revealedToken.value = ''; revealedLabel.value = '' }
+const markEditor = (value: Editor) => { if (editor.value === 'credential' && value !== 'credential') credentialForm.value.token = ''; editor.value = value; baseline.value = snapshot() }
+let revealVersion = 0; let disposed = false
+const clearRevealed = () => { revealVersion++; revealedToken.value = ''; revealedLabel.value = '' }
 const clearSecrets = () => { clearRevealed(); credentialForm.value = { label: '', token: '', expires_at: '' }; credentials.value = [] }
 const cancelEditor = async () => { if (saving.value || !(await canDiscard())) return; editor.value = ''; credentialForm.value.token = '' }
 let version = 0; let credentialVersion = 0
@@ -90,7 +91,7 @@ const load = async (force = false) => {
  finally { if (current === version) loading.value = false }
 }
 watch(() => route.fullPath, () => { editor.value = ''; clearSecrets(); credentialVersion++; void load() }, { immediate: true })
-onUnmounted(() => { version++; credentialVersion++; clearSecrets() })
+onUnmounted(() => { disposed = true; version++; credentialVersion++; clearSecrets() })
 const refresh = async () => { if (await canDiscard()) { editor.value = ''; clearRevealed(); await load(true) } }
 const changeProvider = (value: string | number) => { void router.push({ name: 'Resources', query: { provider: String(value) } }) }
 const selectAccount = (account: ProviderAccount) => { void router.push({ query: { provider: account.provider, account: String(account.id) } }) }
@@ -115,6 +116,6 @@ const disableResource = async (resource: ProviderResource) => { if (saving.value
 const unlink = async (link: Link) => { if (saving.value || !(await canDiscard())) return; try { await confirmAction(`解除“${domainName(link.domain_id)}”与“${selectedResource.value?.name}”的关联？`, '解除关联', { confirmButtonText: '解除' }); await submit(async () => { await api.delete(`/api/resources/links?id=${link.id}`); editor.value = ''; await updateResourceData(true) }) } catch (e) { if (!isDismissed(e)) ElMessage.error('解除失败') } }
 const saveCredential = () => submit(async () => { if (!selectedAccount.value?.id) throw new Error('请选择账号'); if (!credentialForm.value.label.trim() || (!editingCredentialId.value && !credentialForm.value.token.trim())) throw new Error('请填写凭据名称和 Token'); const id = editingCredentialId.value; const payload = { account_id: selectedAccount.value.id, ...credentialForm.value }; await (id ? api.put(`/api/resources/credentials/${id}`, payload) : api.post('/api/resources/credentials', payload)); editor.value = ''; credentialForm.value.token = ''; clearRevealed(); await loadCredentials(); ElMessage.success('Token 已保存') })
 const deleteCredential = async (item: ProviderCredential) => { if (saving.value) return; try { await confirmAction(`删除“${selectedAccount.value?.name}”的凭据“${item.label}”？`, '删除凭据', { confirmButtonText: '删除' }); await submit(async () => { await api.delete(`/api/resources/credentials/${item.id}`); clearRevealed(); await loadCredentials() }) } catch (e) { if (!isDismissed(e)) ElMessage.error('删除失败') } }
-const revealCredential = (id?: number) => submit(async () => { clearRevealed(); const result = await api.post<{ token: string }>(`/api/resources/credentials/${id}`); revealedToken.value = result.token; revealedLabel.value = credentials.value.find(item => item.id === id)?.label || '' })
+const revealCredential = (id?: number) => submit(async () => { clearRevealed(); const requestVersion = revealVersion; const account = selectedAccount.value?.id; const context = route.fullPath; const result = await api.post<{ token: string }>(`/api/resources/credentials/${id}`); if (disposed || requestVersion !== revealVersion || account !== selectedAccount.value?.id || context !== route.fullPath) return; revealedToken.value = result.token; revealedLabel.value = credentials.value.find(item => item.id === id)?.label || '' })
 const copyCredential = async () => { try { await copyText(revealedToken.value); ElMessage.success('Token 已复制') } catch { ElMessage.error('Token 复制失败，请手动复制') } }
 </script>
