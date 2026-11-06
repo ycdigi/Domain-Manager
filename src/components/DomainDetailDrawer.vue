@@ -12,27 +12,32 @@
     <template v-if="domain">
       <div v-if="detailError" class="detail-load-error" role="alert"><span>{{ detailError }}</span><el-button text size="small" @click="loadDetailData">重试</el-button></div>
       <section class="detail-section">
-        <div class="section-heading"><h3>基本信息</h3><span class="detail-muted">查看与维护</span></div>
-        <div class="detail-grid">
+        <div class="section-heading"><h3>核心信息</h3><span class="detail-muted">查看与维护</span></div>
+        <div class="detail-grid detail-core-grid">
           <div><span>状态</span><strong>{{ domain.status }}</strong></div>
           <div><span>网站名称</span><strong>{{ domain.site_name || '未记录' }}</strong></div>
           <div><span>网站归属</span><strong>{{ domain.ownership }}</strong></div>
           <div><span>类型</span><strong>{{ domain.industry || '未记录' }}</strong></div>
           <div><span>资源</span><strong>{{ domain.resource_status || '未关联' }}</strong></div>
-          <div><span>注册日期</span><strong>{{ domain.registrar_date || '未记录' }}</strong></div>
           <div><span>到期日期</span><strong>{{ domain.expiry_date || '未记录' }}</strong></div>
           <div><span>最近 SEO</span><strong>{{ domain.seo_last_date || '未记录' }}</strong></div>
-          <div><span>点击数据</span><strong>{{ clickRangeLabel(domain.daily_clicks_range, domain.daily_clicks) }}<small v-if="domain.clicks_updated_date"> · {{ domain.clicks_updated_date }}</small></strong></div>
-          <div><span>状态检查</span><strong>{{ datePart(domain.last_status_check_at) }}</strong></div>
-          <div><span>AdSense</span><strong>{{ domain.adsense_connected || '未知' }}<small v-if="domain.adsense_opened_date"> · {{ domain.adsense_opened_date }}</small></strong></div>
-          <div><span>开通耗时</span><strong>{{ domain.adsense_open_days == null ? '未计算' : `${domain.adsense_open_days} 天` }}</strong></div>
           <div><span>技术栈</span><strong>{{ domain.platform === '其他' ? (domain.platform_other || '其他') : domain.platform }}</strong></div>
         </div>
-        <div class="detail-line"><span>AdSense账号</span><p><button v-if="domain.adsense_account_id" class="page-link" @click="router.push({ name: 'Adsense', query: { account: String(domain.adsense_account_id) } })">查看账号</button> {{ domain.adsense_account_name || '未关联' }} · {{ domain.adsense_owner || '未记录' }} · {{ domain.adsense_publisher_id || '未记录 Publisher ID' }}</p></div>
-        <div class="detail-line"><span>WordPress统计</span><p v-if="domain.platform === 'WordPress'">计算器 {{ domain.wp_calculator_count ?? '未记录' }} 个 · 文章 {{ domain.wp_article_count ?? '未记录' }} 篇 · {{ domain.content_stats_updated_date || '未记录统计日期' }}</p><p v-else>不适用</p></div>
-        <div class="detail-line"><span>部署资源</span><p>{{ domain.resource_names || '未关联' }}</p></div>
-        <div v-if="resources.length" class="detail-resource-list"><div v-for="resource in resources" :key="resource.id" class="detail-resource"><strong><button class="page-link" @click="router.push({ name: 'Resources', query: { provider: resource.provider, ...(resource.account_id ? { account: String(resource.account_id) } : {}), resource: String(resource.resource_id) } })">{{ resource.provider }} · {{ resource.resource_name }}</button><small v-if="resource.is_primary">主资源</small></strong><span>{{ resource.account_name || '未关联账号' }} · {{ resource.login_email || '未记录邮箱' }}</span><span>{{ resource.resource_url || resource.ip_address || '未记录地址' }}<template v-if="resource.port">:{{ resource.port }}</template></span></div></div>
-        <div class="detail-line"><span>备注</span><p>{{ domain.memo || '未记录' }}</p></div>
+        <el-button class="detail-section-toggle" text size="small" :icon="additionalInfoExpanded ? ArrowUp : ArrowDown" :aria-expanded="additionalInfoExpanded" @click="additionalInfoExpanded = !additionalInfoExpanded">{{ additionalInfoExpanded ? '收起更多信息' : '展开更多信息' }}</el-button>
+        <div v-if="additionalInfoExpanded" class="detail-extra-content">
+          <div class="detail-grid">
+            <div><span>注册日期</span><strong>{{ domain.registrar_date || '未记录' }}</strong></div>
+            <div><span>点击数据</span><strong>{{ clickRangeLabel(domain.daily_clicks_range, domain.daily_clicks) }}<small v-if="domain.clicks_updated_date"> · {{ domain.clicks_updated_date }}</small></strong></div>
+            <div><span>状态检查</span><strong>{{ datePart(domain.last_status_check_at) }}</strong></div>
+            <div><span>AdSense</span><strong>{{ domain.adsense_connected || '未知' }}<small v-if="domain.adsense_opened_date"> · {{ domain.adsense_opened_date }}</small></strong></div>
+            <div><span>开通耗时</span><strong>{{ domain.adsense_open_days == null ? '未计算' : `${domain.adsense_open_days} 天` }}</strong></div>
+          </div>
+          <div class="detail-line"><span>AdSense账号</span><p><button v-if="domain.adsense_account_id" class="page-link" @click="router.push({ name: 'Adsense', query: { account: String(domain.adsense_account_id) } })">查看账号</button> {{ domain.adsense_account_name || '未关联' }} · {{ domain.adsense_owner || '未记录' }} · {{ domain.adsense_publisher_id || '未记录 Publisher ID' }}</p></div>
+          <div class="detail-line"><span>WordPress统计</span><p v-if="domain.platform === 'WordPress'">计算器 {{ domain.wp_calculator_count ?? '未记录' }} 个 · 文章 {{ domain.wp_article_count ?? '未记录' }} 篇 · {{ domain.content_stats_updated_date || '未记录统计日期' }}</p><p v-else>不适用</p></div>
+          <div class="detail-line"><span>部署资源</span><p>{{ domain.resource_names || '未关联' }}</p></div>
+          <div v-if="resources.length" class="detail-resource-list"><div v-for="resource in resources" :key="resource.id" class="detail-resource"><strong><button class="page-link" @click="router.push({ name: 'Resources', query: { provider: resource.provider, ...(resource.account_id ? { account: String(resource.account_id) } : {}), resource: String(resource.resource_id) } })">{{ resource.provider }} · {{ resource.resource_name }}</button><small v-if="resource.is_primary">主资源</small></strong><span>{{ resource.account_name || '未关联账号' }} · {{ resource.login_email || '未记录邮箱' }}</span><span>{{ resource.resource_url || resource.ip_address || '未记录地址' }}<template v-if="resource.port">:{{ resource.port }}</template></span></div></div>
+          <div class="detail-line"><span>备注</span><p>{{ domain.memo || '未记录' }}</p></div>
+        </div>
       </section>
 
       <section class="detail-section todo-section">
@@ -133,6 +138,7 @@ const todos = ref<Todo[]>([])
 const todoTitle = ref('')
 const todoDescription = ref('')
 const todoSaving = ref(false)
+const additionalInfoExpanded = ref(false)
 const detailError = ref('')
 const detailLoading = ref(false)
 const operationKinds = ['SEO', '内容', '技术', '其他'] as const
@@ -175,6 +181,7 @@ const loadDetailData = async () => {
   todos.value = []
   todoTitle.value = ''
   todoDescription.value = ''
+  additionalInfoExpanded.value = false
   const results = await Promise.allSettled([loadNotes(), loadOperations(), loadTodos()])
   if (!currentDetail(id, version)) return
   if (results.some(result => result.status === 'rejected')) detailError.value = '详情数据未能完整加载，基础信息仍可查看。'
@@ -203,7 +210,7 @@ const archiveNote = async (note: Note) => {
 }
 const showHistory = async (note: Note) => { const id = props.domain?.id; const version = detailVersion; if (!id || !note.id) return; try { const value = await api.get<Version[]>(`/api/domains/${id}/ai-notes/${note.id}/history`); if (currentDetail(id, version)) { history.value = value; historyVisible.value = true } } catch (error) { if (currentDetail(id, version)) ElMessage.error(error instanceof Error ? error.message : '历史读取失败') } }
 const copyNote = async (content: string) => { try { await copyText(content); ElMessage.success('已复制') } catch { ElMessage.error('复制失败，请手动选择文本') } }
-watch(() => [props.visible, props.domain?.id], ([visible]) => { if (!visible) { detailVersion++; historyVisible.value = false; history.value = []; } if (visible) { editing.value = false; operationFilter.value = '全部'; operationForm.value = { operation_date: localDate(), operation_kind: 'SEO' }; void loadDetailData() } }, { immediate: true })
+watch(() => [props.visible, props.domain?.id], ([visible]) => { if (!visible) { detailVersion++; historyVisible.value = false; history.value = []; additionalInfoExpanded.value = false; } if (visible) { editing.value = false; operationFilter.value = '全部'; operationForm.value = { operation_date: localDate(), operation_kind: 'SEO' }; void loadDetailData() } }, { immediate: true })
 </script>
 
 <style scoped src="../styles/dialogs/domain-detail.css"></style>

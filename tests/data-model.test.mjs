@@ -513,6 +513,14 @@ test('domain details expose independent Todo storage with collapsed descriptions
   assert.match(todoSchema, /CREATE TABLE IF NOT EXISTS domain_todos/)
 })
 
+test('domain details keep secondary fields collapsed by default', () => {
+  const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
+  assert.match(detail, /核心信息/)
+  assert.match(detail, /additionalInfoExpanded = ref\(false\)/)
+  assert.match(detail, /v-if="additionalInfoExpanded" class="detail-extra-content"/)
+  assert.match(detail, /展开更多信息/)
+})
+
 test('v1.13 migration removes retired notification storage', () => {
   const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/notification-migration.db'
   try {
