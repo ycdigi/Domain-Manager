@@ -2,7 +2,7 @@
     <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
         <main class="workspace">
             <div class="ledger-toolbar">
-                <WorkspaceHeading :title="ownershipTab === 'all' && platformTab === 'all' ? '全部网站' : summaryScope" :subtitle="loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名`" />
+                <div class="ledger-search-top" role="search" aria-label="搜索网站"><el-input v-model="searchText" class="home-search" :prefix-icon="Search" placeholder="搜索域名、网站名称、类型、备注" clearable /></div>
                 <div class="ledger-actions" aria-label="域名管理操作">
                     <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
                     <el-button :disabled="loading || !!loadError || detecting || !filteredDomains.length" :loading="detecting" @click="handleDetect">检测网站状态（{{ filteredDomains.length }}）</el-button>
@@ -13,7 +13,6 @@
                 </div>
             </div>
             <section v-loading="dashboardLoading" class="summary-grid" :aria-label="`运营指标 · ${summaryScope}`" :aria-busy="dashboardLoading">
-                <div class="summary-card"><span>网站数量 · {{ summaryScope }}</span><strong>{{ dashboard.totals.total_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>30 天未优化</span><strong>{{ dashboard.totals.seo_stale_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>WP 优秀网站</span><strong>{{ dashboard.totals.excellent_wordpress || 0 }}</strong></div>
@@ -25,7 +24,6 @@
                     <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
                     <div class="ledger-viewbar">
                         <el-tag v-if="sourceLabel" closable @close="clearSource">{{ sourceLabel }}</el-tag>
-                        <div class="domain-filters"><el-input v-model="searchText" :prefix-icon="Search" placeholder="搜索域名、网站名称、类型、备注" clearable /></div>
                     </div>
                     <div v-if="detectProgress.total" class="detection-progress" role="status">已检测 {{ detectProgress.done }} / {{ detectProgress.total }} · 状态变化 {{ detectProgress.changed }} · 检测失败 {{ detectProgress.failed }}<span v-if="!detecting"> · {{ queue.pending.value.length ? '部分结果待同步' : '已同步' }}</span></div>
                     <div v-if="contextError" class="load-error" role="alert">{{ contextError }}</div>
@@ -79,7 +77,6 @@ import DomainDialog from '../components/DomainDialog.vue';
 import DomainDetailDrawer from '../components/DomainDetailDrawer.vue';
 import QuickFieldDialog from '../components/QuickFieldDialog.vue';
 import AdsenseQuickDialog from '../components/AdsenseQuickDialog.vue';
-import WorkspaceHeading from '../components/WorkspaceHeading.vue';
 import { cachedGet, cachedValue, invalidateData, queryText } from '../utils/workspaceCache';
 import { downloadExcel } from '../utils/downloads';
 import { createDomain, updateDomain, deleteDomain, type DomainData } from '../api/domains';

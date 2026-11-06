@@ -11,8 +11,6 @@ export interface DomainData {
     expiry_date: string
     service_type: string
     status: string
-    tgsend: number
-    st_tgsend: number
     memo: string
     computer_name?: string | null
     site_name: string | null

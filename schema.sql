@@ -10,8 +10,6 @@ CREATE TABLE IF NOT EXISTS domains (
     expiry_date TEXT NOT NULL,
     service_type TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT '离线',
-    tgsend INTEGER DEFAULT 0,
-    st_tgsend INTEGER DEFAULT 1,
     memo TEXT,
     site_name TEXT,
     industry TEXT,
@@ -29,18 +27,8 @@ CREATE TABLE IF NOT EXISTS domains (
     wp_article_count INTEGER,
     content_stats_updated_date TEXT,
     last_status_check_at DATETIME,
-    last_expiry_alert_date TEXT,
-    last_offline_alert_at DATETIME,
     resource_status TEXT NOT NULL DEFAULT '未关联',
     computer_name TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS alertcfg (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    tg_token TEXT NOT NULL,
-    tg_userid TEXT NOT NULL,
-    days INTEGER NOT NULL DEFAULT 30,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -95,7 +83,6 @@ CREATE INDEX IF NOT EXISTS idx_domains_clicks_range ON domains(daily_clicks_rang
 CREATE UNIQUE INDEX IF NOT EXISTS uq_adsense_accounts_publisher_id
     ON adsense_accounts(publisher_id)
     WHERE publisher_id IS NOT NULL AND publisher_id <> '';
-CREATE INDEX IF NOT EXISTS idx_domains_notifications ON domains(domain) WHERE tgsend = 1 OR st_tgsend = 1;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_domains_normalized_name ON domains(lower(rtrim(domain, '.')));
 
 CREATE TABLE IF NOT EXISTS provider_accounts (

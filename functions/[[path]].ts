@@ -27,7 +27,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
         // 如果是 API 请求，继续处理
         if (url.pathname.startsWith('/api/')) {
             // 外部检查和 AI 同步接口使用 API_TOKEN
-            if (url.pathname.startsWith('/api/check') || url.pathname.startsWith('/api/ai/')) {
+            if (url.pathname.startsWith('/api/ai/')) {
                 const authError = await checkApiToken(context)
                 if (authError) return authError
             } else if (url.pathname !== '/api/login') {

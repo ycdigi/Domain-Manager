@@ -14,7 +14,7 @@ def website(id, ownership, platform):
     return dict(id=id, domain=f"site{id}.test", site_name=f"网站{id}", ownership=ownership,
                 platform=platform, industry="计算器", registrar="test", registrar_link="",
                 registrar_date="2026-01-01", expiry_date="2027-01-01", service_type="正常网站",
-                status="在线", tgsend=0, st_tgsend=1, memo="", adsense_account_id=None,
+                status="在线", memo="", adsense_account_id=None,
                 adsense_connected="未知", adsense_opened_date=None, seo_last_date=None,
                 daily_clicks=None, daily_clicks_range=None, clicks_updated_date=None,
                 platform_other=None, wp_article_count=None, wp_calculator_count=None,

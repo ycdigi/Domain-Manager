@@ -22,8 +22,6 @@ interface DomainImport {
     computer_name?: string | null
     industry?: string | null
     ownership?: SiteOwnership
-    tgsend?: number
-    st_tgsend?: number
     adsense_account?: string | null
     adsense_connected?: string
     adsense_opened_date?: string | null
@@ -42,7 +40,7 @@ interface DomainImport {
 }
 
 const providers = new Set<ProviderType>(['github', 'cloudflare', 'vhost', 'vps'])
-const allowedFields = ['ownership', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'computer_name', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
+const allowedFields = ['ownership', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'computer_name', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
 const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 
@@ -110,8 +108,6 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             }
             if (item.content_stats_updated_date != null && item.content_stats_updated_date !== '' && !isValidDate(item.content_stats_updated_date)) return '内容统计日期格式无效'
             if ((item.wp_calculator_count != null || item.wp_article_count != null) && !isValidDate(item.content_stats_updated_date)) return '填写 WordPress 内容数量时必须填写统计日期'
-            if (item.tgsend !== undefined && ![0, 1].includes(item.tgsend)) return '域名通知选项无效'
-            if (item.st_tgsend !== undefined && ![0, 1].includes(item.st_tgsend)) return '状态通知选项无效'
             if (item.resources !== undefined && (!Array.isArray(item.resources) || item.resources.length > 20)) return '每个网站最多导入 20 个资源关联'
             if (item.ai_notes !== undefined && (!Array.isArray(item.ai_notes) || item.ai_notes.length > 50)) return '每个网站最多导入 50 条 AI 记录'
             if (item.operations !== undefined && (!Array.isArray(item.operations) || item.operations.length > 500)) return '每个网站最多导入 500 条操作记录'

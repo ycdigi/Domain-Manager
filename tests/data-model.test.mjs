@@ -154,7 +154,8 @@ test('AI sync prompt uses fixed industries and only sends changed fields', () =>
 
 test('legacy addrec endpoint is removed while supported endpoints remain', () => {
   assert.equal(fs.existsSync(path.join(repo, 'functions/api/addrec/index.ts')), false)
-  assert.equal(fs.existsSync(path.join(repo, 'functions/api/check/index.ts')), true)
+  assert.equal(fs.existsSync(path.join(repo, 'functions/api/domains/check.ts')), true)
+  assert.equal(fs.existsSync(path.join(repo, 'functions/api/check/index.ts')), false)
   assert.equal(fs.existsSync(path.join(repo, 'functions/api/domains/export.ts')), true)
 })
 
@@ -307,7 +308,6 @@ test('domain detail drawer is compact and reuses the full edit flow', () => {
 
 test('form and detail loading states remain recoverable after request failures', () => {
   const domainDialog = fs.readFileSync(path.join(repo, 'src/components/DomainDialog.vue'), 'utf8')
-  const alertDialog = fs.readFileSync(path.join(repo, 'src/views/Notifications.vue'), 'utf8')
   const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
   const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
   const resources = fs.readFileSync(path.join(repo, 'src/views/Resources.vue'), 'utf8')
@@ -316,8 +316,6 @@ test('form and detail loading states remain recoverable after request failures',
   const adsenseQuick = fs.readFileSync(path.join(repo, 'src/components/AdsenseQuickDialog.vue'), 'utf8')
   assert.match(domainDialog, /emit\('submit', payload\)\s*\}\) \}/)
   assert.doesNotMatch(domainDialog, /emit\('submit', payload\); dialogVisible\.value = false/)
-  assert.doesNotMatch(alertDialog, /emit\('submit', form\.value\)\s*\n\s*dialogVisible\.value = false/)
-  assert.match(alertDialog, /original\.value = JSON\.stringify\(form\.value\)/)
   assert.match(home, /overviewError/)
   assert.match(home, /loadOverview/)
   assert.match(detail, /Promise\.allSettled\(\[loadNotes\(\), loadOperations\(\)\]\)/)
@@ -479,9 +477,37 @@ test('v1.1 through v1.3 migrations preserve existing domains', () => {
 
 test('workspace routes replace management dialogs without duplicating implementations', () => {
   const routes = fs.readFileSync(path.join(repo, 'src/router/index.ts'), 'utf8')
-  for (const route of ['home', 'resources', 'adsense', 'settings/notifications', 'data']) assert.ok(routes.includes(`path: '${route}'`))
+  for (const route of ['home', 'resources', 'adsense', 'data']) assert.ok(routes.includes(`path: '${route}'`))
+  assert.doesNotMatch(routes, /settings\/notifications|Notifications/)
   for (const removed of ['AdsenseManagerDialog', 'ResourceManagerDialog', 'AlertConfigDialog', 'ImportDialog']) assert.equal(fs.existsSync(path.join(repo, `src/components/${removed}.vue`)), false)
-  for (const page of ['Resources', 'Adsense', 'Notifications', 'DataManagement']) assert.doesNotMatch(fs.readFileSync(path.join(repo, `src/views/${page}.vue`), 'utf8'), /<el-dialog/)
+  for (const page of ['Resources', 'Adsense', 'DataManagement']) assert.doesNotMatch(fs.readFileSync(path.join(repo, `src/views/${page}.vue`), 'utf8'), /<el-dialog/)
+})
+
+test('home search replaces the redundant title count and Telegram notification is removed end to end', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const navigation = fs.readFileSync(path.join(repo, 'src/components/WorkspaceNavigation.vue'), 'utf8')
+  const schema = fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8')
+  assert.match(home, /class="ledger-search-top" role="search"/)
+  assert.doesNotMatch(home, /WorkspaceHeading/)
+  assert.doesNotMatch(home, /网站数量 · \{\{ summaryScope \}\}/)
+  assert.doesNotMatch(navigation, /通知配置|notifications/)
+  assert.doesNotMatch(schema, /alertcfg|tg_token|st_tgsend|last_expiry_alert_date/)
+  assert.equal(fs.existsSync(path.join(repo, 'src/views/Notifications.vue')), false)
+  assert.equal(fs.existsSync(path.join(repo, 'functions/api/alertconfig/index.ts')), false)
+  assert.equal(fs.existsSync(path.join(repo, 'functions/api/check/index.ts')), false)
+})
+
+test('v1.13 migration removes retired notification storage', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/notification-migration.db'
+  try {
+    runSql(db, fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8'))
+    runSql(db, `ALTER TABLE domains ADD COLUMN tgsend INTEGER DEFAULT 0; ALTER TABLE domains ADD COLUMN st_tgsend INTEGER DEFAULT 1; ALTER TABLE domains ADD COLUMN last_expiry_alert_date TEXT; ALTER TABLE domains ADD COLUMN last_offline_alert_at DATETIME; CREATE TABLE alertcfg (id INTEGER PRIMARY KEY, tg_token TEXT, tg_userid TEXT, days INTEGER); CREATE INDEX idx_domains_notifications ON domains(domain) WHERE tgsend = 1 OR st_tgsend = 1;`)
+    runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.13.0.sql'), 'utf8'))
+    assert.doesNotMatch(runSql(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='alertcfg';"), /alertcfg/)
+    assert.doesNotMatch(runSql(db, 'PRAGMA table_info(domains);'), /tgsend|st_tgsend|last_expiry_alert_date|last_offline_alert_at/)
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
 })
 
 test('session read cache deduplicates requests, invalidates dependencies and retries failures', async () => {

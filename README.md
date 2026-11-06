@@ -20,10 +20,8 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
 ## 功能特点
 
 - 域名管理：添加、编辑、删除、导入、导出域名信息
-- 状态监控：自动检查域名在线状态
-- 到期提醒：设置域名到期提醒时间
+- 状态检查：手动检查域名在线状态
 - 多注册商支持：支持多个域名注册商的信息记录
-- Telegram 通知：支持通过 Telegram 发送到期提醒
 - 响应式设计：支持移动端和桌面端访问
 - 安全认证：基于用户名密码的访问控制
 
@@ -111,7 +109,6 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 在 Cloudflare Dashboard 中进入 D1 页面
    - 选择您的数据库
    - 新数据库执行仓库根目录的 `schema.sql`；已有数据库必须按版本顺序执行迁移文件，不要用初始 schema 覆盖旧结构
-   - 如果数据库是旧版本且 `domains` 表还没有 `st_tgsend` 列，再单独执行一次 `schema-migration-v1.0.2.sql`
    - 升级到 AdSense/SEO 字段时，对已有数据库再执行一次 `schema-migration-v1.1.0.sql`；该迁移文件不要重复执行
    - 升级到基础设施账号、资源关联、Token 凭据和点击字段时，对已有数据库再执行一次 `schema-migration-v1.2.0.sql`；该迁移文件不要重复执行
    - 先检查 `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`。若有结果，先人工合并重复域名；之后执行 `schema-migration-v1.3.0.sql`，此迁移只执行一次
@@ -124,6 +121,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 已有数据库升级到 AdSense 月度美元/人民币金额、转账日期和可选网站美元明细时，再执行一次 `schema-migration-v1.9.0.sql`
    - 添加网站归属关系时，先备份已有数据库，再执行一次 `schema-migration-v1.11.0.sql`；旧网站统一设为自营网站，新数据库已包含该字段，不要重复迁移
    - 收拢网站资源绑定规则时，先检查是否存在重复主资源或重复账号归属资源，再执行一次 `schema-migration-v1.12.0.sql`；停用对象的历史关联会保留，不要重复迁移
+   - 移除 Telegram 通知功能时，先备份已有数据库，再执行一次 `schema-migration-v1.13.0.sql`；该迁移会删除通知配置和网站通知字段，不要重复迁移
 
 ### D1 命令行管理
 
@@ -149,9 +147,6 @@ npm run db:verify:remote
 已有数据库时，不要重新执行 `schema.sql` 覆盖旧结构。按实际缺失的版本顺序执行：
 
 ```bash
-# 仅当 domains 缺少 st_tgsend 时执行
-npm run db:migrate:v1.0.2
-
 # 仅当缺少 AdSense/SEO 字段时执行
 npm run db:migrate:v1.1.0
 
@@ -169,6 +164,8 @@ npm run db:migrate:v1.8.0
 npm run db:migrate:v1.9.0
 npm run db:migrate:v1.10.0
 npm run db:migrate:v1.11.0
+npm run db:migrate:v1.12.0
+npm run db:migrate:v1.13.0
 npm run db:verify:remote
 ```
 
@@ -370,7 +367,7 @@ Content-Type: application/json
 
 ## 工作区导航（2026-11-05）
 
-登录后统一使用左侧导航：网站 `/home`，资源 `/resources`，AdSense `/adsense`，通知 `/settings/notifications`，数据 `/data`。页面可直接访问，沿用长期登录和同一权限守卫，本次无 D1 迁移。
+登录后统一使用左侧导航：网站 `/home`，资源 `/resources`，AdSense `/adsense`，数据 `/data`。页面可直接访问，沿用长期登录和同一权限守卫。
 
 URL 可保存归属 `ownership`、技术栈 `platform`、详情域名 `site`；资源页保存 `provider`、`account`、`resource`，AdSense 页保存 `account`、`month`。关联网站入口会在台账显示可移除来源标签。搜索/排序与浏览器返回保持，Token 与未保存文本不进入 URL。
 

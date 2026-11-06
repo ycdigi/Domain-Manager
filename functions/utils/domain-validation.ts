@@ -65,8 +65,6 @@ export const validateDomain = (data: Partial<Domain>) => {
     }
     if (data.content_stats_updated_date != null && data.content_stats_updated_date !== '' && !isValidDate(data.content_stats_updated_date)) return '内容统计日期无效'
     if ((data.wp_calculator_count != null || data.wp_article_count != null) && !isValidDate(data.content_stats_updated_date)) return '填写 WordPress 内容数量时必须填写统计日期'
-    if (data.tgsend !== undefined && ![0, 1].includes(data.tgsend)) return '域名通知选项无效'
-    if (data.st_tgsend !== undefined && ![0, 1].includes(data.st_tgsend)) return '状态通知选项无效'
     return null
 }
 

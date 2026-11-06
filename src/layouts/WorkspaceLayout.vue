@@ -42,7 +42,7 @@ const activePlatform = computed(() => route.name !== 'Home' ? '' : ['Astro', 'Ne
 const ownershipTabs: Array<{ label: string; value: 'all' | SiteOwnership }> = [{ label: '全部归属', value: 'all' }, ...siteOwnerships.map(value => ({ label: value, value }))]
 const activeOwnership = computed(() => route.name !== 'Home' ? '' : isSiteOwnership(queryText(route.query.ownership)) ? queryText(route.query.ownership) : 'all')
 const ownershipTabCounts = computed(() => Object.fromEntries(ownershipTabs.map(tab => [tab.value, (domains.value || []).filter(row => (tab.value === 'all' || row.ownership === tab.value) && (!activePlatform.value || activePlatform.value === 'all' || row.platform === activePlatform.value)).length])) as Record<typeof ownershipTabs[number]['value'], number>)
-const activeManager = computed(() => ({ Resources: 'resources', Adsense: 'adsense', Notifications: 'notifications', Data: 'data' }[String(route.name)] || ''))
+const activeManager = computed(() => ({ Resources: 'resources', Adsense: 'adsense', Data: 'data' }[String(route.name)] || ''))
 let pendingNavigationAction: (() => void) | undefined
 const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.() }
 const runNavigationAction = (action: () => void) => { if (navigationMobileOpen.value) { pendingNavigationAction = action; navigationMobileOpen.value = false } else action() }
@@ -60,7 +60,7 @@ const selectOwnership = (ownership: string) => runNavigationAction(() => {
   if (ownership === 'all') delete query.ownership; else query.ownership = ownership
   void router.push({ name: 'Home', query })
 })
-const navigateManager = (view: string) => runNavigationAction(() => { const name = { resources: 'Resources', adsense: 'Adsense', notifications: 'Notifications', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
+const navigateManager = (view: string) => runNavigationAction(() => { const name = { resources: 'Resources', adsense: 'Adsense', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
 const backup = async () => { try { await downloadJsonBackup(); ElMessage.success('JSON 备份已导出') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败') } }
 const logout = () => { void logoutWorkspace() }
 provide('openWorkspaceNavigation', () => { navigationMobileOpen.value = true })

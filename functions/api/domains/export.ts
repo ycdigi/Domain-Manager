@@ -18,7 +18,7 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             `SELECT domains.domain, domains.registrar, domains.registrar_link, domains.registrar_date,
                     domains.expiry_date, domains.service_type, domains.status, domains.memo,
                     domains.site_name, domains.industry, domains.ownership, domains.computer_name,
-                    domains.tgsend, domains.st_tgsend, domains.adsense_connected,
+                    domains.adsense_connected,
                     domains.adsense_opened_date, domains.seo_last_date, domains.daily_clicks, domains.daily_clicks_range,
                     domains.clicks_updated_date, domains.platform, domains.platform_other,
                     domains.wp_calculator_count, domains.wp_article_count, domains.content_stats_updated_date,

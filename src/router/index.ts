@@ -27,7 +27,6 @@ const router = createRouter({
                 { path: 'home', name: 'Home', component: Home },
                 { path: 'resources', name: 'Resources', component: () => import('../views/Resources.vue') },
                 { path: 'adsense', name: 'Adsense', component: () => import('../views/Adsense.vue') },
-                { path: 'settings/notifications', name: 'Notifications', component: () => import('../views/Notifications.vue') },
                 { path: 'data', name: 'Data', component: () => import('../views/DataManagement.vue') }
             ]
         }

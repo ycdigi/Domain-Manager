@@ -1,8 +1,8 @@
 import type { Domain } from '../types'
 import { dailyClicksRangeFromNumber, isValidDate, normalizeDomain, normalizeDomainType, todayShanghaiDate, validateDomain } from '../utils/domain-validation'
 
-const columns = ['domain', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'tgsend', 'st_tgsend', 'memo', 'site_name', 'industry', 'ownership', 'computer_name', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'last_status_check_at'] as const
-const defaults = { registrar_link: '', tgsend: 0, st_tgsend: 1, memo: '', site_name: null, industry: null, ownership: '自营网站', computer_name: null, adsense_account_id: null, adsense_connected: '未知', adsense_opened_date: null, seo_last_date: null, daily_clicks: null, daily_clicks_range: null, clicks_updated_date: null, platform: '其他', platform_other: null, wp_calculator_count: null, wp_article_count: null, content_stats_updated_date: null } as const
+const columns = ['domain', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'ownership', 'computer_name', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'last_status_check_at'] as const
+const defaults = { registrar_link: '', memo: '', site_name: null, industry: null, ownership: '自营网站', computer_name: null, adsense_account_id: null, adsense_connected: '未知', adsense_opened_date: null, seo_last_date: null, daily_clicks: null, daily_clicks_range: null, clicks_updated_date: null, platform: '其他', platform_other: null, wp_calculator_count: null, wp_article_count: null, content_stats_updated_date: null } as const
 export class WebsiteChangeError extends Error {}
 export type WebsiteChange = { record: Domain; fields: Record<string, unknown>; seoToday: boolean }
 

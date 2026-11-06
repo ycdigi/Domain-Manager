@@ -10,8 +10,6 @@ export interface Env {
     ASSETS: {
         fetch: typeof fetch
     }
-    TELEGRAM_BOT_TOKEN: string
-    TELEGRAM_CHAT_ID: string
     CREDENTIAL_ENCRYPTION_KEY?: string
 }
 
@@ -24,8 +22,6 @@ export interface Domain {
     expiry_date: string
     service_type: string
     status: string
-    tgsend: number
-    st_tgsend: number
     memo: string
     site_name?: string | null
     industry?: string | null
@@ -48,8 +44,6 @@ export interface Domain {
     wp_article_count?: number | null
     content_stats_updated_date?: string | null
     last_status_check_at?: string | null
-    last_expiry_alert_date?: string | null
-    last_offline_alert_at?: string | null
     resource_status?: string
     computer_name?: string | null
     resource_count?: number

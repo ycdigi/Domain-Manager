@@ -13,10 +13,8 @@
 A domain management system built on Cloudflare Pages/EdgeOne Pages, designed to help you easily manage and monitor the status, expiration dates, and other information for your domains.
 ## Features
 - Domain Management: Add, edit, delete, import, and export domain information.
-- Status Monitoring: Automatically checks the online status of domains.
-- Expiration Reminders: Set reminder periods for domain expiration.
+- Status Checks: Manually check the online status of domains.
 - Multi-Registrar Support: Supports recording information for multiple domain registrars.
-- Telegram Notifications: Supports sending expiration reminders via Telegram.
 - Responsive Design: Accessible on both mobile and desktop devices.
 - Secure Authentication: Access control based on username and password.
 ## Batch Import Instructions
@@ -94,7 +92,6 @@ Domain JSON may also include an `ai_notes` array with `kind` (`AI提示词` or `
 - In the Cloudflare Dashboard, go to the D1 section.
 - Select your database.
 - For a new database, execute the root `schema.sql`. For an existing database, apply versioned migrations in order; do not use the initial schema as an upgrade script.
-- If an older `domains` table does not have the `st_tgsend` column, run `schema-migration-v1.0.2.sql` once.
 - To add the AdSense and SEO fields to an existing database, run `schema-migration-v1.1.0.sql` once. Do not run that migration twice.
 - To add infrastructure accounts, resource links, encrypted credentials, and click fields, run `schema-migration-v1.2.0.sql` once. Do not run that migration twice.
 - Before v1.3.0, check `SELECT lower(rtrim(domain, '.')), COUNT(*) FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1;`. Resolve any duplicate domain rows manually, then run `schema-migration-v1.3.0.sql` once for status-alert tracking, resource-status triggers, and revised indexes.
@@ -105,6 +102,8 @@ Domain JSON may also include an `ai_notes` array with `kind` (`AI提示词` or `
 For website ownership, back up the existing database and apply `schema-migration-v1.11.0.sql` once before deploying this feature. Existing websites become self-operated; fresh databases already include the field. The `ownership` values are `未分类`, `自营网站`, and `企业客户网站`. Ownership and stack filters intersect; website metrics follow both filters, while account income and infrastructure totals remain explicitly global. JSON/Excel exports retain ownership; legacy imports and AI sync requests preserve existing ownership when omitted, and new imported sites default to self-operated.
 
 Before applying the resource-binding upgrade, check for duplicate primary links per website and duplicate `account:<id>` ownership resources, then apply `schema-migration-v1.12.0.sql` once. Existing links to disabled accounts or resources are retained; new links to disabled objects are rejected.
+
+Before deploying this version, back up an existing database and apply `schema-migration-v1.13.0.sql` once to remove the retired Telegram notification configuration and website notification fields.
 
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 
