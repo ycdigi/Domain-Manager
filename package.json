@@ -33,7 +33,7 @@
     "db:migrate:v1.12.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.12.0.sql --yes",
     "db:migrate:v1.13.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.13.0.sql --yes",
     "db:migrate:v1.14.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.14.0.sql --yes",
-    "db:verify:remote": "wrangler d1 execute domains-db --remote --command \"SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('domains','adsense_accounts','adsense_income','adsense_income_domains','provider_accounts','provider_resources','domain_resources','provider_credentials','domain_ai_notes','domain_ai_note_versions','domain_operations');\"",
+    "db:verify:remote": "wrangler d1 execute domains-db --remote --command \"SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('domains','adsense_accounts','adsense_income','adsense_income_domains','provider_accounts','provider_resources','domain_resources','provider_credentials','domain_ai_notes','domain_ai_note_versions','domain_operations','domain_todos');\"",
     "db:execute": "npm run db:init:remote",
     "db:local": "wrangler d1 execute domains-db --local --file=./schema.sql --yes",
     "deploy": "npm run build && wrangler pages deploy dist --branch main",

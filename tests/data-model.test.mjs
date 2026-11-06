@@ -526,6 +526,20 @@ test('v1.13 migration removes retired notification storage', () => {
   }
 })
 
+test('v1.14 migration adds Todo storage and is repeatable', () => {
+  const db = fs.mkdtempSync(path.join(os.tmpdir(), 'domain-manager-')) + '/todo-migration.db'
+  try {
+    const legacySchema = fs.readFileSync(path.join(repo, 'schema.sql'), 'utf8').replace(/CREATE TABLE IF NOT EXISTS domain_todos \([\s\S]*?\n\);\n\nCREATE INDEX IF NOT EXISTS idx_domain_operations_domain_date ON domain_operations[\s\S]*?CREATE INDEX IF NOT EXISTS idx_domain_todos_domain_created ON domain_todos\(domain_id, created_at DESC, id DESC\);\n/m, 'CREATE INDEX IF NOT EXISTS idx_domain_operations_domain_date ON domain_operations(domain_id, operation_date DESC);\n')
+    runSql(db, legacySchema)
+    runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.14.0.sql'), 'utf8'))
+    runSql(db, fs.readFileSync(path.join(repo, 'schema-migration-v1.14.0.sql'), 'utf8'))
+    assert.match(runSql(db, "SELECT name FROM sqlite_master WHERE type='table' AND name='domain_todos';"), /domain_todos/)
+    assert.match(runSql(db, "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_domain_todos_domain_created';"), /idx_domain_todos_domain_created/)
+  } finally {
+    fs.rmSync(path.dirname(db), { recursive: true, force: true })
+  }
+})
+
 test('session read cache deduplicates requests, invalidates dependencies and retries failures', async () => {
   const ts = await import('typescript')
   const source = fs.readFileSync(path.join(repo, 'src/utils/workspaceCache.ts'), 'utf8')

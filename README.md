@@ -167,6 +167,7 @@ npm run db:migrate:v1.10.0
 npm run db:migrate:v1.11.0
 npm run db:migrate:v1.12.0
 npm run db:migrate:v1.13.0
+npm run db:migrate:v1.14.0
 npm run db:verify:remote
 ```
 
