@@ -516,9 +516,24 @@ test('domain details expose independent Todo storage with collapsed descriptions
 test('domain details keep secondary fields collapsed by default', () => {
   const detail = fs.readFileSync(path.join(repo, 'src/components/DomainDetailDrawer.vue'), 'utf8')
   assert.match(detail, /核心信息/)
+  assert.match(detail, /detail-core-grid[\s\S]*?网站名称[\s\S]*?技术栈[\s\S]*?到期日期[\s\S]*?点击数据/)
   assert.match(detail, /additionalInfoExpanded = ref\(false\)/)
   assert.match(detail, /v-if="additionalInfoExpanded" class="detail-extra-content"/)
   assert.match(detail, /展开更多信息/)
+})
+
+test('home summary metrics are rendered in the navigation only on Home', () => {
+  const home = fs.readFileSync(path.join(repo, 'src/views/Home.vue'), 'utf8')
+  const layout = fs.readFileSync(path.join(repo, 'src/layouts/WorkspaceLayout.vue'), 'utf8')
+  const navigation = fs.readFileSync(path.join(repo, 'src/components/WorkspaceNavigation.vue'), 'utf8')
+  assert.doesNotMatch(home, /summary-grid|summary-card|30 天未优化|优秀网站/)
+  assert.match(home, /v-if="sourceLabel" class="ledger-viewbar"/)
+  assert.match(layout, /route\.name === 'Home' \? homeOverviewTotals : null/)
+  assert.match(navigation, /overviewTotals\.expiring_domains/)
+  assert.match(navigation, /overviewTotals\.excellent_wordpress/)
+  assert.match(navigation, /overviewTotals\.excellent_astro/)
+  assert.match(navigation, /overviewTotals\.excellent_nextjs/)
+  assert.match(navigation, /临期域名/)
 })
 
 test('v1.13 migration removes retired notification storage', () => {

@@ -1,8 +1,8 @@
 <template>
   <div class="workspace-shell" :class="{ 'navigation-collapsed': navigationCollapsed }">
-    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :ownership-tabs="ownershipTabs" :ownership-counts="ownershipTabCounts" :active-ownership="activeOwnership" @select-ownership="selectOwnership" :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" :collapsed="navigationCollapsed" @select="selectPlatform" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
+    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :ownership-tabs="ownershipTabs" :ownership-counts="ownershipTabCounts" :active-ownership="activeOwnership" @select-ownership="selectOwnership" :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" :overview-totals="route.name === 'Home' ? homeOverviewTotals : null" :collapsed="navigationCollapsed" @select="selectPlatform" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
     <el-drawer v-model="navigationMobileOpen" class="workspace-navigation-drawer" title="网站导航" direction="ltr" size="256px" :with-header="false" @closed="runPendingNavigationAction">
-      <WorkspaceNavigation :ownership-tabs="ownershipTabs" :ownership-counts="ownershipTabCounts" :active-ownership="activeOwnership" @select-ownership="selectOwnership" :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" mobile @select="selectPlatform" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
+      <WorkspaceNavigation :ownership-tabs="ownershipTabs" :ownership-counts="ownershipTabCounts" :active-ownership="activeOwnership" @select-ownership="selectOwnership" :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" :overview-totals="route.name === 'Home' ? homeOverviewTotals : null" mobile @select="selectPlatform" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
     </el-drawer>
     <main class="workspace-content">
       <section v-if="queue.pending.value.length || queue.syncing.value" class="sync-status" aria-label="同步状态" aria-live="polite">
@@ -28,6 +28,9 @@ import { siteOwnerships, isSiteOwnership, type SiteOwnership } from '../../share
 import type { DomainData } from '../api/domains'
 import '../styles/workspace/workspace.css'
 const route = useRoute(); const router = useRouter()
+interface HomeOverviewTotals { expiring_domains: number; excellent_wordpress: number; excellent_astro: number; excellent_nextjs: number }
+const homeOverviewTotals = ref<HomeOverviewTotals | null>(null)
+provide('homeOverviewTotals', homeOverviewTotals)
 const queue = getWriteQueue(); const showSyncDetails = ref(false)
 const syncNow = async () => { try { const result = await queue.retryFailed(); if (result.synced) ElMessage.success('所有任务已同步'); else ElMessage.warning('部分任务仍待同步，请查看详情') } catch { ElMessage.error('同步未完成，请重试') } }
 const taskLabel = (id?: number) => (domains.value || []).find((row: DomainData) => row.id === id)?.domain || `记录 #${id || '未知'}`

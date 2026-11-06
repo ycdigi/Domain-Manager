@@ -12,17 +12,10 @@
                     <el-button :icon="sidebarCollapsed ? Expand : Fold" :aria-expanded="!sidebarCollapsed" :title="sidebarCollapsed ? '显示概览' : '隐藏概览'" @click="toggleSidebar">{{ sidebarCollapsed ? '显示概览' : '隐藏概览' }}</el-button>
                 </div>
             </div>
-            <section v-loading="dashboardLoading" class="summary-grid" :aria-label="`运营指标 · ${summaryScope}`" :aria-busy="dashboardLoading">
-                <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
-                <div class="summary-card"><span>30 天未优化</span><strong>{{ dashboard.totals.seo_stale_domains || 0 }}</strong></div>
-                <div class="summary-card"><span>WP 优秀网站</span><strong>{{ dashboard.totals.excellent_wordpress || 0 }}</strong></div>
-                <div class="summary-card"><span>Astro 优秀网站</span><strong>{{ dashboard.totals.excellent_astro || 0 }}</strong></div>
-                <div class="summary-card"><span>Next.js 优秀网站</span><strong>{{ dashboard.totals.excellent_nextjs || 0 }}</strong></div>
-            </section>
             <div class="workbench-grid">
                 <section class="domain-ledger" aria-label="网站台账" :aria-busy="loading">
                     <div v-if="overviewError" class="overview-error" role="alert"><span>{{ overviewError }}</span><el-button size="small" @click="loadOverview">重试概览</el-button></div>
-                    <div class="ledger-viewbar">
+                    <div v-if="sourceLabel" class="ledger-viewbar">
                         <el-tag v-if="sourceLabel" closable @close="clearSource">{{ sourceLabel }}</el-tag>
                     </div>
                     <div v-if="detectProgress.total" class="detection-progress" role="status">已检测 {{ detectProgress.done }} / {{ detectProgress.total }} · 状态变化 {{ detectProgress.changed }} · 检测失败 {{ detectProgress.failed }}<span v-if="!detecting"> · {{ queue.pending.value.length ? '部分结果待同步' : '已同步' }}</span></div>
@@ -67,7 +60,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, watch } from 'vue';
+import { ref, computed, inject, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, watch } from 'vue';
 import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, type TableInstance } from 'element-plus';
 import { Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
@@ -154,9 +147,11 @@ const quickFieldPlaceholder = computed(() => quickFieldMode.value === 'site_name
 const quickFieldValue = computed(() => quickFieldMode.value === 'site_name' ? quickFieldDomain.value?.site_name : quickFieldDomain.value?.platform_other);
 const adsenseQuickVisible = ref(false);
 const adsenseQuickDomain = ref<DomainData>();
+interface HomeOverviewTotals { expiring_domains: number; excellent_wordpress: number; excellent_astro: number; excellent_nextjs: number }
 interface DashboardData { totals: Record<string, number>; seo: Array<{ id: number; domain: string; seo_last_date: string | null; days_since: number | null }>; clicks: Record<string, number>; providers: Array<{ provider: string; account_count: number; resource_count: number; linked_domain_count: number }>; owner_income: Array<{ owner: string; currency: string; account_count: number; site_count: number; income_usd_total: number; income_cny_total: number | null; opened_date: string | null }>; platforms: Array<{ platform: string; count: number }>; quality: Record<string, number> }
 const emptyDashboard = (): DashboardData => ({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [], platforms: [], quality: {} });
 const dashboard = ref<DashboardData>(emptyDashboard());
+const homeOverviewTotals = inject<{ value: HomeOverviewTotals | null }>('homeOverviewTotals');
 const dashboardLoading = ref(false);
 let dashboardRequest = 0;
 const industryOptions = ['计算器', '资讯站', '其他'];
@@ -380,11 +375,20 @@ const loadDashboard = async () => {
     const request = ++dashboardRequest;
     dashboardLoading.value = true;
     dashboard.value = emptyDashboard();
+    if (homeOverviewTotals) homeOverviewTotals.value = null;
     try {
         const today = localDate();
         const params = new URLSearchParams({ today, month: today.slice(0, 7), ownership: ownershipTab.value, platform: platformTab.value });
         const data = await cachedGet<DashboardData>(`/api/dashboard/summary?${params}`);
-        if (request === dashboardRequest) dashboard.value = data;
+        if (request === dashboardRequest) {
+            dashboard.value = data;
+            if (homeOverviewTotals) homeOverviewTotals.value = {
+                expiring_domains: data.totals.expiring_domains || 0,
+                excellent_wordpress: data.totals.excellent_wordpress || 0,
+                excellent_astro: data.totals.excellent_astro || 0,
+                excellent_nextjs: data.totals.excellent_nextjs || 0
+            };
+        }
         return true;
     } catch (error) {
         if (request === dashboardRequest) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。';

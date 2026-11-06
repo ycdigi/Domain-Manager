@@ -63,7 +63,9 @@ with sync_playwright() as p:
             data = dict(domains=rows)
         elif url.path == "/api/dashboard/summary":
             selected = [row for row in rows if all(query.get(key, "all") in ("all", row[key]) for key in ("ownership", "platform"))]
-            data = dict(totals=dict(total_domains=len(selected)), seo=[], clicks={}, providers=[], owner_income=[], platforms=[], quality={})
+            data = dict(totals=dict(total_domains=len(selected), expiring_domains=1, excellent_wordpress=2,
+                                    excellent_astro=3, excellent_nextjs=4), seo=[], clicks={}, providers=[],
+                        owner_income=[], platforms=[], quality={})
             if query.get("ownership") == hold_ownership[0]:
                 held_summary.append((route, data))
                 return
@@ -93,11 +95,13 @@ with sync_playwright() as p:
     expect(page.locator(".el-table__body-wrapper tbody tr")).to_have_count(1)
     expect(page.get_by_role("heading", level=1)).to_contain_text("企业客户网站")
     expect(nav.get_by_role("button", name="自营网站", exact=True)).to_have_attribute("title", "自营网站 · 1 个网站")
-    expect(page.locator(".summary-card").first.locator("strong")).to_have_text("1")
+    expect(nav.get_by_text("临期域名", exact=True)).to_be_visible()
+    expect(nav.locator(".workspace-nav-metrics strong").nth(0)).to_have_text("1")
+    expect(nav.locator(".workspace-nav-metrics strong")).to_have_count(4)
     search = page.get_by_placeholder("搜索域名、网站名称、类型、备注")
     search.fill("nomatch")
     expect(page.get_by_text("没有匹配的网站", exact=True)).to_be_visible()
-    expect(page.locator(".summary-card").first.locator("strong")).to_have_text("1")
+    expect(nav.locator(".workspace-nav-metrics strong").nth(0)).to_have_text("1")
     search.fill("")
     page.go_back()
     expect(page.locator(".el-table__body-wrapper tbody tr")).to_have_count(2)
@@ -145,20 +149,20 @@ with sync_playwright() as p:
     page.wait_for_function("document.querySelector('h1').textContent.includes('自营网站')")
     page.wait_for_timeout(100)
     nav.get_by_role("button", name="未分类", exact=True).click()
-    expect(page.locator(".summary-card").first.locator("strong")).to_have_text("1")
+    expect(nav.locator(".workspace-nav-metrics strong").nth(0)).to_have_text("1")
     assert held_summary, "the earlier filter request must be in flight"
     for route, data in held_summary:
         route.fulfill(json=dict(status=200, message="成功", data=data))
     page.wait_for_load_state("networkidle")
-    expect(page.locator(".summary-card").first.locator("strong")).to_have_text("1")
+    expect(nav.locator(".workspace-nav-metrics strong").nth(0)).to_have_text("1")
     held_summary.clear()
     page.reload()
-    expect(page.locator(".summary-card").first.locator("strong")).to_have_text("1")
+    expect(nav.locator(".workspace-nav-metrics strong").nth(0)).to_have_text("1")
     nav.get_by_role("button", name="自营网站", exact=True).click()
     page.wait_for_function("document.querySelector('h1').textContent.includes('自营网站')")
     page.wait_for_timeout(100)
     nav.get_by_role("button", name="未分类", exact=True).click()
-    expect(page.locator(".summary-card").first.locator("strong")).to_have_text("1")
+    expect(nav.locator(".workspace-nav-metrics strong").nth(0)).to_have_text("1")
     assert held_summary
     for route, _ in held_summary:
         route.fulfill(status=500, json=dict(status=500, message="旧筛选请求失败", data=None))
@@ -166,7 +170,6 @@ with sync_playwright() as p:
     expect(page.get_by_text("概览数据未能完整加载，列表数据仍可继续使用。", exact=True)).not_to_be_visible()
     assert any(query.get("ownership") == "企业客户网站" and query.get("platform") == "WordPress" for _, path, query in requests if path == "/api/dashboard/summary")
     assert not errors, errors
-    expect(page.locator(".summary-grid .el-loading-mask")).not_to_be_visible()
     page.wait_for_timeout(400)
     page.screenshot(path="/tmp/domain-manager-ownership-desktop.png", full_page=True)
     print("Desktop ownership acceptance passed")

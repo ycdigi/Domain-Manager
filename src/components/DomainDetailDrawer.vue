@@ -14,20 +14,20 @@
       <section class="detail-section">
         <div class="section-heading"><h3>核心信息</h3><span class="detail-muted">查看与维护</span></div>
         <div class="detail-grid detail-core-grid">
-          <div><span>状态</span><strong>{{ domain.status }}</strong></div>
           <div><span>网站名称</span><strong>{{ domain.site_name || '未记录' }}</strong></div>
-          <div><span>网站归属</span><strong>{{ domain.ownership }}</strong></div>
-          <div><span>类型</span><strong>{{ domain.industry || '未记录' }}</strong></div>
-          <div><span>资源</span><strong>{{ domain.resource_status || '未关联' }}</strong></div>
-          <div><span>到期日期</span><strong>{{ domain.expiry_date || '未记录' }}</strong></div>
-          <div><span>最近 SEO</span><strong>{{ domain.seo_last_date || '未记录' }}</strong></div>
           <div><span>技术栈</span><strong>{{ domain.platform === '其他' ? (domain.platform_other || '其他') : domain.platform }}</strong></div>
+          <div><span>到期日期</span><strong>{{ domain.expiry_date || '未记录' }}</strong></div>
+          <div><span>点击数据</span><strong>{{ clickRangeLabel(domain.daily_clicks_range, domain.daily_clicks) }}<small v-if="domain.clicks_updated_date"> · {{ domain.clicks_updated_date }}</small></strong></div>
         </div>
         <el-button class="detail-section-toggle" text size="small" :icon="additionalInfoExpanded ? ArrowUp : ArrowDown" :aria-expanded="additionalInfoExpanded" @click="additionalInfoExpanded = !additionalInfoExpanded">{{ additionalInfoExpanded ? '收起更多信息' : '展开更多信息' }}</el-button>
         <div v-if="additionalInfoExpanded" class="detail-extra-content">
           <div class="detail-grid">
+            <div><span>状态</span><strong>{{ domain.status }}</strong></div>
+            <div><span>网站归属</span><strong>{{ domain.ownership }}</strong></div>
+            <div><span>类型</span><strong>{{ domain.industry || '未记录' }}</strong></div>
+            <div><span>资源</span><strong>{{ domain.resource_status || '未关联' }}</strong></div>
             <div><span>注册日期</span><strong>{{ domain.registrar_date || '未记录' }}</strong></div>
-            <div><span>点击数据</span><strong>{{ clickRangeLabel(domain.daily_clicks_range, domain.daily_clicks) }}<small v-if="domain.clicks_updated_date"> · {{ domain.clicks_updated_date }}</small></strong></div>
+            <div><span>最近 SEO</span><strong>{{ domain.seo_last_date || '未记录' }}</strong></div>
             <div><span>状态检查</span><strong>{{ datePart(domain.last_status_check_at) }}</strong></div>
             <div><span>AdSense</span><strong>{{ domain.adsense_connected || '未知' }}<small v-if="domain.adsense_opened_date"> · {{ domain.adsense_opened_date }}</small></strong></div>
             <div><span>开通耗时</span><strong>{{ domain.adsense_open_days == null ? '未计算' : `${domain.adsense_open_days} 天` }}</strong></div>

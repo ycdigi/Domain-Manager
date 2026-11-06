@@ -29,6 +29,15 @@
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'adsense' }" aria-label="AdSense 管理" title="AdSense 管理" @click="emit('manage', 'adsense')"><el-icon aria-hidden="true"><Coin /></el-icon><span v-if="!collapsed" class="workspace-nav-text">AdSense 管理</span></button>
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'data' }" aria-label="数据管理" title="数据管理" @click="emit('manage', 'data')"><el-icon aria-hidden="true"><Download /></el-icon><span v-if="!collapsed" class="workspace-nav-text">数据管理</span></button>
       </div>
+      <div v-if="!collapsed && overviewTotals" class="workspace-nav-group workspace-nav-overview" aria-label="首页概览指标">
+        <p class="workspace-nav-label">首页概览</p>
+        <div class="workspace-nav-metrics">
+          <div><span>临期域名</span><strong>{{ overviewTotals.expiring_domains }}</strong></div>
+          <div><span>WP</span><strong>{{ overviewTotals.excellent_wordpress }}</strong></div>
+          <div><span>Astro</span><strong>{{ overviewTotals.excellent_astro }}</strong></div>
+          <div><span>Next.js</span><strong>{{ overviewTotals.excellent_nextjs }}</strong></div>
+        </div>
+      </div>
     </nav>
     <div class="workspace-nav-footer">
       <el-dropdown ref="moreMenu" trigger="click" placement="top-start">
@@ -57,6 +66,7 @@ defineProps<{
   counts: Record<View, number>;
   active: string;
   activeManager: string;
+  overviewTotals?: { expiring_domains: number; excellent_wordpress: number; excellent_astro: number; excellent_nextjs: number } | null;
   collapsed?: boolean;
   mobile?: boolean;
 }>();
