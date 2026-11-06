@@ -261,7 +261,9 @@ test('ledger service provider cell can add an existing resource', () => {
   assert.match(home, /resourceOptionLabel/)
   assert.match(home, /providerDisplay/)
   assert.match(home, /providerShortLabel/)
-  assert.match(home, /class="inline-select provider-add-select"/)
+  assert.match(home, /class="inline-select provider-select"/)
+  assert.match(home, /placeholder="未关联"/)
+  assert.doesNotMatch(home, /provider-add-select|placeholder="选择"/)
   assert.match(home, /resourceRole/)
 })
 
