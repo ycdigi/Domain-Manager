@@ -79,11 +79,11 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             INSERT INTO domains (
                 domain, registrar, registrar_link, registrar_date,
                 expiry_date, service_type, status, tgsend, st_tgsend, memo,
-                site_name, industry,
+                site_name, industry, ownership,
                 adsense_account_id, adsense_connected, adsense_opened_date, seo_last_date,
                 daily_clicks, daily_clicks_range, clicks_updated_date, platform, platform_other,
                 wp_calculator_count, wp_article_count, content_stats_updated_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             RETURNING *
         `).bind(
             normalizedDomain,
@@ -98,6 +98,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             data.memo || '',
             data.site_name?.trim() || null,
             normalizeDomainType(data.industry?.trim()) || null,
+            data.ownership ?? '自营网站',
             data.adsense_account_id ?? null,
             data.adsense_connected || '未知',
             data.adsense_opened_date || null,

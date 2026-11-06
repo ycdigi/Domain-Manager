@@ -102,6 +102,8 @@ Domain JSON may also include an `ai_notes` array with `kind` (`AI提示词` or `
 - For existing databases, run `schema-migration-v1.4.0.sql` once to add per-domain AI prompts and idea notes.
 - For existing databases, run `schema-migration-v1.5.0.sql` once to add Publisher IDs, platform/content snapshots, and operation-date history, then run `schema-migration-v1.6.0.sql` once for site names and industries.
 
+For website ownership, back up the existing database and apply `schema-migration-v1.11.0.sql` once before deploying this feature. Existing websites become self-operated; fresh databases already include the field. The `ownership` values are `未分类`, `自营网站`, and `企业客户网站`. Ownership and stack filters intersect; website metrics follow both filters, while account income and infrastructure totals remain explicitly global. JSON/Excel exports retain ownership; legacy imports and AI sync requests preserve existing ownership when omitted, and new imported sites default to self-operated.
+
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 
 `CREDENTIAL_ENCRYPTION_KEY` encrypts stored GitHub tokens. Keep an independent backup. If it is lost or replaced, existing ciphertext cannot be decrypted and those tokens must be entered again.

@@ -2,7 +2,7 @@ import type { Env, Domain, DomainAiNoteKind, DomainOperationKind } from '../../.
 import { checkApiToken } from '../../../utils/auth'
 import { dailyClicksRangeFromNumber, isValidDate, isValidDailyClicksRange, normalizeDomain, normalizeDomainType, todayShanghaiDate, validateDomain } from '../../../utils/domain-validation'
 
-type SyncFields = Partial<Pick<Domain, 'status' | 'site_name' | 'industry' | 'seo_last_date' | 'daily_clicks' | 'daily_clicks_range' | 'clicks_updated_date' | 'platform' | 'platform_other' | 'wp_calculator_count' | 'wp_article_count' | 'content_stats_updated_date' | 'adsense_connected' | 'adsense_opened_date' | 'memo'>> & {
+type SyncFields = Partial<Pick<Domain, 'status' | 'site_name' | 'ownership' | 'industry' | 'seo_last_date' | 'daily_clicks' | 'daily_clicks_range' | 'clicks_updated_date' | 'platform' | 'platform_other' | 'wp_calculator_count' | 'wp_article_count' | 'content_stats_updated_date' | 'adsense_connected' | 'adsense_opened_date' | 'memo'>> & {
     adsense_account?: string | null
 }
 
@@ -16,7 +16,7 @@ interface SyncBody {
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const operationKinds: DomainOperationKind[] = ['SEO', '内容', '技术', '其他']
 const noteKinds: DomainAiNoteKind[] = ['AI提示词', '想法说明']
-const fieldNames = new Set(['status', 'site_name', 'industry', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'adsense_connected', 'adsense_opened_date', 'memo', 'adsense_account'])
+const fieldNames = new Set(['status', 'site_name', 'ownership', 'industry', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'adsense_connected', 'adsense_opened_date', 'memo', 'adsense_account'])
 
 const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
 
@@ -88,7 +88,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const appliedFields: string[] = []
         const addField = (name: string, value: unknown) => { assignments.push(`${name} = ?`); values.push(value); appliedFields.push(name) }
 
-        for (const name of ['status', 'site_name', 'industry', 'seo_last_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'adsense_connected', 'adsense_opened_date', 'memo'] as const) {
+        for (const name of ['status', 'site_name', 'ownership', 'industry', 'seo_last_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'adsense_connected', 'adsense_opened_date', 'memo'] as const) {
             if (has(fields, name)) addField(name, fields[name] === '' ? null : fields[name])
         }
         if (has(fields, 'adsense_account')) addField('adsense_account_id', adsenseAccountId)

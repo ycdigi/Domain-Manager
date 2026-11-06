@@ -8,10 +8,18 @@
     </div>
     <nav class="workspace-nav-groups" aria-label="工作区导航">
       <div class="workspace-nav-group">
-        <p v-if="!collapsed" class="workspace-nav-label">网站</p>
-        <button v-for="tab in tabs" :key="tab.value" type="button" class="workspace-nav-item" :class="{ 'is-active': active === tab.value }" :aria-pressed="active === tab.value" :aria-label="tab.label === '全部' ? '全部网站' : tab.label" :title="`${tab.label === '全部' ? '全部网站' : tab.label} · ${counts[tab.value]} 个网站`" @click="emit('select', tab.value)">
+        <p v-if="!collapsed" class="workspace-nav-label">网站归属</p>
+        <button v-for="tab in ownershipTabs" :key="tab.value" type="button" class="workspace-nav-item" :class="{ 'is-active': activeOwnership === tab.value }" :aria-pressed="activeOwnership === tab.value" :aria-label="tab.label" :title="`${tab.label} · ${ownershipCounts[tab.value]} 个网站`" @click="emit('selectOwnership', tab.value)">
+          <el-icon aria-hidden="true"><Grid v-if="tab.value === 'all'" /><House v-else-if="tab.value === '自营网站'" /><OfficeBuilding v-else-if="tab.value === '企业客户网站'" /><QuestionFilled v-else /></el-icon>
+          <span v-if="!collapsed" class="workspace-nav-text">{{ tab.label }}</span>
+          <span v-if="!collapsed" class="workspace-nav-count" aria-hidden="true">{{ ownershipCounts[tab.value] }}</span>
+        </button>
+      </div>
+      <div class="workspace-nav-group">
+        <p v-if="!collapsed" class="workspace-nav-label">技术栈</p>
+        <button v-for="tab in tabs" :key="tab.value" type="button" class="workspace-nav-item" :class="{ 'is-active': active === tab.value }" :aria-pressed="active === tab.value" :aria-label="tab.label === '全部' ? '全部技术栈' : tab.label" :title="`${tab.label === '全部' ? '全部技术栈' : tab.label} · ${counts[tab.value]} 个网站`" @click="emit('select', tab.value)">
           <el-icon aria-hidden="true"><Grid v-if="tab.value === 'all'" /><Lightning v-else-if="tab.value === 'Astro'" /><Connection v-else-if="tab.value === 'Next.js'" /><Document v-else /></el-icon>
-          <span v-if="!collapsed" class="workspace-nav-text">{{ tab.label === '全部' ? '全部网站' : tab.label }}</span>
+          <span v-if="!collapsed" class="workspace-nav-text">{{ tab.label === '全部' ? '全部技术栈' : tab.label }}</span>
           <span v-if="!collapsed" class="workspace-nav-count" aria-hidden="true">{{ counts[tab.value] }}</span>
         </button>
       </div>
@@ -35,13 +43,17 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue';
 import type { DropdownInstance } from 'element-plus';
-import { Grid, Lightning, Connection, Document, FolderOpened, Coin, Bell, MoreFilled, Download, Close, Expand, Fold } from '@element-plus/icons-vue';
+import type { SiteOwnership } from '../../shared/website-classification';
+import { House, OfficeBuilding, QuestionFilled, Grid, Lightning, Connection, Document, FolderOpened, Coin, Bell, MoreFilled, Download, Close, Expand, Fold } from '@element-plus/icons-vue';
 const moreMenu = ref<DropdownInstance>();
 const closeMoreMenu = () => { moreMenu.value?.handleClose(); };
 onMounted(() => window.addEventListener('resize', closeMoreMenu));
 onUnmounted(() => window.removeEventListener('resize', closeMoreMenu));
 type View = 'all' | 'Astro' | 'Next.js' | 'WordPress';
 defineProps<{
+  ownershipTabs: Array<{ label: string; value: 'all' | SiteOwnership }>;
+  ownershipCounts: Record<'all' | SiteOwnership, number>;
+  activeOwnership: string;
   tabs: Array<{ label: string; value: View }>;
   counts: Record<View, number>;
   active: string;
@@ -51,6 +63,7 @@ defineProps<{
 }>();
 const emit = defineEmits<{
   select: [value: View];
+  selectOwnership: [value: 'all' | SiteOwnership];
   manage: [value: 'resources' | 'adsense' | 'notifications' | 'data'];
   collapse: [];
   close: [];

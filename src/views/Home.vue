@@ -2,18 +2,18 @@
     <div class="home-container" :class="{ 'sidebar-collapsed': sidebarCollapsed }">
         <main class="workspace">
             <div class="ledger-toolbar">
-                <WorkspaceHeading :title="platformTab === 'all' ? '全部网站' : `${platformTab} 网站`" :subtitle="loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名`" />
+                <WorkspaceHeading :title="ownershipTab === 'all' && platformTab === 'all' ? '全部网站' : summaryScope" :subtitle="loading ? '正在加载…' : loadError ? '加载失败' : `${filteredDomains.length} / ${domains.length} 个域名`" />
                 <div class="ledger-actions" aria-label="域名管理操作">
                     <el-button :icon="Refresh" :loading="refreshing" :disabled="loading || !!loadError" @click="handleRefresh">刷新</el-button>
                     <el-button :disabled="loading || !!loadError || detecting || !filteredDomains.length" :loading="detecting" @click="handleDetect">检测网站状态（{{ filteredDomains.length }}）</el-button>
                     <el-button type="primary" :icon="Plus" @click="handleAdd">新增域名</el-button>
                     <el-button :icon="Upload" @click="handleImport">导入</el-button>
-                    <el-button :icon="Download" @click="handleExport">导出</el-button>
+                    <el-button :icon="Download" @click="handleExport">导出全部</el-button>
                     <el-button :icon="sidebarCollapsed ? Expand : Fold" :aria-expanded="!sidebarCollapsed" :title="sidebarCollapsed ? '显示概览' : '隐藏概览'" @click="toggleSidebar">{{ sidebarCollapsed ? '显示概览' : '隐藏概览' }}</el-button>
                 </div>
             </div>
-            <section class="summary-grid" aria-label="运营指标">
-                <div class="summary-card"><span>域名总数</span><strong>{{ domains.length }}</strong></div>
+            <section v-loading="dashboardLoading" class="summary-grid" :aria-label="`运营指标 · ${summaryScope}`" :aria-busy="dashboardLoading">
+                <div class="summary-card"><span>网站数量 · {{ summaryScope }}</span><strong>{{ dashboard.totals.total_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>30 天内到期</span><strong>{{ dashboard.totals.expiring_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>30 天未优化</span><strong>{{ dashboard.totals.seo_stale_domains || 0 }}</strong></div>
                 <div class="summary-card"><span>WP 优秀网站</span><strong>{{ dashboard.totals.excellent_wordpress || 0 }}</strong></div>
@@ -34,6 +34,7 @@
                         <el-table-column prop="site_name" label="网站名称" min-width="170" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="site-name-cell"><el-tooltip v-if="hasRecentOperation(scope.row)" content="近 7 天有操作记录" placement="top"><el-icon class="site-recent-star" role="img" aria-label="近 7 天有操作记录"><StarFilled /></el-icon></el-tooltip><el-tooltip v-if="seoNeedsAttention(scope.row)" :content="seoState(scope.row).title" placement="top"><el-icon class="site-seo-alert" role="img" :aria-label="seoState(scope.row).title"><WarningFilled /></el-icon></el-tooltip><button type="button" class="table-inline-text" :title="scope.row.site_name || '未命名'" @click="openQuickField(scope.row, 'site_name')">{{ scope.row.site_name || '未命名' }}</button></div></template></el-table-column>
                         <el-table-column prop="domain" label="域名" min-width="200" :fixed="pinIdentityColumns" sortable><template #default="scope"><div class="domain-cell"><a :href="'https://' + scope.row.domain" target="_blank" rel="noopener noreferrer" class="domain-link" :title="scope.row.domain" :aria-label="`打开 ${scope.row.domain}`">{{ scope.row.domain }}</a><div class="seo-cell" :class="`seo-${seoState(scope.row).kind}`"><button v-if="seoState(scope.row).actionable" type="button" class="seo-check-button seo-icon-only" :title="seoState(scope.row).title" :aria-label="seoState(scope.row).title" @click.stop="handleSeoToday(scope.row)"><el-icon><Check /></el-icon></button><span v-else class="seo-locked seo-icon-only" :title="seoState(scope.row).title"><el-icon><Lock /></el-icon></span></div><el-button text class="domain-copy-button" :icon="DocumentCopy" :title="`复制 ${scope.row.domain}`" :aria-label="`复制 ${scope.row.domain}`" @click.stop="copyDomain(scope.row.domain)" /></div></template></el-table-column>
                         <el-table-column v-if="platformTab === 'all'" prop="platform" label="技术栈" min-width="90" sortable><template #default="scope">{{ platformText(scope.row) }}</template></el-table-column>
+                        <el-table-column prop="ownership" label="网站归属" min-width="130"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.ownership" :disabled="ownershipSaving.has(scope.row.id)" :aria-label="`${scope.row.domain} 网站归属`" @change="value => handleOwnershipChange(scope.row, value)"><el-option v-for="ownership in siteOwnerships" :key="ownership" :label="ownership" :value="ownership" /></el-select></template></el-table-column>
                         <el-table-column v-if="platformTab === 'WordPress'" label="文章数量" min-width="82"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_article_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 文章数量`" @change="value => handleWordPressCount(scope.row, 'wp_article_count', value)" /></template></el-table-column>
                         <el-table-column v-if="platformTab === 'WordPress'" label="计算器数量" min-width="92"><template #default="scope"><el-input-number class="inline-count-input" size="small" :model-value="scope.row.wp_calculator_count ?? undefined" :min="0" :precision="0" :step="1" :controls="false" placeholder="未填" :aria-label="`${scope.row.domain} 计算器数量`" @change="value => handleWordPressCount(scope.row, 'wp_calculator_count', value)" /></template></el-table-column>
                         <el-table-column prop="industry" label="类型" min-width="90" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.industry || ''" placeholder="未分类" clearable @change="value => handleInlineSelect(scope.row, 'industry', value)"><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></template></el-table-column>
@@ -52,10 +53,10 @@
                 <button v-if="!sidebarCollapsed" type="button" class="sidebar-backdrop" aria-label="关闭概览" @click="toggleSidebar"></button>
                 <aside class="dashboard-sidebar" aria-label="管理概览">
                     <button type="button" class="overview-close" @click="toggleSidebar">关闭概览</button>
-                    <section class="sidebar-panel"><div class="sidebar-title"><h2>AdSense 累计收入</h2><button class="sidebar-link" @click="router.push({ name: 'Adsense' })">管理</button></div><div v-if="dashboard.owner_income.length" class="sidebar-list"><div v-for="item in dashboard.owner_income" :key="item.owner" class="sidebar-row"><span>{{ item.owner }}<small>{{ item.account_count }} 个账号 · {{ item.site_count }} 个网站 · 累计</small></span><strong>USD {{ Number(item.income_usd_total || 0).toFixed(2) }}<em v-if="item.income_cny_total != null"> · CNY {{ Number(item.income_cny_total).toFixed(2) }}</em></strong></div></div><p v-else class="sidebar-empty">暂无收入记录</p></section>
-                    <section class="sidebar-panel"><div class="sidebar-title"><h2>最久未 SEO</h2></div><div v-if="dashboard.seo.length" class="sidebar-list"><div v-for="item in dashboard.seo" :key="item.id" class="sidebar-row"><span>{{ item.domain }}<small>{{ item.seo_last_date || '从未优化' }} · {{ item.days_since ?? '—' }} 天</small></span><button v-if="seoState(item).actionable" class="sidebar-link" @click="markSeoById(item.id)">今天优化</button><span v-else class="sidebar-seo-locked" :title="seoState(item).title"><el-icon><Lock /></el-icon></span></div></div><p v-else class="sidebar-empty">暂无网站</p></section>
-                    <section class="sidebar-panel"><div class="sidebar-title"><h2>日点击分布</h2></div><div class="click-summary"><span>未填写 <strong>{{ dashboard.clicks.unknown || 0 }}</strong></span><span>&lt;10 <strong>{{ dashboard.clicks.under_10 || 0 }}</strong></span><span>10–29 <strong>{{ dashboard.clicks.from_10_to_29 || 0 }}</strong></span><span>30–49 <strong>{{ dashboard.clicks.from_30_to_49 || 0 }}</strong></span><span>50–99 <strong>{{ dashboard.clicks.from_50_to_99 || 0 }}</strong></span><span>≥100 <strong>{{ dashboard.clicks.over_100 || 0 }}</strong></span></div></section>
-                    <section class="sidebar-panel"><div class="sidebar-title"><h2>基础设施</h2><button class="sidebar-link" @click="router.push({ name: 'Resources' })">管理</button></div><div class="provider-summary"><div v-for="item in dashboard.providers" :key="item.provider"><span>{{ providerLabel(item.provider) }}</span><strong>{{ item.account_count }} 账号 · {{ item.resource_count }} 资源 · {{ item.linked_domain_count }} 网站</strong></div></div></section>
+                    <section class="sidebar-panel"><div class="sidebar-title"><h2>AdSense 累计收入 · 全局</h2><button class="sidebar-link" @click="router.push({ name: 'Adsense' })">管理</button></div><div v-if="dashboard.owner_income.length" class="sidebar-list"><div v-for="item in dashboard.owner_income" :key="item.owner" class="sidebar-row"><span>{{ item.owner }}<small>{{ item.account_count }} 个账号 · {{ item.site_count }} 个网站 · 累计</small></span><strong>USD {{ Number(item.income_usd_total || 0).toFixed(2) }}<em v-if="item.income_cny_total != null"> · CNY {{ Number(item.income_cny_total).toFixed(2) }}</em></strong></div></div><p v-else class="sidebar-empty">暂无收入记录</p></section>
+                    <section class="sidebar-panel"><div class="sidebar-title"><h2>最久未 SEO · {{ summaryScope }}</h2></div><div v-if="dashboard.seo.length" class="sidebar-list"><div v-for="item in dashboard.seo" :key="item.id" class="sidebar-row"><span>{{ item.domain }}<small>{{ item.seo_last_date || '从未优化' }} · {{ item.days_since ?? '—' }} 天</small></span><button v-if="seoState(item).actionable" class="sidebar-link" @click="markSeoById(item.id)">今天优化</button><span v-else class="sidebar-seo-locked" :title="seoState(item).title"><el-icon><Lock /></el-icon></span></div></div><p v-else class="sidebar-empty">暂无网站</p></section>
+                    <section class="sidebar-panel"><div class="sidebar-title"><h2>日点击分布 · {{ summaryScope }}</h2></div><div class="click-summary"><span>未填写 <strong>{{ dashboard.clicks.unknown || 0 }}</strong></span><span>&lt;10 <strong>{{ dashboard.clicks.under_10 || 0 }}</strong></span><span>10–29 <strong>{{ dashboard.clicks.from_10_to_29 || 0 }}</strong></span><span>30–49 <strong>{{ dashboard.clicks.from_30_to_49 || 0 }}</strong></span><span>50–99 <strong>{{ dashboard.clicks.from_50_to_99 || 0 }}</strong></span><span>≥100 <strong>{{ dashboard.clicks.over_100 || 0 }}</strong></span></div></section>
+                    <section class="sidebar-panel"><div class="sidebar-title"><h2>基础设施 · 全局</h2><button class="sidebar-link" @click="router.push({ name: 'Resources' })">管理</button></div><div class="provider-summary"><div v-for="item in dashboard.providers" :key="item.provider"><span>{{ providerLabel(item.provider) }}</span><strong>{{ item.account_count }} 账号 · {{ item.resource_count }} 资源 · {{ item.linked_domain_count }} 网站 · 全局</strong></div></div></section>
                 </aside>
             </div>
         </main>
@@ -86,6 +87,7 @@ import { getWriteQueue } from '../utils/writeQueue';
 import { api, ApiError } from '../utils/request';
 import { confirmAction, isDismissed } from '../utils/feedback';
 import { copyText } from '../utils/clipboard';
+import { siteOwnerships, isSiteOwnership, type SiteOwnership } from '../../shared/website-classification';
 
 interface DomainSortState { prop: string; order: 'ascending' | 'descending'; }
 
@@ -122,6 +124,8 @@ const adsenseAccounts = ref<Array<{ id?: number; name: string; owner: string; pu
 const queue = getWriteQueue();
 const searchText = ref(queryText(route.query.q));
 const platformTab = computed(() => ['Astro', 'Next.js', 'WordPress'].includes(queryText(route.query.platform)) ? queryText(route.query.platform) : 'all');
+const ownershipTab = computed(() => isSiteOwnership(queryText(route.query.ownership)) ? queryText(route.query.ownership) : 'all');
+const summaryScope = computed(() => `${ownershipTab.value === 'all' ? '全部归属' : ownershipTab.value} · ${platformTab.value === 'all' ? '全部技术栈' : platformTab.value}`);
 const computerOptions = ref<string[]>(['Mac Mini Luokun', 'Mac Mini YC', 'Mac MiniBook 旧']);
 const computerStorageKey = 'domain-manager.computers';
 try { const savedComputers = JSON.parse(localStorage.getItem(computerStorageKey) || '[]'); if (Array.isArray(savedComputers)) computerOptions.value = [...new Set([...computerOptions.value, ...savedComputers.filter(value => typeof value === 'string')])]; } catch { /* keep defaults */ }
@@ -133,6 +137,7 @@ const refreshing = ref(false);
 const detecting = ref(false);
 const detectProgress = ref({ total: 0, done: 0, changed: 0, failed: 0 });
 const domainSaving = ref(false);
+const ownershipSaving = ref(new Set<number>());
 const quickFieldSaving = ref(false);
 const adsenseSaving = ref(false);
 interface ResourceOption { value: string; kind: 'resource' | 'account'; id: number; provider: string; name: string; account_id?: number; account_name?: string | null; identifier?: string | null; status?: string }
@@ -153,7 +158,10 @@ const quickFieldValue = computed(() => quickFieldMode.value === 'site_name' ? qu
 const adsenseQuickVisible = ref(false);
 const adsenseQuickDomain = ref<DomainData>();
 interface DashboardData { totals: Record<string, number>; seo: Array<{ id: number; domain: string; seo_last_date: string | null; days_since: number | null }>; clicks: Record<string, number>; providers: Array<{ provider: string; account_count: number; resource_count: number; linked_domain_count: number }>; owner_income: Array<{ owner: string; currency: string; account_count: number; site_count: number; income_usd_total: number; income_cny_total: number | null; opened_date: string | null }>; platforms: Array<{ platform: string; count: number }>; quality: Record<string, number> }
-const dashboard = ref<DashboardData>({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [], platforms: [], quality: {} });
+const emptyDashboard = (): DashboardData => ({ totals: {}, seo: [], clicks: {}, providers: [], owner_income: [], platforms: [], quality: {} });
+const dashboard = ref<DashboardData>(emptyDashboard());
+const dashboardLoading = ref(false);
+let dashboardRequest = 0;
 const industryOptions = ['计算器', '资讯站', '其他'];
 const normalizeIndustry = (value: string | null | undefined) => value && industryOptions.includes(value) ? value : value ? '其他' : null;
 const sourceLinks = ref<Array<{ domain_id: number; resource_id: number; account_id?: number; resource_name?: string; account_name?: string }>>([]);
@@ -170,6 +178,7 @@ const filteredDomains = computed(() => domains.value.filter(row => {
     const haystack = `${row.domain} ${row.site_name || ''} ${normalizeIndustry(row.industry) || ''} ${row.registrar} ${row.memo} ${row.computer_name || ''} ${row.resource_names || ''} ${row.platform}`.toLowerCase();
     if (searchText.value && !haystack.includes(searchText.value.trim().toLowerCase())) return false;
     if (platformTab.value !== 'all' && row.platform !== platformTab.value) return false;
+    if (ownershipTab.value !== 'all' && row.ownership !== ownershipTab.value) return false;
     if (route.query.adsense_account && String(row.adsense_account_id) !== route.query.adsense_account) return false;
     if (route.query.resource && !sourceLinks.value.some(link => link.domain_id === row.id && String(link.resource_id) === route.query.resource)) return false;
     if (route.query.provider_account && !sourceLinks.value.some(link => link.domain_id === row.id && String(link.account_id) === route.query.provider_account)) return false;
@@ -298,6 +307,21 @@ const handleInlineSelect = async (row: DomainData, field: 'status' | 'platform' 
         ElMessage.error(error instanceof Error ? error.message : '保存失败');
     }
 };
+const handleOwnershipChange = async (row: DomainData, value: SiteOwnership) => {
+    if (!row.id || ownershipSaving.value.has(row.id) || row.ownership === value) return;
+    ownershipSaving.value.add(row.id);
+    const previous = row.ownership;
+    row.ownership = value;
+    try {
+        await api.patch(`/api/domains/${row.id}`, { ownership: value });
+        invalidateData('/api/dashboard/summary');
+        await loadOverview();
+        if (ownershipTab.value !== 'all' && ownershipTab.value !== value) ElMessage.success('已保存，该网站不在当前筛选范围内');
+    } catch (error) {
+        row.ownership = previous;
+        ElMessage.error(error instanceof Error ? error.message : '网站归属保存失败');
+    } finally { ownershipSaving.value.delete(row.id); }
+};
 const handleWordPressCount = async (row: DomainData, field: 'wp_calculator_count' | 'wp_article_count', value: number | undefined | null) => {
     if (!row.id || row.platform !== 'WordPress') return;
     const nextValue = value == null ? null : value;
@@ -355,8 +379,28 @@ const saveQuickField = async (value: string | null) => {
     catch (error) { row[field] = oldValue as never; ElMessage.error(error instanceof Error ? error.message : '保存失败'); } finally { quickFieldSaving.value = false; }
 };
 const loadAdsenseAccounts = async () => { try { adsenseAccounts.value = await cachedGet(`/api/adsense/accounts?month=${localDate().slice(0, 7)}`); return true; } catch(error) { console.error('获取 AdSense 账号失败:', error); return false; } };
-const loadDashboard = async () => { try { const today = localDate(); dashboard.value = await cachedGet(`/api/dashboard/summary?today=${today}&month=${today.slice(0, 7)}`); return true; } catch (error) { console.error('获取首页概览失败:', error); return false; } };
-const loadOverview = async () => { overviewError.value = ''; const results = await Promise.all([loadAdsenseAccounts(), loadDashboard()]); if (results.some(result => !result)) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。'; };
+const loadDashboard = async () => {
+    const request = ++dashboardRequest;
+    dashboardLoading.value = true;
+    dashboard.value = emptyDashboard();
+    try {
+        const today = localDate();
+        const params = new URLSearchParams({ today, month: today.slice(0, 7), ownership: ownershipTab.value, platform: platformTab.value });
+        const data = await cachedGet<DashboardData>(`/api/dashboard/summary?${params}`);
+        if (request === dashboardRequest) dashboard.value = data;
+        return true;
+    } catch (error) {
+        if (request === dashboardRequest) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。';
+        console.error('获取首页概览失败:', error); return false;
+    } finally { if (request === dashboardRequest) dashboardLoading.value = false; }
+};
+let overviewRequest = 0;
+const loadOverview = async () => {
+    const request = ++overviewRequest;
+    overviewError.value = '';
+    const results = await Promise.all([loadAdsenseAccounts(), loadDashboard()]);
+    if (request === overviewRequest && results.some(result => !result)) overviewError.value = '概览数据未能完整加载，列表数据仍可继续使用。';
+};
 const reloadAll = async () => { invalidateData('/api/domains', '/api/dashboard/summary', '/api/adsense/accounts'); await Promise.all([loadDomains(), loadOverview()]); };
 const refreshDomainDetails = async () => { invalidateData('/api/domains', '/api/dashboard/summary'); await loadDomains(); await loadDashboard(); };
 
@@ -373,6 +417,7 @@ const handleDelete = async (row: DomainData) => {
 const handleDialogSubmit = async (formData: Omit<DomainData, 'id' | 'created_at'>) => {
     if (domainSaving.value) return; domainSaving.value = true;
     try {
+        const savedDomain = formData.domain.trim().toLowerCase().replace(/\.$/, '');
         if (isEdit.value && editData.value?.id) {
             await updateDomain(editData.value.id, formData);
         } else {
@@ -382,6 +427,8 @@ const handleDialogSubmit = async (formData: Omit<DomainData, 'id' | 'created_at'
         invalidateData('/api/domains', '/api/adsense/accounts', '/api/dashboard/summary');
         await loadDomains();
         await loadOverview();
+        const savedRow = domains.value.find(row => row.domain === savedDomain);
+        if (savedRow && ((ownershipTab.value !== 'all' && savedRow.ownership !== ownershipTab.value) || (platformTab.value !== 'all' && savedRow.platform !== platformTab.value))) ElMessage.success('已保存，该网站不在当前筛选范围内');
     } catch (error: unknown) { ElMessage.error(error instanceof Error ? error.message : '操作失败'); } finally { domainSaving.value = false; }
 };
 
@@ -404,6 +451,7 @@ const loadDomains = async () => {
 };
 
 watch(filteredDomains, () => { void applyTableSort(); });
+watch([ownershipTab, platformTab], () => { if (route.name === 'Home') void loadOverview(); });
 
 const handleRefresh = async () => {
     if (refreshing.value) return;

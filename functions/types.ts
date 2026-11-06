@@ -1,5 +1,7 @@
 /// <reference types="@cloudflare/workers-types" />
 
+import type { SiteOwnership } from '../shared/website-classification'
+
 export interface Env {
     DB: D1Database
     USER: string
@@ -27,6 +29,7 @@ export interface Domain {
     memo: string
     site_name?: string | null
     industry?: string | null
+    ownership?: SiteOwnership
     adsense_account_id?: number | null
     adsense_account_name?: string | null
     adsense_owner?: string | null

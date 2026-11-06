@@ -33,6 +33,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
                 memo = ?,
                 site_name = ?,
                 industry = ?,
+                ownership = COALESCE(?, ownership),
                 adsense_account_id = ?,
                 adsense_connected = ?,
                 adsense_opened_date = ?,
@@ -60,6 +61,7 @@ export const onRequestPut: PagesFunction<Env> = async (context) => {
             data.memo || '',
             data.site_name?.trim() || null,
             normalizeDomainType(data.industry?.trim()) || null,
+            data.ownership ?? null,
             data.adsense_account_id || null,
             data.adsense_connected || '未知',
             data.adsense_opened_date || null,
@@ -111,7 +113,7 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         const id = context.params.id as string
         const input = await context.request.json() as Record<string, unknown>
         const fields = Object.fromEntries(Object.entries(input).map(([key, value]) => [key, value === '' ? null : value]))
-        const allowed = ['site_name', 'industry', 'status', 'platform', 'platform_other', 'adsense_connected', 'adsense_account_id', 'adsense_opened_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'computer_name']
+        const allowed = ['ownership', 'site_name', 'industry', 'status', 'platform', 'platform_other', 'adsense_connected', 'adsense_account_id', 'adsense_opened_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'computer_name']
         const keys = Object.keys(fields)
         if (!keys.length || keys.some(key => !allowed.includes(key))) return Response.json({ status: 400, message: '局部更新包含不支持的字段', data: null }, { status: 400 })
 

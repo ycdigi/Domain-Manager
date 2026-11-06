@@ -1,5 +1,7 @@
 import type { Domain, DomainPlatform } from '../types'
 
+import { isSiteOwnership } from '../../shared/website-classification'
+
 const platforms: DomainPlatform[] = ['WordPress', 'Astro', 'Next.js', '其他']
 export const domainTypes = ['计算器', '资讯站', '其他'] as const
 export type DomainType = typeof domainTypes[number]
@@ -42,6 +44,7 @@ export const validateDomain = (data: Partial<Domain>) => {
     if (!isValidDate(data.registrar_date) || !isValidDate(data.expiry_date)) return '注册日期和到期日期必须是有效的 YYYY-MM-DD 日期'
     if (data.status !== '在线' && data.status !== '离线') return '网站状态无效'
     if (data.site_name != null && (typeof data.site_name !== 'string' || data.site_name.length > 200)) return '网站名称不能超过 200 个字符'
+    if (data.ownership !== undefined && !isSiteOwnership(data.ownership)) return '网站归属关系无效'
     if (data.industry != null && !domainTypes.includes(data.industry as DomainType)) return '网站类型只能是计算器、资讯站或其他'
     if (data.adsense_connected !== undefined && !['未知', '已开通', '未开通'].includes(data.adsense_connected)) return 'AdSense 网站状态无效'
     if ((data.adsense_connected || '未知') === '已开通' && !isValidDate(data.adsense_opened_date)) return '已开通时必须填写有效开通日期'

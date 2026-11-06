@@ -1,8 +1,8 @@
 <template>
   <div class="workspace-shell" :class="{ 'navigation-collapsed': navigationCollapsed }">
-    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" :collapsed="navigationCollapsed" @select="selectPlatform" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
+    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :ownership-tabs="ownershipTabs" :ownership-counts="ownershipTabCounts" :active-ownership="activeOwnership" @select-ownership="selectOwnership" :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" :collapsed="navigationCollapsed" @select="selectPlatform" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
     <el-drawer v-model="navigationMobileOpen" class="workspace-navigation-drawer" title="网站导航" direction="ltr" size="256px" :with-header="false" @closed="runPendingNavigationAction">
-      <WorkspaceNavigation :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" mobile @select="selectPlatform" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
+      <WorkspaceNavigation :ownership-tabs="ownershipTabs" :ownership-counts="ownershipTabCounts" :active-ownership="activeOwnership" @select-ownership="selectOwnership" :tabs="platformTabs" :counts="platformTabCounts" :active="activePlatform" :active-manager="activeManager" mobile @select="selectPlatform" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
     </el-drawer>
     <main class="workspace-content">
       <section v-if="queue.pending.value.length || queue.syncing.value" class="sync-status" aria-label="同步状态" aria-live="polite">
@@ -24,6 +24,7 @@ import { cachedValue, cachedGet, queryText } from '../utils/workspaceCache'
 import { downloadJsonBackup } from '../utils/downloads'
 import { getWriteQueue } from '../utils/writeQueue'
 import { logoutWorkspace } from '../router'
+import { siteOwnerships, isSiteOwnership, type SiteOwnership } from '../../shared/website-classification'
 import type { DomainData } from '../api/domains'
 import '../styles/workspace/workspace.css'
 const route = useRoute(); const router = useRouter()
@@ -36,8 +37,11 @@ try { navigationCollapsed.value = localStorage.getItem(navigationStorageKey) ===
 const toggleNavigation = () => { navigationCollapsed.value = !navigationCollapsed.value; try { localStorage.setItem(navigationStorageKey, String(navigationCollapsed.value)) } catch { /* current view remains usable */ } }
 const domains = cachedValue<DomainData[]>('/api/domains')
 const platformTabs = [{ label: '全部', value: 'all' as const }, { label: 'Astro', value: 'Astro' as const }, { label: 'Next.js', value: 'Next.js' as const }, { label: 'WordPress', value: 'WordPress' as const }]
-const platformTabCounts = computed(() => Object.fromEntries(platformTabs.map(tab => [tab.value, (domains.value || []).filter((row: DomainData) => tab.value === 'all' || row.platform === tab.value).length])) as Record<typeof platformTabs[number]['value'], number>)
-const activePlatform = computed(() => route.name !== 'Home' ? '' : queryText(route.query.platform) || 'all')
+const platformTabCounts = computed(() => Object.fromEntries(platformTabs.map(tab => [tab.value, (domains.value || []).filter((row: DomainData) => (tab.value === 'all' || row.platform === tab.value) && (!activeOwnership.value || activeOwnership.value === 'all' || row.ownership === activeOwnership.value)).length])) as Record<typeof platformTabs[number]['value'], number>)
+const activePlatform = computed(() => route.name !== 'Home' ? '' : ['Astro', 'Next.js', 'WordPress'].includes(queryText(route.query.platform)) ? queryText(route.query.platform) : 'all')
+const ownershipTabs: Array<{ label: string; value: 'all' | SiteOwnership }> = [{ label: '全部归属', value: 'all' }, ...siteOwnerships.map(value => ({ label: value, value }))]
+const activeOwnership = computed(() => route.name !== 'Home' ? '' : isSiteOwnership(queryText(route.query.ownership)) ? queryText(route.query.ownership) : 'all')
+const ownershipTabCounts = computed(() => Object.fromEntries(ownershipTabs.map(tab => [tab.value, (domains.value || []).filter(row => (tab.value === 'all' || row.ownership === tab.value) && (!activePlatform.value || activePlatform.value === 'all' || row.platform === activePlatform.value)).length])) as Record<typeof ownershipTabs[number]['value'], number>)
 const activeManager = computed(() => ({ Resources: 'resources', Adsense: 'adsense', Notifications: 'notifications', Data: 'data' }[String(route.name)] || ''))
 let pendingNavigationAction: (() => void) | undefined
 const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.() }
@@ -48,6 +52,12 @@ const selectPlatform = (platform: string) => runNavigationAction(() => {
   const query = route.name === 'Home' ? { ...route.query } : { ...workspaceQueries.Home }
   delete query.site
   if (platform === 'all') delete query.platform; else query.platform = platform
+  void router.push({ name: 'Home', query })
+})
+const selectOwnership = (ownership: string) => runNavigationAction(() => {
+  const query = route.name === 'Home' ? { ...route.query } : { ...workspaceQueries.Home }
+  delete query.site
+  if (ownership === 'all') delete query.ownership; else query.ownership = ownership
   void router.push({ name: 'Home', query })
 })
 const navigateManager = (view: string) => runNavigationAction(() => { const name = { resources: 'Resources', adsense: 'Adsense', notifications: 'Notifications', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })

@@ -3,6 +3,7 @@
         <el-form :disabled="saving" class="domain-edit-form" ref="formRef" :model="form" :rules="rules" label-width="100px" label-position="top">
             <el-form-item label="域名" prop="domain"><el-input v-model="form.domain" placeholder="请输入域名" id="domain-input" autocomplete="off" clearable /></el-form-item>
             <el-form-item label="网站名称"><el-input v-model="form.site_name" placeholder="例如：电气计算器站" maxlength="200" show-word-limit clearable /></el-form-item>
+            <el-form-item label="网站归属关系"><el-select v-model="form.ownership" id="ownership-input" aria-label="网站归属关系"><el-option v-for="ownership in siteOwnerships" :key="ownership" :label="ownership" :value="ownership" /></el-select></el-form-item>
             <el-form-item label="类型"><el-select v-model="form.industry" placeholder="选择类型" clearable><el-option v-for="industry in industryOptions" :key="industry" :label="industry" :value="industry" /></el-select></el-form-item>
             <el-form-item label="域名商" prop="registrar"><el-input v-model="form.registrar" placeholder="请输入域名商" id="registrar-input" autocomplete="off" clearable /></el-form-item>
             <el-form-item label="域名商链接" prop="registrar_link"><el-input v-model="form.registrar_link" placeholder="请输入域名商链接" id="registrar-link-input" autocomplete="off" clearable /></el-form-item>
@@ -33,6 +34,7 @@
 <script setup lang="ts">
 import { ref, watch, computed } from 'vue'
 import type { FormInstance, FormRules } from 'element-plus'
+import { siteOwnerships } from '../../shared/website-classification'
 import { clicksDate, contentDate } from '../utils/dataFreshness'
 import type { DomainData } from '../api/domains'
 interface AdsenseAccountOption { id?: number; name: string; owner: string }
@@ -43,7 +45,7 @@ const dialogVisible = ref(props.visible)
 const formRef = ref<FormInstance>()
 const optimizeToday = ref(false)
 const industryOptions = ['计算器', '资讯站', '其他']
-const defaultForm: DomainForm = { domain: '', site_name: '', industry: '', registrar: '', registrar_link: '', registrar_date: '', expiry_date: '', service_type: '伪装网站', platform: '其他', platform_other: '', status: '在线', tgsend: 0, st_tgsend: 1, memo: '', adsense_account_id: undefined, adsense_connected: '未知', adsense_opened_date: '', seo_last_date: '', daily_clicks: undefined, daily_clicks_range: undefined, clicks_updated_date: null, last_status_check_at: null, wp_calculator_count: undefined, wp_article_count: undefined, content_stats_updated_date: '', resource_status: '未检查' }
+const defaultForm: DomainForm = { domain: '', ownership: '自营网站', site_name: '', industry: '', registrar: '', registrar_link: '', registrar_date: '', expiry_date: '', service_type: '伪装网站', platform: '其他', platform_other: '', status: '在线', tgsend: 0, st_tgsend: 1, memo: '', adsense_account_id: undefined, adsense_connected: '未知', adsense_opened_date: '', seo_last_date: '', daily_clicks: undefined, daily_clicks_range: undefined, clicks_updated_date: null, last_status_check_at: null, wp_calculator_count: undefined, wp_article_count: undefined, content_stats_updated_date: '', resource_status: '未检查' }
 const form = ref<DomainForm>({ ...defaultForm })
 const rules = computed<FormRules>(() => ({
     domain: [{ required: true, message: '请输入域名', trigger: ['blur'] }, { pattern: /^(?=^.{3,255}$)[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+$/, message: '请输入正确的域名格式', trigger: ['blur'] }],

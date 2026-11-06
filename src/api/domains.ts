@@ -1,5 +1,7 @@
 import request from '../utils/request'
 
+import type { SiteOwnership } from '../../shared/website-classification'
+
 export interface DomainData {
     id?: number
     domain: string
@@ -15,6 +17,7 @@ export interface DomainData {
     computer_name?: string | null
     site_name: string | null
     industry: string | null
+    ownership: SiteOwnership
     adsense_account_id: number | null
     adsense_account_name?: string | null
     adsense_owner?: string | null

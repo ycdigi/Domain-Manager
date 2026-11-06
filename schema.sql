@@ -15,6 +15,7 @@ CREATE TABLE IF NOT EXISTS domains (
     memo TEXT,
     site_name TEXT,
     industry TEXT,
+    ownership TEXT NOT NULL DEFAULT '自营网站' CHECK (ownership IN ('未分类', '自营网站', '企业客户网站')),
     adsense_account_id INTEGER,
     adsense_connected TEXT NOT NULL DEFAULT '未知',
     adsense_opened_date TEXT,
@@ -87,6 +88,7 @@ CREATE INDEX IF NOT EXISTS idx_domains_seo_last_date ON domains(seo_last_date);
 CREATE INDEX IF NOT EXISTS idx_domains_expiry_date ON domains(expiry_date);
 CREATE INDEX IF NOT EXISTS idx_domains_platform ON domains(platform);
 CREATE INDEX IF NOT EXISTS idx_domains_content_stats_date ON domains(content_stats_updated_date);
+CREATE INDEX IF NOT EXISTS idx_domains_ownership ON domains(ownership);
 CREATE INDEX IF NOT EXISTS idx_domains_industry ON domains(industry);
 CREATE INDEX IF NOT EXISTS idx_domains_site_name ON domains(site_name);
 CREATE INDEX IF NOT EXISTS idx_domains_clicks_range ON domains(daily_clicks_range);

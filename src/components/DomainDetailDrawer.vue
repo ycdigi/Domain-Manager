@@ -16,6 +16,7 @@
         <div class="detail-grid">
           <div><span>状态</span><strong>{{ domain.status }}</strong></div>
           <div><span>网站名称</span><strong>{{ domain.site_name || '未记录' }}</strong></div>
+          <div><span>网站归属</span><strong>{{ domain.ownership }}</strong></div>
           <div><span>类型</span><strong>{{ domain.industry || '未记录' }}</strong></div>
           <div><span>资源</span><strong>{{ domain.resource_status || '未关联' }}</strong></div>
           <div><span>注册日期</span><strong>{{ domain.registrar_date || '未记录' }}</strong></div>

@@ -122,6 +122,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 已有数据库升级到日点击区间选择时，再执行一次 `schema-migration-v1.7.0.sql`
    - 已有数据库升级到电脑字段时，再执行一次 `schema-migration-v1.8.0.sql`
    - 已有数据库升级到 AdSense 月度美元/人民币金额、转账日期和可选网站美元明细时，再执行一次 `schema-migration-v1.9.0.sql`
+   - 添加网站归属关系时，先备份已有数据库，再执行一次 `schema-migration-v1.11.0.sql`；旧网站统一设为自营网站，新数据库已包含该字段，不要重复迁移
 
 ### D1 命令行管理
 
@@ -166,6 +167,7 @@ npm run db:migrate:v1.7.0
 npm run db:migrate:v1.8.0
 npm run db:migrate:v1.9.0
 npm run db:migrate:v1.10.0
+npm run db:migrate:v1.11.0
 npm run db:verify:remote
 ```
 
@@ -187,6 +189,7 @@ npm run db:migrate:v1.7.0
 npm run db:migrate:v1.8.0
 npm run db:migrate:v1.9.0
 npm run db:migrate:v1.10.0
+npm run db:migrate:v1.11.0
 npm run db:verify:remote
 ```
 
@@ -358,7 +361,7 @@ Content-Type: application/json
 
 ### 技术栈工作台与电脑归属
 
-首页只保留全局搜索，使用“全部 / Astro / Next.js / WordPress”切换技术栈；WordPress 标签额外提供文章数量和计算器数量维护。概览每次进入默认隐藏，可手动展开。顶部指标保留为只读统计，不再产生隐藏筛选条件。
+首页按“网站归属”和“技术栈”两组筛选：归属为全部归属、自营网站、企业客户网站、未分类；归属与 Astro、Next.js、WordPress 技术栈条件共同生效，导航数量按另一组条件计算。搜索只缩小列表。新增默认自营网站，列表可直接修改归属，详情也展示归属；WordPress 标签额外提供文章数量和计算器数量维护。概览每次进入默认隐藏，可手动展开。顶部指标保留为只读统计，不再产生隐藏筛选条件。
 
 `computer_name` 为可空电脑名称，支持下拉选择、输入新名称和清除。预置 Mac Mini Luokun、Mac Mini YC、Mac MiniBook 旧，不自动推测网站在哪台电脑维护。已关联名称从 D1 记录恢复，未使用的自定义候选保存在当前浏览器。JSON 导入/导出与 Excel 快照均包含该字段。
 
@@ -368,6 +371,8 @@ Content-Type: application/json
 
 登录后统一使用左侧导航：网站 `/home`，资源 `/resources`，AdSense `/adsense`，通知 `/settings/notifications`，数据 `/data`。页面可直接访问，沿用长期登录和同一权限守卫，本次无 D1 迁移。
 
-URL 可保存技术栈 `platform`、详情域名 `site`；资源页保存 `provider`、`account`、`resource`，AdSense 页保存 `account`、`month`。关联网站入口会在台账显示可移除来源标签。搜索/排序与浏览器返回保持，Token 与未保存文本不进入 URL。
+URL 可保存归属 `ownership`、技术栈 `platform`、详情域名 `site`；资源页保存 `provider`、`account`、`resource`，AdSense 页保存 `account`、`month`。关联网站入口会在台账显示可移除来源标签。搜索/排序与浏览器返回保持，Token 与未保存文本不进入 URL。
 
 管理编辑在页内完成；域名详情、短编辑和危险操作确认保留抽屉/短弹窗。数据页先预览 JSON，再明确确认写入。JSON 是域名备份与导入格式，完整数据库恢复仍需 D1 备份；Excel 不包含凭据。
+
+网站数量、到期、SEO、优秀网站和点击概览随归属与技术栈筛选；账号累计收入及基础设施总量标注为全局。导出全部始终包含所有网站及归属。JSON 导入与 AI 同步未提供 `ownership` 时保留已有归属，新导入默认自营网站；显式值只能是 `未分类`、`自营网站`、`企业客户网站`。筛选规则及验收场景见 `docs/requirements/website-ownership.md`。
