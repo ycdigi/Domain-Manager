@@ -27,6 +27,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
                        FROM domain_resources dr JOIN provider_resources r ON r.id = dr.resource_id
                        LEFT JOIN provider_accounts a ON a.id = r.account_id WHERE dr.domain_id = d.id
                    )) AS resource_names,
+                   (SELECT json_group_array(json_object(
+                       'id', r.id,
+                       'provider', r.provider,
+                       'login_email', a.login_email,
+                       'ip_address', r.ip_address,
+                       'is_primary', dr.is_primary
+                   )) FROM domain_resources dr JOIN provider_resources r ON r.id = dr.resource_id
+                   LEFT JOIN provider_accounts a ON a.id = r.account_id WHERE dr.domain_id = d.id) AS resource_contacts,
                    (SELECT COUNT(*) FROM domain_ai_notes n WHERE n.domain_id = d.id AND n.archived_at IS NULL) AS ai_note_count,
                    (SELECT MAX(o.operation_date) FROM domain_operations o WHERE o.domain_id = d.id) AS latest_operation_date,
                    (SELECT COUNT(*) FROM domain_operations o WHERE o.domain_id = d.id) AS operation_count,

@@ -37,6 +37,7 @@ export interface DomainData {
     resource_status: string
     resource_count?: number
     resource_names?: string | null
+    resource_contacts?: string | null
     ai_note_count?: number
     latest_operation_date?: string | null
     operation_count?: number

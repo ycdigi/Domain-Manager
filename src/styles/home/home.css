@@ -50,6 +50,8 @@ html.dm-ui .home-container .workspace { min-width:0; width:100%; max-width:none;
 .home-container .inline-select .el-select__wrapper { min-height:30px; padding-inline:4px; box-shadow:none; background: var(--color-clear); }
 .home-container .inline-select .el-select__wrapper:hover { box-shadow:0 0 0 1px var(--color-field-edge) inset; }
 .home-container .inline-select .el-select__wrapper.is-focused { box-shadow:0 0 0 2px var(--color-focus) inset; }
+.home-container .provider-selected, .home-container .provider-option { display:inline-flex; align-items:center; gap:var(--space-2xs); min-width:0; }
+.home-container .provider-selected .el-icon, .home-container .provider-option .el-icon { flex:0 0 auto; }
 .home-container .inline-count-input { width:76px; }
 .home-container .inline-count-input .el-input__wrapper { min-height:30px; padding-inline:4px; box-shadow:none; background: var(--color-clear); }
 .home-container .inline-count-input .el-input__wrapper:hover { box-shadow:0 0 0 1px var(--color-field-edge) inset; }

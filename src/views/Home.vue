@@ -32,7 +32,7 @@
                         <el-table-column prop="daily_clicks" label="日点击" min-width="96" sortable :sort-method="compareDailyClicks"><template #default="scope"><el-select class="inline-select click-range-select" size="small" :model-value="scope.row.daily_clicks_range || clickRangeFromNumber(scope.row.daily_clicks) || ''" placeholder="未填写" clearable @change="value => handleDailyClicks(scope.row, value)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_connected" label="AdSense" min-width="94" sortable><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.adsense_connected" @change="value => handleAdsenseSelect(scope.row, value)"><el-option label="未知" value="未知" /><el-option label="已开通" value="已开通" /><el-option label="未开通" value="未开通" /></el-select></template></el-table-column>
                         <el-table-column prop="adsense_income_usd" label="AdSense收入" min-width="118" sortable><template #default="scope"><span v-if="scope.row.adsense_income_detail_count">USD {{ Number(scope.row.adsense_income_usd || 0).toFixed(2) }}</span><span v-else class="page-muted">未细化</span></template></el-table-column>
-                        <el-table-column label="服务商" min-width="180" show-overflow-tooltip><template #default="scope"><el-select v-if="resourceOptions.length" class="inline-select provider-select" size="small" :model-value="resourceSelectValue(scope.row)" placeholder="未关联" :loading="resourceOptionsLoading" :title="providerDisplay(scope.row.resource_names)" @change="value => handleResourceChange(scope.row, value)"><el-option v-if="resourceSelectValue(scope.row).startsWith('linked:')" :label="providerDisplay(scope.row.resource_names)" :value="resourceSelectValue(scope.row)" /><el-option v-for="resource in resourceOptions" :key="resource.value" :label="resourceOptionLabel(resource)" :value="resource.value" /></el-select><el-button v-else text size="small" @click="router.push({ name: 'Resources' })">先添加账号</el-button></template></el-table-column>
+                        <el-table-column label="服务商" min-width="150" show-overflow-tooltip><template #default="scope"><el-select v-if="resourceOptions.length" class="inline-select provider-select" size="small" :model-value="resourceSelectValue(scope.row)" placeholder="未关联" :loading="resourceOptionsLoading" :title="providerContactLabel(scope.row)" @change="value => handleResourceChange(scope.row, value)"><template #label><span class="provider-selected"><el-icon><component :is="providerIcon(providerContactProvider(scope.row))" /></el-icon><span>{{ providerContactLabel(scope.row) }}</span></span></template><el-option v-if="resourceSelectValue(scope.row).startsWith('linked:')" :label="providerContactLabel(scope.row)" :value="resourceSelectValue(scope.row)" /><el-option v-for="resource in resourceOptions" :key="resource.value" :label="resourceOptionLabel(resource)" :value="resource.value"><template #default><span class="provider-option"><el-icon><component :is="providerIcon(resource.provider)" /></el-icon><span>{{ resourceOptionLabel(resource) }}</span></span></template></el-option></el-select><el-button v-else text size="small" @click="router.push({ name: 'Resources' })">先添加账号</el-button></template></el-table-column>
                         <el-table-column prop="expiry_date" label="到期日期" min-width="100" sortable><template #default="scope"><span :class="expiryState(scope.row).className">{{ scope.row.expiry_date || '未记录' }}</span></template></el-table-column>
                         <el-table-column label="电脑" min-width="155"><template #default="scope"><el-select class="inline-select" size="small" :model-value="scope.row.computer_name || ''" placeholder="选择 / 添加" filterable allow-create default-first-option clearable @change="value => handleComputerChange(scope.row, value)"><el-option v-for="computer in computerOptions" :key="computer" :label="computer" :value="computer" /></el-select></template></el-table-column>
                         <el-table-column label="操作" width="112"><template #default="scope"><div class="row-actions row-icon-actions"><el-button text :icon="Document" :title="`详情：${scope.row.domain}`" :aria-label="`详情：${scope.row.domain}`" @click="openDomainDetail(scope.row)" /><el-button text :icon="Edit" :title="`修改：${scope.row.domain}`" :aria-label="`修改：${scope.row.domain}`" @click="handleEdit(scope.row)" /><el-button text type="danger" :icon="Delete" :title="`删除：${scope.row.domain}`" :aria-label="`删除：${scope.row.domain}`" @click="handleDelete(scope.row)" /></div></template></el-table-column>
@@ -63,7 +63,7 @@
 import { ref, computed, inject, onMounted, onUnmounted, onActivated, onDeactivated, nextTick, watch } from 'vue';
 import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router';
 import { ElMessage, type TableInstance } from 'element-plus';
-import { Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete } from '@element-plus/icons-vue';
+import { Refresh, Plus, Upload, Download, Search, Fold, Expand, Check, Lock, StarFilled, WarningFilled, Document, DocumentCopy, Edit, Delete, Link, Cloudy, Monitor, Connection } from '@element-plus/icons-vue';
 import '../styles/home/home.css';
 import { useAuth } from '../utils/auth';
 import DomainDialog from '../components/DomainDialog.vue';
@@ -130,7 +130,7 @@ const domainSaving = ref(false);
 const ownershipSaving = ref(new Set<number>());
 const quickFieldSaving = ref(false);
 const adsenseSaving = ref(false);
-interface ResourceOption { value: string; kind: 'resource' | 'account'; id: number; provider: string; name: string; account_id?: number; account_name?: string | null; identifier?: string | null; status?: string }
+interface ResourceOption { value: string; kind: 'resource' | 'account'; id: number; provider: string; name: string; account_id?: number; account_name?: string | null; login_email?: string | null; identifier?: string | null; ip_address?: string | null; status?: string }
 const resourceOptions = ref<ResourceOption[]>([]);
 const resourceOptionsLoading = ref(false);
 const dialogVisible = ref(false);
@@ -185,15 +185,16 @@ const handleDetailEdit = (row: DomainData) => { detailVisible.value = false; han
 
 const handleImport = () => { void router.push({ name: 'Data' }); };
 const handleComputerChange = async (row: DomainData, value: string | null) => { const name = value?.trim() || ''; if (!row.id || row.computer_name === name) return; const previous = row.computer_name; row.computer_name = name || null; if (name && !computerOptions.value.includes(name)) { computerOptions.value.push(name); localStorage.setItem(computerStorageKey, JSON.stringify(computerOptions.value)); } try { await api.patch(`/api/domains/${row.id}`, { computer_name: name || null }); } catch (error) { row.computer_name = previous || null; ElMessage.error(error instanceof Error ? error.message : '电脑信息保存失败'); } };
-const resourceOptionLabel = (resource: ResourceOption) => `${providerShortLabel(resource.provider)} ${resource.account_name ? `${resource.account_name} / ` : ''}${resource.name}`;
-const providerShortLabel = (value: string) => ({ github: 'G:', cloudflare: 'C:', vhost: 'V:', vps: 'P:' }[value] || `${value.slice(0, 1).toUpperCase()}:`);
-const providerDisplay = (value?: string | null) => value ? value.replace(/\b(github|cloudflare|vhost|vps):/gi, match => providerShortLabel(match.slice(0, -1).toLowerCase())) : '未关联';
-const resourceBackendLabel = (resource: ResourceOption) => `${resource.provider}: ${resource.account_name ? `${resource.account_name} / ` : ''}${resource.name}`;
+interface ResourceContact { id: number; provider: string; login_email?: string | null; ip_address?: string | null; is_primary?: number }
+const resourceContacts = (row: DomainData): ResourceContact[] => { if (!row.resource_contacts) return []; try { const value = JSON.parse(row.resource_contacts); return Array.isArray(value) ? value : []; } catch { return []; } };
+const providerIcon = (provider: string) => ({ github: Link, cloudflare: Cloudy, vhost: Monitor, vps: Connection }[provider] || Link);
+const providerContactProvider = (row: DomainData) => resourceContacts(row).sort((a, b) => Number(b.is_primary || 0) - Number(a.is_primary || 0))[0]?.provider || 'github';
+const providerContactLabel = (row: DomainData) => { const contact = resourceContacts(row).sort((a, b) => Number(b.is_primary || 0) - Number(a.is_primary || 0))[0]; if (!contact) return '未关联'; return contact.provider === 'vps' ? (contact.ip_address || '未记录 IP') : (contact.login_email || '未记录邮箱'); };
+const resourceOptionLabel = (resource: ResourceOption) => resource.provider === 'vps' ? (resource.ip_address || '未记录 IP') : (resource.login_email || '未记录邮箱');
 const resourceSelectValue = (row: DomainData) => {
-    const raw = row.resource_names?.split(',')[0]?.trim();
-    if (!raw) return '';
-    const option = resourceOptions.value.find(resource => resourceBackendLabel(resource) === raw);
-    return option?.value || `linked:${row.id}`;
+    const contact = resourceContacts(row).sort((a, b) => Number(b.is_primary || 0) - Number(a.is_primary || 0))[0];
+    if (!contact) return '';
+    return resourceOptions.value.some(resource => resource.value === `resource:${contact.id}`) ? `resource:${contact.id}` : `linked:${contact.id}`;
 };
 const resourceRole = (provider: string) => ({ github: '代码仓库', cloudflare: '部署平台', vhost: '虚拟主机', vps: 'VPS' }[provider] || '其他');
 const handleResourceChange = async (row: DomainData, value: string | undefined) => {
@@ -212,7 +213,7 @@ const loadResourceOptions = async (force = false) => {
     try {
         const [resources, accounts] = await Promise.all([cachedGet<ResourceOption[]>('/api/resources', force), cachedGet<Array<{ id: number; provider: string; name: string; login_email?: string | null; status?: string }>>('/api/resources/accounts', force)]);
         const actualResources = resources.filter(resource => resource.status !== '停用' && !resource.identifier?.startsWith('account:')).map(resource => ({ ...resource, value: `resource:${resource.id}`, kind: 'resource' as const }));
-        const accountOptions = accounts.filter(account => account.status !== '停用').map(account => ({ value: `account:${account.id}`, kind: 'account' as const, id: account.id, account_id: account.id, provider: account.provider, name: '账号归属', account_name: account.name, status: account.status }));
+        const accountOptions = accounts.filter(account => account.status !== '停用').map(account => ({ value: `account:${account.id}`, kind: 'account' as const, id: account.id, account_id: account.id, provider: account.provider, name: '账号归属', account_name: account.name, login_email: account.login_email, status: account.status }));
         resourceOptions.value = [...actualResources, ...accountOptions];
     } catch { resourceOptions.value = []; }
     finally { resourceOptionsLoading.value = false; }
