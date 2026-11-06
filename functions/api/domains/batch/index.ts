@@ -1,6 +1,9 @@
-import type { Env } from '../../../types'
+import type { Env, Domain } from '../../../types'
 import { checkAuth } from '../../../utils/auth'
-import { dailyClicksRangeFromNumber, isValidDate, isValidDailyClicksRange, todayShanghaiDate } from '../../../utils/domain-validation'
+import { isValidDate } from '../../../utils/domain-validation'
+
+import { prepareWebsiteChange, websiteWrite, WebsiteChangeError } from '../../../domain/website-changes'
+import { bindingWrite, primaryClearWrite, ResourceBindingError, resolveBindingResource } from '../../../domain/resource-bindings'
 
 type DomainPatch = { type: 'domain_patch'; id: number; fields: Record<string, unknown> }
 type LinkAdd = { type: 'resource_link_add'; domain_id: number; resource_id: number; role: string; is_primary?: number; memo?: string }
@@ -9,7 +12,6 @@ type DomainOperationAdd = { type: 'domain_operation_add'; domain_id: number; ope
 type Operation = DomainPatch | DomainOperationAdd | LinkAdd | LinkRemove
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const validStatus = (value: unknown) => value === '在线' || value === '离线'
 
 export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context)
@@ -21,50 +23,18 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (operations.length > 25) return json(null, 413, '单批最多同步 25 个操作')
 
         const statements: D1PreparedStatement[] = []
+        const projected = new Map<number, Domain>()
         for (const operation of operations) {
             if (operation.type === 'domain_patch') {
                 if (!Number.isInteger(operation.id) || !operation.fields || typeof operation.fields !== 'object') return json(null, 400, '域名更新格式无效')
                 const fields = operation.fields
                 const keys = Object.keys(fields)
                 if (!keys.length || keys.some(key => !['status', 'last_status_check_at', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'seo_last_date'].includes(key))) return json(null, 400, '域名更新包含不支持的字段')
-                if ('status' in fields && !validStatus(fields.status)) return json(null, 400, '网站状态无效')
-                if ('last_status_check_at' in fields && !isValidDate(fields.last_status_check_at)) return json(null, 400, '检查日期无效')
-                if ('daily_clicks' in fields && fields.daily_clicks !== null && (!Number.isInteger(fields.daily_clicks) || Number(fields.daily_clicks) < 0)) return json(null, 400, '日点击必须是非负整数或空值')
-                if ('daily_clicks_range' in fields && fields.daily_clicks_range !== null && !isValidDailyClicksRange(fields.daily_clicks_range)) return json(null, 400, '日点击区间无效')
-                if ('seo_last_date' in fields && fields.seo_last_date !== null && !isValidDate(fields.seo_last_date)) return json(null, 400, 'SEO 日期格式无效')
-
-                const assignments: string[] = []
-                const values: unknown[] = []
-                const changed: string[] = []
-                const changedValues: unknown[] = []
-                if ('status' in fields) {
-                    const checkedDate = (fields.last_status_check_at as string | undefined) || todayShanghaiDate()
-                    assignments.push('status = ?', 'last_status_check_at = ?')
-                    values.push(fields.status, checkedDate)
-                    changed.push('(status IS NOT ? OR date(last_status_check_at) IS NOT ?)')
-                    changedValues.push(fields.status, checkedDate)
-                }
-                if ('last_status_check_at' in fields && !('status' in fields)) {
-                    assignments.push('last_status_check_at = ?')
-                    values.push(fields.last_status_check_at)
-                    changed.push('date(last_status_check_at) IS NOT ?')
-                    changedValues.push(fields.last_status_check_at)
-                }
-                if ('daily_clicks' in fields || 'daily_clicks_range' in fields) {
-                    const clickDate = fields.daily_clicks == null && fields.daily_clicks_range == null ? null : (fields.clicks_updated_date || todayShanghaiDate())
-                    if (clickDate !== null && !isValidDate(clickDate)) return json(null, 400, '点击数据日期无效')
-                    assignments.push('daily_clicks = ?', 'daily_clicks_range = ?', 'clicks_updated_date = ?')
-                    values.push(fields.daily_clicks ?? null, fields.daily_clicks_range ?? dailyClicksRangeFromNumber(fields.daily_clicks), clickDate)
-                    changed.push('(daily_clicks IS NOT ? OR daily_clicks_range IS NOT ? OR clicks_updated_date IS NOT ?)')
-                    changedValues.push(fields.daily_clicks ?? null, fields.daily_clicks_range ?? dailyClicksRangeFromNumber(fields.daily_clicks), clickDate)
-                }
-                if ('seo_last_date' in fields) {
-                    assignments.push('seo_last_date = ?')
-                    values.push(fields.seo_last_date)
-                    changed.push('seo_last_date IS NOT ?')
-                    changedValues.push(fields.seo_last_date)
-                }
-                statements.push(context.env.DB.prepare(`UPDATE domains SET ${assignments.join(', ')} WHERE id = ? AND (${changed.join(' OR ')})`).bind(...values, operation.id, ...changedValues))
+                const current = projected.get(operation.id) || await context.env.DB.prepare('SELECT * FROM domains WHERE id = ?').bind(operation.id).first<Domain>()
+                if (!current) return json(null, 400, '域名不存在')
+                const change = prepareWebsiteChange(current, fields, 'patch')
+                projected.set(operation.id, change.record)
+                statements.push(websiteWrite(context.env.DB, change, operation.id))
             } else if (operation.type === 'domain_operation_add') {
                 if (!Number.isInteger(operation.domain_id) || !isValidDate(operation.operation_date) || !['SEO', '内容', '技术', '其他'].includes(operation.operation_kind)) return json(null, 400, '操作日期格式无效')
                 statements.push(context.env.DB.prepare(`
@@ -73,16 +43,9 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 `).bind(operation.domain_id, operation.operation_date, operation.operation_kind, operation.domain_id))
             } else if (operation.type === 'resource_link_add') {
                 if (!Number.isInteger(operation.domain_id) || !Number.isInteger(operation.resource_id) || typeof operation.role !== 'string' || !operation.role.trim()) return json(null, 400, '资源关联格式无效')
-                const valid = await context.env.DB.prepare(`SELECT
-                    EXISTS(SELECT 1 FROM domains WHERE id = ?) AS domain_exists,
-                    EXISTS(SELECT 1 FROM provider_resources WHERE id = ?) AS resource_exists
-                `).bind(operation.domain_id, operation.resource_id).first<{ domain_exists: number; resource_exists: number }>()
-                if (!valid?.domain_exists || !valid.resource_exists) return json(null, 400, '网站或资源不存在')
-                statements.push(context.env.DB.prepare(`
-                    INSERT INTO domain_resources (domain_id, resource_id, role, is_primary, memo)
-                    VALUES (?, ?, ?, ?, ?)
-                    ON CONFLICT(domain_id, resource_id, role) DO UPDATE SET is_primary = excluded.is_primary, memo = excluded.memo
-                `).bind(operation.domain_id, operation.resource_id, operation.role.trim(), operation.is_primary ? 1 : 0, operation.memo || ''))
+                const resource = await resolveBindingResource(context.env.DB, { domainId: operation.domain_id, resourceId: operation.resource_id, role: operation.role, isPrimary: operation.is_primary, memo: operation.memo })
+                if (operation.is_primary) statements.push(primaryClearWrite(context.env.DB, operation.domain_id))
+                statements.push(bindingWrite(context.env.DB, { domainId: operation.domain_id, role: operation.role, isPrimary: operation.is_primary, memo: operation.memo }, resource.id, false))
             } else if (operation.type === 'resource_link_remove') {
                 if (!Number.isInteger(operation.id)) return json(null, 400, '资源关联编号无效')
                 statements.push(context.env.DB.prepare('DELETE FROM domain_resources WHERE id = ?').bind(operation.id))
@@ -92,6 +55,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         await context.env.DB.batch(statements)
         return json({ accepted: operations.length })
     } catch (error) {
+        if (error instanceof WebsiteChangeError || error instanceof ResourceBindingError) return json(null, 400, error.message)
         console.error('批量同步失败:', error)
         return json(null, 503, '批量同步失败，请稍后重试')
     }

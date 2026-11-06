@@ -44,9 +44,11 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 FROM domains${where}`).bind(...values).all(),
             db.prepare(`WITH providers(provider) AS (VALUES ('github'), ('cloudflare'), ('vhost'), ('vps')),
                 account_counts AS (SELECT provider, COUNT(*) AS account_count FROM provider_accounts GROUP BY provider),
-                resource_counts AS (SELECT r.provider, COUNT(DISTINCT r.id) AS resource_count,
+                resource_counts AS (SELECT r.provider,
+                    COUNT(DISTINCT CASE WHEN r.identifier IS NULL OR r.identifier NOT LIKE 'account:%' THEN r.id END) AS resource_count,
                     COUNT(DISTINCT dr.domain_id) AS linked_domain_count
-                    FROM provider_resources r LEFT JOIN domain_resources dr ON dr.resource_id = r.id GROUP BY r.provider)
+                    FROM provider_resources r LEFT JOIN domain_resources dr ON dr.resource_id = r.id
+                    GROUP BY r.provider)
                 SELECT p.provider, COALESCE(a.account_count, 0) AS account_count,
                     COALESCE(r.resource_count, 0) AS resource_count, COALESCE(r.linked_domain_count, 0) AS linked_domain_count
                 FROM providers p LEFT JOIN account_counts a ON a.provider = p.provider

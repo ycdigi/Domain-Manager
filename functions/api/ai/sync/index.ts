@@ -1,6 +1,8 @@
 import type { Env, Domain, DomainAiNoteKind, DomainOperationKind } from '../../../types'
 import { checkApiToken } from '../../../utils/auth'
-import { dailyClicksRangeFromNumber, isValidDate, isValidDailyClicksRange, normalizeDomain, normalizeDomainType, todayShanghaiDate, validateDomain } from '../../../utils/domain-validation'
+import { isValidDate, normalizeDomain, todayShanghaiDate } from '../../../utils/domain-validation'
+
+import { prepareWebsiteChange, websiteWrite, WebsiteChangeError } from '../../../domain/website-changes'
 
 type SyncFields = Partial<Pick<Domain, 'status' | 'site_name' | 'ownership' | 'industry' | 'seo_last_date' | 'daily_clicks' | 'daily_clicks_range' | 'clicks_updated_date' | 'platform' | 'platform_other' | 'wp_calculator_count' | 'wp_article_count' | 'content_stats_updated_date' | 'adsense_connected' | 'adsense_opened_date' | 'memo'>> & {
     adsense_account?: string | null
@@ -62,58 +64,12 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             }
         }
 
-        const merged = {
-            ...current,
-            ...fields,
-            adsense_account_id: adsenseAccountId,
-            registrar: current.registrar,
-            registrar_date: current.registrar_date,
-            expiry_date: current.expiry_date,
-            service_type: current.service_type,
-            domain: normalizedDomain
-        }
-        if (!has(fields, 'industry')) merged.industry = normalizeDomainType(current.industry)
-        if (fields.platform && fields.platform !== 'WordPress') {
-            merged.wp_calculator_count = null
-            merged.wp_article_count = null
-            merged.content_stats_updated_date = null
-        }
-        if (fields.platform && fields.platform !== '其他') merged.platform_other = null
-        const validationError = validateDomain(merged)
-        if (validationError) return json(null, 400, validationError)
-
+        const supplied: Record<string, unknown> = Object.fromEntries(Object.entries(fields).filter(([key]) => key !== 'adsense_account'))
+        if (has(fields, 'adsense_account')) supplied.adsense_account_id = adsenseAccountId
+        const change = prepareWebsiteChange(current, supplied, 'patch')
         const statements: D1PreparedStatement[] = []
-        const assignments: string[] = []
-        const values: unknown[] = []
-        const appliedFields: string[] = []
-        const addField = (name: string, value: unknown) => { assignments.push(`${name} = ?`); values.push(value); appliedFields.push(name) }
-
-        for (const name of ['status', 'site_name', 'ownership', 'industry', 'seo_last_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'adsense_connected', 'adsense_opened_date', 'memo'] as const) {
-            if (has(fields, name)) addField(name, fields[name] === '' ? null : fields[name])
-        }
-        if (has(fields, 'adsense_account')) addField('adsense_account_id', adsenseAccountId)
-        if (has(fields, 'daily_clicks')) {
-            addField('daily_clicks', fields.daily_clicks ?? null)
-            addField('daily_clicks_range', fields.daily_clicks_range ?? dailyClicksRangeFromNumber(fields.daily_clicks))
-            addField('clicks_updated_date', fields.daily_clicks == null ? null : (fields.clicks_updated_date || todayShanghaiDate()))
-        } else if (has(fields, 'daily_clicks_range')) {
-            if (fields.daily_clicks_range !== null && !isValidDailyClicksRange(fields.daily_clicks_range)) return json(null, 400, '日点击区间无效')
-            addField('daily_clicks_range', fields.daily_clicks_range || null)
-            addField('clicks_updated_date', fields.daily_clicks_range ? (fields.clicks_updated_date || todayShanghaiDate()) : null)
-        } else if (has(fields, 'clicks_updated_date')) {
-            addField('clicks_updated_date', fields.clicks_updated_date || null)
-        }
-        if (has(fields, 'status')) addField('last_status_check_at', todayShanghaiDate())
-
-        if (assignments.length) {
-            if (fields.platform && fields.platform !== 'WordPress') {
-                addField('wp_calculator_count', null)
-                addField('wp_article_count', null)
-                addField('content_stats_updated_date', null)
-            }
-            if (fields.platform && fields.platform !== '其他') addField('platform_other', null)
-            statements.push(db.prepare(`UPDATE domains SET ${assignments.join(', ')} WHERE id = ?`).bind(...values, current.id))
-        }
+        const appliedFields = Object.keys(change.fields)
+        if (appliedFields.length) statements.push(websiteWrite(db, change, current.id))
 
         if (body.operation) {
             statements.push(db.prepare(`
@@ -157,6 +113,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         `).bind(current.id).first()
         return json({ domain: updated, applied: { fields: appliedFields, operation: body.operation ? 1 : 0, ai_notes: body.ai_notes?.length || 0 } }, 200, 'AI 同步完成')
     } catch (error) {
+        if (error instanceof WebsiteChangeError) return json(null, 400, error.message)
         console.error('AI 同步失败:', error)
         return json(null, 500, error instanceof Error ? error.message : 'AI 同步失败')
     }

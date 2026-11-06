@@ -178,6 +178,8 @@ CREATE TABLE IF NOT EXISTS domain_ai_note_versions (
 
 CREATE INDEX IF NOT EXISTS idx_provider_resources_provider ON provider_resources(provider);
 CREATE INDEX IF NOT EXISTS idx_domain_resources_resource ON domain_resources(resource_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_domain_resources_one_primary ON domain_resources(domain_id) WHERE is_primary = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_resources_account_ownership ON provider_resources(account_id, identifier) WHERE account_id IS NOT NULL AND identifier LIKE 'account:%';
 CREATE INDEX IF NOT EXISTS idx_credentials_account ON provider_credentials(account_id);
 CREATE INDEX IF NOT EXISTS idx_domain_ai_notes_domain ON domain_ai_notes(domain_id, archived_at, updated_at);
 CREATE INDEX IF NOT EXISTS idx_domain_ai_note_versions_note ON domain_ai_note_versions(note_id, version_no DESC);

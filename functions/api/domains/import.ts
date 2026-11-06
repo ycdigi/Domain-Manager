@@ -1,10 +1,12 @@
-import type { Env, ProviderType } from '../../types'
+import type { Env, ProviderType, Domain } from '../../types'
 import { verifyToken } from '../../utils/auth'
-import { dailyClicksRangeFromNumber, domainTypes, isValidDailyClicksRange, isValidDate, normalizeDomain } from '../../utils/domain-validation'
+import { domainTypes, isValidDailyClicksRange, isValidDate, normalizeDomain } from '../../utils/domain-validation'
 
 import { isSiteOwnership, type SiteOwnership } from '../../../shared/website-classification'
+import { prepareWebsiteChange, websiteWrite, WebsiteChangeError } from '../../domain/website-changes'
+import { bindingWriteByDomain, primaryClearByDomainWrite } from '../../domain/resource-bindings'
 
-interface ResourceImport { provider: ProviderType; account?: string | null; resource: string; role: string }
+interface ResourceImport { provider: ProviderType; account?: string | null; resource: string; role: string; is_primary?: number | boolean; memo?: string | null }
 interface AiNoteImport { kind: 'AI提示词' | '想法说明'; content: string }
 interface OperationImport { operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他' }
 interface DomainImport {
@@ -40,10 +42,9 @@ interface DomainImport {
 }
 
 const providers = new Set<ProviderType>(['github', 'cloudflare', 'vhost', 'vps'])
-const allowedFields = ['ownership', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'computer_name', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
+const allowedFields = ['ownership', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'site_name', 'industry', 'computer_name', 'tgsend', 'st_tgsend', 'adsense_connected', 'adsense_opened_date', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'platform', 'platform_other', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date'] as const
 const has = (object: object, key: string) => Object.prototype.hasOwnProperty.call(object, key)
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const todayShanghai = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 
 export const onRequestPost: PagesFunction<Env> = async context => {
     const auth = await verifyToken(context)
@@ -121,13 +122,16 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 if (!operation || !isValidDate(operation.operation_date) || !['SEO', '内容', '技术', '其他'].includes(operation.operation_kind)) return '操作记录格式无效'
             }
             const linkKeys = new Set<string>()
+            let primaryCount = 0
             for (const link of item.resources || []) {
                 const accountName = typeof link?.account === 'string' ? link.account.trim() : ''
                 if (!link || typeof link !== 'object' || !providers.has(link.provider) || (link.provider !== 'vps' && !accountName) || (link.account != null && typeof link.account !== 'string') || typeof link.resource !== 'string' || !link.resource.trim() || typeof link.role !== 'string' || !link.role.trim()) return '资源关联字段无效'
                 const key = `${link.provider}\0${accountName}\0${link.resource.trim()}\0${link.role.trim()}`
                 if (linkKeys.has(key)) return '同一网站包含重复资源关联'
                 linkKeys.add(key)
+                if (link.is_primary === true || link.is_primary === 1) primaryCount++
             }
+            if (primaryCount > 1) return '同一网站最多只能恢复一个主资源'
             if (['registrar', 'registrar_date', 'expiry_date', 'service_type', 'status'].some(key => !has(item, key) || !item[key as keyof DomainImport])) return '缺少必填字段'
             return null
         }
@@ -139,7 +143,6 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (errors.length) return json({ total: domains.length, success: 0, failed: errors.length, errors }, 400, '预校验失败，未写入任何数据')
 
         const db = context.env.DB
-        const importDate = todayShanghai()
         const duplicateRows = await db.prepare("SELECT lower(rtrim(domain, '.')) AS domain_key, COUNT(*) AS count FROM domains GROUP BY lower(rtrim(domain, '.')) HAVING COUNT(*) > 1").all<{ domain_key: string; count: number }>()
         const duplicated = new Set((duplicateRows.results || []).map(row => row.domain_key))
         const duplicateUploads = domains.filter(item => duplicated.has(normalizeDomain(item.domain)))
@@ -189,35 +192,17 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 const id = existingIds.get(domain)
                 const fields: Record<string, unknown> = { domain }
                 for (const key of allowedFields) if (has(item, key)) fields[key] = item[key] === '' ? null : item[key]
-                if (has(item, 'platform') && item.platform !== 'WordPress') {
-                    fields.wp_calculator_count = null
-                    fields.wp_article_count = null
-                    fields.content_stats_updated_date = null
-                }
-                if (has(item, 'daily_clicks')) fields.clicks_updated_date = item.daily_clicks == null ? null : (item.clicks_updated_date || importDate)
-                if (has(item, 'daily_clicks')) fields.daily_clicks_range = item.daily_clicks == null ? null : (item.daily_clicks_range || dailyClicksRangeFromNumber(item.daily_clicks))
                 if (has(item, 'adsense_account')) fields.adsense_account_id = item.adsense_account?.trim() ? accountIds.get(item.adsense_account.trim()) : null
-
-                if (id) {
-                    const columns = Object.keys(fields).filter(key => key !== 'domain')
-                    if (columns.length) {
-                        const assignments = columns.map(key => `${key} = ?`)
-                        const values = columns.map(key => fields[key])
-                        statements.push(db.prepare(`UPDATE domains SET ${assignments.join(', ')} WHERE id = ?`).bind(...values, id))
-                    }
-                } else {
-                    for (const key of ['registrar', 'registrar_date', 'expiry_date', 'service_type', 'status']) if (!has(item, key)) fields[key] = key === 'status' ? '离线' : ''
-                    const columns = Object.keys(fields)
-                    const values = columns.map(key => fields[key])
-                    statements.push(db.prepare(`INSERT INTO domains (${columns.join(', ')}) VALUES (${values.map(() => '?').join(', ')})`).bind(...values))
-                }
+                const current = id ? await db.prepare('SELECT * FROM domains WHERE id = ?').bind(id).first<Domain>() : null
+                const change = prepareWebsiteChange(current, fields, id ? 'restore' : 'create')
+                statements.push(websiteWrite(db, change, id, false))
 
                 if (item.resources !== undefined) {
                     if (id) statements.push(db.prepare('DELETE FROM domain_resources WHERE domain_id = ?').bind(id))
                     for (const link of item.resources) {
                         const resourceId = resourceIds.get(`${link.provider}\0${typeof link.account === 'string' ? link.account.trim() : ''}\0${link.resource.trim()}`)!
-                        statements.push(db.prepare(`INSERT INTO domain_resources (domain_id, resource_id, role) SELECT id, ?, ? FROM domains WHERE domain = ? COLLATE NOCASE`)
-                            .bind(resourceId, link.role.trim(), domain))
+                        if (link.is_primary) statements.push(primaryClearByDomainWrite(db, domain))
+                        statements.push(bindingWriteByDomain(db, { domainId: id || 0, role: link.role, isPrimary: link.is_primary, memo: link.memo }, resourceId, domain))
                     }
                 }
                 for (const note of item.ai_notes || []) {
@@ -251,6 +236,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         }
         return json({ total: domains.length, created, updated, success, failed: 0, errors: [] }, 200, '导入完成')
     } catch (error) {
+        if (error instanceof WebsiteChangeError) return json(null, 400, error.message)
         console.error('导入数据失败:', error)
         return json(null, 500, '导入失败；前序批次可能已完成，重复导入可安全重试')
     }

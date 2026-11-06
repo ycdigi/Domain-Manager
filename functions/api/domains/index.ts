@@ -1,6 +1,7 @@
 import { Env, Domain } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { dailyClicksRangeFromNumber, normalizeDomain, normalizeDomainType, validateDomain, todayShanghaiDate } from '../../utils/domain-validation'
+import { normalizeDomain } from '../../utils/domain-validation'
+import { prepareWebsiteChange, websiteWrite, seoTodayWrite, WebsiteChangeError } from '../../domain/website-changes'
 
 export const onRequestGet: PagesFunction<Env> = async (context) => {
     try {
@@ -65,8 +66,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
         }
 
         const data = await context.request.json() as Domain
-        const validationError = validateDomain(data)
-        if (validationError) return Response.json({ status: 400, message: validationError, data: null }, { status: 400 })
+        const change = prepareWebsiteChange(null, data as unknown as Record<string, unknown>, 'create')
         const normalizedDomain = normalizeDomain(data.domain)
         const existing = await context.env.DB.prepare("SELECT id FROM domains WHERE lower(rtrim(domain, '.')) = ? LIMIT 1").bind(normalizedDomain).first()
         if (existing) return Response.json({ status: 409, message: '该域名已存在', data: null }, { status: 409 })
@@ -75,43 +75,9 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             if (!account) return Response.json({ status: 400, message: 'AdSense 账号不存在', data: null }, { status: 400 })
         }
 
-        const result = await context.env.DB.prepare(`
-            INSERT INTO domains (
-                domain, registrar, registrar_link, registrar_date,
-                expiry_date, service_type, status, tgsend, st_tgsend, memo,
-                site_name, industry, ownership,
-                adsense_account_id, adsense_connected, adsense_opened_date, seo_last_date,
-                daily_clicks, daily_clicks_range, clicks_updated_date, platform, platform_other,
-                wp_calculator_count, wp_article_count, content_stats_updated_date
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            RETURNING *
-        `).bind(
-            normalizedDomain,
-            data.registrar,
-            data.registrar_link || '',
-            data.registrar_date,
-            data.expiry_date,
-            data.service_type,
-            data.status,
-            data.tgsend || 0,
-            data.st_tgsend ?? 1,
-            data.memo || '',
-            data.site_name?.trim() || null,
-            normalizeDomainType(data.industry?.trim()) || null,
-            data.ownership ?? '自营网站',
-            data.adsense_account_id ?? null,
-            data.adsense_connected || '未知',
-            data.adsense_opened_date || null,
-            data.seo_last_date || null,
-            data.daily_clicks ?? null,
-            data.daily_clicks_range || dailyClicksRangeFromNumber(data.daily_clicks),
-            data.daily_clicks_range || data.daily_clicks == null ? null : (data.clicks_updated_date || todayShanghaiDate()),
-            data.platform || '其他',
-            data.platform === '其他' ? (data.platform_other || null) : null,
-            data.platform === 'WordPress' ? (data.wp_calculator_count ?? null) : null,
-            data.platform === 'WordPress' ? (data.wp_article_count ?? null) : null,
-            data.platform === 'WordPress' ? (data.content_stats_updated_date || null) : null
-        ).run<Domain>()
+        const result = change.seoToday
+            ? (await context.env.DB.batch([websiteWrite(context.env.DB, change), seoTodayWrite(context.env.DB, change.record.domain, change.record.seo_last_date!)]))[0]
+            : await websiteWrite(context.env.DB, change).run<Domain>()
 
         if (result.success) {
             const newDomain = result.results?.[0] || null
@@ -124,6 +90,7 @@ export const onRequestPost: PagesFunction<Env> = async (context) => {
             throw new Error('数据库插入失败')
         }
     } catch (error) {
+        if (error instanceof WebsiteChangeError) return Response.json({ status: 400, message: error.message, data: null }, { status: 400 })
         console.error('创建域名失败:', error)
         return Response.json({
             status: 500,

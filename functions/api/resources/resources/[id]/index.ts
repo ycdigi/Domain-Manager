@@ -1,6 +1,7 @@
 import type { Env, ProviderResource } from '../../../../types'
 import { checkAuth } from '../../../../utils/auth'
 import { isIpAddress, isValidDate } from '../../../../utils/domain-validation'
+import { isAccountOwnershipResource } from '../../../../domain/resource-bindings'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 
@@ -9,8 +10,9 @@ export const onRequestPut: PagesFunction<Env> = async context => {
     try {
         const data = await context.request.json() as Partial<ProviderResource>
         if (!data.name?.trim() || (data.status && !['正常', '停用', '未知'].includes(data.status))) return json(null, 400, '资源名称或状态无效')
-        const existing = await context.env.DB.prepare('SELECT provider FROM provider_resources WHERE id = ?').bind(context.params.id).first<{ provider: string }>()
+        const existing = await context.env.DB.prepare('SELECT provider, identifier FROM provider_resources WHERE id = ?').bind(context.params.id).first<{ provider: string; identifier: string | null }>()
         if (!existing) return json(null, 404, '资源不存在')
+        if (isAccountOwnershipResource(existing.identifier)) return json(null, 400, '账号归属资源由系统维护，具体资源请另行创建')
         if (existing.provider === 'vps' && (typeof data.ip_address !== 'string' || !isIpAddress(data.ip_address.trim()))) return json(null, 400, 'VPS 资源必须填写有效 IP 地址')
         if (data.port != null && (!Number.isInteger(data.port) || data.port < 1 || data.port > 65535)) return json(null, 400, '端口范围无效')
         if (data.expires_at && !isValidDate(data.expires_at)) return json(null, 400, '到期日期格式无效')

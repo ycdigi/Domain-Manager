@@ -104,6 +104,8 @@ Domain JSON may also include an `ai_notes` array with `kind` (`AI提示词` or `
 
 For website ownership, back up the existing database and apply `schema-migration-v1.11.0.sql` once before deploying this feature. Existing websites become self-operated; fresh databases already include the field. The `ownership` values are `未分类`, `自营网站`, and `企业客户网站`. Ownership and stack filters intersect; website metrics follow both filters, while account income and infrastructure totals remain explicitly global. JSON/Excel exports retain ownership; legacy imports and AI sync requests preserve existing ownership when omitted, and new imported sites default to self-operated.
 
+Before applying the resource-binding upgrade, check for duplicate primary links per website and duplicate `account:<id>` ownership resources, then apply `schema-migration-v1.12.0.sql` once. Existing links to disabled accounts or resources are retained; new links to disabled objects are rejected.
+
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 
 `CREDENTIAL_ENCRYPTION_KEY` encrypts stored GitHub tokens. Keep an independent backup. If it is lost or replaced, existing ciphertext cannot be decrypted and those tokens must be entered again.
