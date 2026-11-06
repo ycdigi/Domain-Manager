@@ -35,6 +35,18 @@
         <div class="detail-line"><span>备注</span><p>{{ domain.memo || '未记录' }}</p></div>
       </section>
 
+      <section class="detail-section todo-section">
+        <div class="section-heading"><h3>Todo</h3><span class="detail-muted">{{ todos.length }} 项</span></div>
+        <form class="todo-form" @submit.prevent="addTodo"><el-input v-model="todoTitle" maxlength="200" placeholder="添加 Todo 标题" clearable /><el-button type="primary" native-type="submit" :loading="todoSaving">添加</el-button><el-input v-model="todoDescription" class="todo-description-input" type="textarea" :rows="2" maxlength="5000" placeholder="描述（可选）" /></form>
+        <div v-if="todos.length" class="todo-list">
+          <article v-for="todo in todos" :key="todo.id" class="todo-row">
+            <div class="todo-main"><strong>{{ todo.title }}</strong><p v-if="todo.expanded">{{ todo.description || '没有描述' }}</p></div>
+            <div class="todo-actions"><el-button text size="small" type="danger" :title="`删除 Todo：${todo.title}`" :aria-label="`删除 Todo：${todo.title}`" @click="removeTodo(todo)"><Delete /></el-button><el-button text size="small" :icon="todo.expanded ? ArrowUp : ArrowDown" :title="todo.expanded ? '收起描述' : '展开描述'" :aria-label="todo.expanded ? '收起描述' : '展开描述'" @click="todo.expanded = !todo.expanded" /></div>
+          </article>
+        </div>
+        <p v-else class="detail-empty">还没有 Todo。</p>
+      </section>
+
       <section v-if="qualityIssues.length" class="detail-section quality-section">
         <div class="section-heading"><h3>信息待补全</h3><span class="detail-muted">{{ qualityIssues.length }} 项</span></div>
         <ul><li v-for="issue in qualityIssues" :key="issue">{{ issue }}</li></ul>
@@ -88,7 +100,7 @@ import { useRouter } from 'vue-router'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 
 import { ElMessage } from 'element-plus'
-import { CopyDocument, Edit } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, CopyDocument, Delete, Edit } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
 import { getWriteQueue } from '../utils/writeQueue'
 import { confirmAction, isDismissed } from '../utils/feedback'
@@ -100,6 +112,7 @@ interface Note { id: number; domain_id: number; kind: NoteKind; content: string;
 interface Version { id: number; note_id: number; kind: NoteKind; content: string; version_no: number; created_at?: string }
 interface Operation { id: number; domain_id: number; operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他'; created_at?: string }
 interface ResourceLink { id: number; resource_id: number; account_id?: number; provider: string; resource_name: string; resource_url?: string | null; ip_address?: string | null; port?: number | null; account_name?: string | null; login_email?: string | null; role: string; is_primary: number }
+interface Todo { id: number; domain_id: number; title: string; description?: string | null; expanded?: boolean }
 const router = useRouter()
 const props = defineProps<{ visible: boolean; domain?: DomainData }>()
 const emit = defineEmits<{ (event: 'update:visible', value: boolean): void; (event: 'changed'): void; (event: 'edit', domain: DomainData): void }>()
@@ -116,6 +129,10 @@ const historyVisible = ref(false)
 const history = ref<Version[]>([])
 const operations = ref<Operation[]>([])
 const resources = ref<ResourceLink[]>([])
+const todos = ref<Todo[]>([])
+const todoTitle = ref('')
+const todoDescription = ref('')
+const todoSaving = ref(false)
 const detailError = ref('')
 const detailLoading = ref(false)
 const operationKinds = ['SEO', '内容', '技术', '其他'] as const
@@ -146,6 +163,7 @@ const currentDetail = (id: number, version: number) => !disposed && props.visibl
 const loadNotes = async () => { const id = props.domain?.id; const version = detailVersion; if (!id) return; const value = await api.get<Note[]>(`/api/domains/${id}/ai-notes`); if (currentDetail(id, version)) notes.value = value }
 const localDate = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
 const loadOperations = async () => { const id = props.domain?.id; const version = detailVersion; if (!id) return; const [ops, links] = await Promise.all([api.get<Operation[]>(`/api/domains/${id}/operations`), api.get<ResourceLink[]>(`/api/resources/links?domain_id=${id}`)]); if (currentDetail(id, version)) { operations.value = ops; resources.value = links } }
+const loadTodos = async () => { const id = props.domain?.id; const version = detailVersion; if (!id) return; const value = await api.get<Todo[]>(`/api/domains/${id}/todos`); if (currentDetail(id, version)) todos.value = value.map(todo => ({ ...todo, expanded: false })) }
 const loadDetailData = async () => {
   if (!props.domain?.id) return
   const id = props.domain.id; const version = ++detailVersion
@@ -154,11 +172,16 @@ const loadDetailData = async () => {
   notes.value = []
   operations.value = []
   resources.value = []
-  const results = await Promise.allSettled([loadNotes(), loadOperations()])
+  todos.value = []
+  todoTitle.value = ''
+  todoDescription.value = ''
+  const results = await Promise.allSettled([loadNotes(), loadOperations(), loadTodos()])
   if (!currentDetail(id, version)) return
   if (results.some(result => result.status === 'rejected')) detailError.value = '详情数据未能完整加载，基础信息仍可查看。'
   detailLoading.value = false
 }
+const addTodo = async () => { if (todoSaving.value || !props.domain?.id || !todoTitle.value.trim()) return; todoSaving.value = true; try { const todo = await api.post<Todo>(`/api/domains/${props.domain.id}/todos`, { title: todoTitle.value.trim(), description: todoDescription.value.trim() || null }); todos.value.unshift({ ...todo, expanded: false }); todoTitle.value = ''; todoDescription.value = ''; ElMessage.success('Todo 已添加') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '添加 Todo 失败') } finally { todoSaving.value = false } }
+const removeTodo = async (todo: Todo) => { try { await confirmAction(`删除 Todo“${todo.title}”？`, '删除 Todo', { confirmButtonText: '删除' }); await api.delete(`/api/domains/${props.domain?.id}/todos/${todo.id}`); todos.value = todos.value.filter(item => item.id !== todo.id); ElMessage.success('Todo 已删除') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '删除 Todo 失败') } }
 const saveOperation = async () => { if (!props.domain?.id || !operationForm.value.operation_date) { ElMessage.warning('请选择操作日期'); return }; try { queue.enqueue({ type: 'domain_operation_add', domain_id: props.domain.id, operation_date: operationForm.value.operation_date, operation_kind: operationForm.value.operation_kind }); const result = await queue.flush(); await loadOperations(); emit('changed'); if (result.pending) ElMessage.warning('操作已保存在本机，尚未同步'); else ElMessage.success('操作日期已记录') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '操作日期已加入待同步队列') } }
 const recordToday = (kind: Operation['operation_kind']) => { operationForm.value = { operation_date: localDate(), operation_kind: kind }; void saveOperation() }
 const removeOperation = async (operation: Operation) => { try { await confirmAction(`删除“${props.domain?.domain || '当前网站'}”的 ${operation.operation_date} · ${operation.operation_kind} 操作记录？`, `删除操作记录 · ${props.domain?.domain || '当前网站'}`, { confirmButtonText: '删除' }); await api.delete(`/api/domains/${props.domain?.id}/operations/${operation.id}`); await loadOperations(); emit('changed') } catch (error) { if (!isDismissed(error)) ElMessage.error(error instanceof Error ? error.message : '删除操作记录失败') } }

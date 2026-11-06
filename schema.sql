@@ -181,7 +181,17 @@ CREATE TABLE IF NOT EXISTS domain_operations (
     FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS domain_todos (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (domain_id) REFERENCES domains(id) ON DELETE CASCADE
+);
+
 CREATE INDEX IF NOT EXISTS idx_domain_operations_domain_date ON domain_operations(domain_id, operation_date DESC);
+CREATE INDEX IF NOT EXISTS idx_domain_todos_domain_created ON domain_todos(domain_id, created_at DESC, id DESC);
 
 CREATE TRIGGER IF NOT EXISTS trg_domain_ai_notes_delete
 AFTER DELETE ON domains
@@ -200,6 +210,12 @@ CREATE TRIGGER IF NOT EXISTS trg_domain_delete_operations
 AFTER DELETE ON domains
 BEGIN
     DELETE FROM domain_operations WHERE domain_id = OLD.id;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_domain_delete_todos
+AFTER DELETE ON domains
+BEGIN
+    DELETE FROM domain_todos WHERE domain_id = OLD.id;
 END;
 
 CREATE TRIGGER IF NOT EXISTS trg_domain_resource_insert

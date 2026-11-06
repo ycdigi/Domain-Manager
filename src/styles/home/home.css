@@ -15,6 +15,7 @@ html.dm-ui .home-container .workspace { min-width:0; width:100%; max-width:none;
 .home-container .home-search .el-input__wrapper.is-focus { background:var(--color-paper); box-shadow:0 0 0 2px var(--color-focus) inset, 0 0 0 4px var(--color-accent-paper); }
 .home-container .home-search .el-input__prefix { color:var(--color-muted); }
 .home-container .home-search .el-input__inner { font-size:var(--text-md); }
+.home-container .home-search .el-input__inner:focus-visible { outline:0 !important; }
 .home-container .ledger-toolbar { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:var(--space-sm) var(--space-lg); margin-bottom:var(--space-md); }
 .home-container .ledger-actions { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-xs); }
 .home-container .summary-grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); margin-bottom:var(--space-md); border:1px solid var(--color-rule); border-radius:var(--radius-panel); background: var(--color-paper); }

@@ -9,6 +9,7 @@ import { bindingWriteByDomain, primaryClearByDomainWrite } from '../../domain/re
 interface ResourceImport { provider: ProviderType; account?: string | null; resource: string; role: string; is_primary?: number | boolean; memo?: string | null }
 interface AiNoteImport { kind: 'AI提示词' | '想法说明'; content: string }
 interface OperationImport { operation_date: string; operation_kind: 'SEO' | '内容' | '技术' | '其他' }
+interface TodoImport { title: string; description?: string | null }
 interface DomainImport {
     domain: string
     registrar?: string
@@ -37,6 +38,7 @@ interface DomainImport {
     resources?: ResourceImport[]
     ai_notes?: AiNoteImport[]
     operations?: OperationImport[]
+    todos?: TodoImport[]
 }
 
 const providers = new Set<ProviderType>(['github', 'cloudflare', 'vhost', 'vps'])
@@ -111,11 +113,15 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (item.resources !== undefined && (!Array.isArray(item.resources) || item.resources.length > 20)) return '每个网站最多导入 20 个资源关联'
             if (item.ai_notes !== undefined && (!Array.isArray(item.ai_notes) || item.ai_notes.length > 50)) return '每个网站最多导入 50 条 AI 记录'
             if (item.operations !== undefined && (!Array.isArray(item.operations) || item.operations.length > 500)) return '每个网站最多导入 500 条操作记录'
+            if (item.todos !== undefined && (!Array.isArray(item.todos) || item.todos.length > 100)) return '每个网站最多导入 100 条 Todo'
             for (const note of item.ai_notes || []) {
                 if (!note || !['AI提示词', '想法说明'].includes(note.kind) || typeof note.content !== 'string' || !note.content.trim() || note.content.length > 20000) return 'AI 记录格式无效或内容过长'
             }
             for (const operation of item.operations || []) {
                 if (!operation || !isValidDate(operation.operation_date) || !['SEO', '内容', '技术', '其他'].includes(operation.operation_kind)) return '操作记录格式无效'
+            }
+            for (const todo of item.todos || []) {
+                if (!todo || typeof todo.title !== 'string' || !todo.title.trim() || todo.title.length > 200 || (todo.description != null && typeof todo.description !== 'string') || (todo.description?.length || 0) > 5000) return 'Todo 格式无效或内容过长'
             }
             const linkKeys = new Set<string>()
             let primaryCount = 0
@@ -225,6 +231,13 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                         INSERT OR IGNORE INTO domain_operations (domain_id, operation_date, operation_kind)
                         SELECT id, ?, ? FROM domains WHERE lower(rtrim(domain, '.')) = ?
                     `).bind(operation.operation_date, operation.operation_kind, domain))
+                }
+                for (const todo of item.todos || []) {
+                    statements.push(db.prepare(`
+                        INSERT INTO domain_todos (domain_id, title, description)
+                        SELECT id, ?, ? FROM domains WHERE lower(rtrim(domain, '.')) = ?
+                        AND NOT EXISTS (SELECT 1 FROM domain_todos t WHERE t.domain_id = domains.id AND t.title = ? AND COALESCE(t.description, '') = COALESCE(?, ''))
+                    `).bind(todo.title.trim(), todo.description?.trim() || null, domain, todo.title.trim(), todo.description?.trim() || null))
                 }
                 success++
             }

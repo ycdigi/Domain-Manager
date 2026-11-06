@@ -7,7 +7,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
         const db = context.env.DB
-        const [domains, operations, adsenseAccounts, income, incomeDomains, providerAccounts, resources, links, notes] = await Promise.all([
+        const [domains, operations, adsenseAccounts, income, incomeDomains, providerAccounts, resources, links, notes, todos] = await Promise.all([
             db.prepare(`SELECT d.id, d.domain, d.registrar, d.registrar_link, d.registrar_date, d.expiry_date,
                 d.service_type, d.status, d.memo, d.computer_name, d.adsense_connected, d.adsense_opened_date,
                 d.site_name, d.industry, d.ownership,
@@ -50,7 +50,10 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 ORDER BY d.domain COLLATE NOCASE, r.provider, r.name COLLATE NOCASE`).all(),
             db.prepare(`SELECT n.id, n.domain_id, d.domain, n.kind, n.content, n.created_at, n.updated_at
                 FROM domain_ai_notes n JOIN domains d ON d.id = n.domain_id
-                WHERE n.archived_at IS NULL ORDER BY d.domain COLLATE NOCASE, n.kind, n.updated_at DESC`).all()
+                WHERE n.archived_at IS NULL ORDER BY d.domain COLLATE NOCASE, n.kind, n.updated_at DESC`).all(),
+            db.prepare(`SELECT t.id, t.domain_id, d.domain, t.title, t.description, t.created_at
+                FROM domain_todos t JOIN domains d ON d.id = t.domain_id
+                ORDER BY d.domain COLLATE NOCASE, t.created_at DESC, t.id DESC`).all()
         ])
         return json({
             domains: domains.results || [],
@@ -61,7 +64,8 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             provider_accounts: providerAccounts.results || [],
             provider_resources: resources.results || [],
             domain_resources: links.results || [],
-            ai_notes: notes.results || []
+            ai_notes: notes.results || [],
+            domain_todos: todos.results || []
         })
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取导出快照失败') }
 }

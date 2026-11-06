@@ -66,6 +66,14 @@ export interface DomainOperation {
     created_at?: string
 }
 
+export interface DomainTodo {
+    id?: number
+    domain_id: number
+    title: string
+    description?: string | null
+    created_at?: string
+}
+
 export type DomainAiNoteKind = 'AI提示词' | '想法说明'
 
 export interface DomainAiNote {

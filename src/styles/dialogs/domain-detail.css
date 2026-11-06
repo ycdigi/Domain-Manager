@@ -33,6 +33,16 @@
 .section-heading, .note-meta, .note-actions, .note-form-actions, .history-item > div { display: flex; align-items: center; justify-content: space-between; gap: var(--space-sm); }
 .section-heading h3 { margin: 0; font-size: var(--text-md); }
 .detail-empty { padding-block:var(--space-sm); }
+.todo-form { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:var(--space-xs); margin-top:var(--space-sm); }
+.todo-description-input { grid-column:1 / -1; }
+.todo-list { display:grid; gap:var(--space-2xs); margin-top:var(--space-sm); }
+.todo-row { display:flex; align-items:flex-start; justify-content:space-between; gap:var(--space-sm); padding:var(--space-xs) 0; border-bottom:1px solid var(--color-rule); }
+.todo-row:last-child { border-bottom:0; }
+.todo-main { min-width:0; flex:1; }
+.todo-main strong { display:block; color:var(--color-ink); font-size:var(--text-sm); font-weight:600; overflow-wrap:anywhere; }
+.todo-main p { margin:var(--space-2xs) 0 0; color:var(--color-muted); font-size:var(--text-sm); line-height:1.5; white-space:pre-wrap; overflow-wrap:anywhere; }
+.todo-actions { display:flex; flex:0 0 auto; align-items:center; gap:var(--space-2xs); }
+.todo-actions .el-button { min-width:30px; min-height:30px; padding:var(--space-2xs); }
 .note-list, .history-list { display: grid; gap: var(--space-xs); }
 .note-card { padding: var(--space-xs) var(--space-sm); border: 1px solid var(--color-rule); border-radius: var(--radius-control); background: var(--color-paper-2); }
 .note-meta, .history-item > div { color: var(--color-muted); font-size: var(--text-xs); }

@@ -50,9 +50,14 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             FROM domain_operations
             ORDER BY domain_id, operation_date DESC, id DESC
         `).all()
+        const { results: todoRows } = await context.env.DB.prepare(`
+            SELECT domain_id, title, description
+            FROM domain_todos ORDER BY domain_id, created_at DESC, id DESC
+        `).all()
         const grouped = new Map<number, unknown[]>()
         const notesByDomain = new Map<number, unknown[]>()
         const operationsByDomain = new Map<number, unknown[]>()
+        const todosByDomain = new Map<number, unknown[]>()
         for (const resource of resourceRows || []) {
             const item = resource as { domain_id: number }
             const list = grouped.get(item.domain_id) || []
@@ -72,9 +77,15 @@ export const onRequestGet: PagesFunction<Env> = async (context) => {
             list.push({ operation_date: item.operation_date, operation_kind: item.operation_kind })
             operationsByDomain.set(item.domain_id, list)
         }
+        for (const todo of todoRows || []) {
+            const item = todo as { domain_id: number; title: string; description: string | null }
+            const list = todosByDomain.get(item.domain_id) || []
+            list.push({ title: item.title, description: item.description })
+            todosByDomain.set(item.domain_id, list)
+        }
         const enriched = (results || []).map((row: any) => {
             const { domain_id, ...exportRow } = row
-            return { ...exportRow, resources: grouped.get(domain_id) || [], ai_notes: notesByDomain.get(domain_id) || [], operations: operationsByDomain.get(domain_id) || [] }
+            return { ...exportRow, resources: grouped.get(domain_id) || [], ai_notes: notesByDomain.get(domain_id) || [], operations: operationsByDomain.get(domain_id) || [], todos: todosByDomain.get(domain_id) || [] }
         })
 
         // 返回 JSON 文件，直接输出 domains 数组

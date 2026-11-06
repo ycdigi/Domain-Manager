@@ -1,6 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import Login from '../views/Login.vue'
-import Home from '../views/Home.vue'
 import WorkspaceLayout from '../layouts/WorkspaceLayout.vue'
 import { clearWorkspaceCache } from '../utils/workspaceCache'
 let loggingOut = false
@@ -24,7 +23,7 @@ const router = createRouter({
             component: WorkspaceLayout,
             meta: { requiresAuth: true },
             children: [
-                { path: 'home', name: 'Home', component: Home },
+                { path: 'home', name: 'Home', component: () => import('../views/Home.vue') },
                 { path: 'resources', name: 'Resources', component: () => import('../views/Resources.vue') },
                 { path: 'adsense', name: 'Adsense', component: () => import('../views/Adsense.vue') },
                 { path: 'data', name: 'Data', component: () => import('../views/DataManagement.vue') }
