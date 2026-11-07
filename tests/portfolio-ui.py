@@ -37,9 +37,12 @@ sites = [
          resource_ids=[], resource_names=None, open_task_count=0, review_count=0),
 ]
 resources = [dict(id=1, provider="cloudflare", name="Build Site", status="正常"), dict(id=2, provider="github", name="Source Repo", status="正常")]
-resource_links = []
+resource_links = [dict(id=1, website_id=6, resource_id=2, role="代码仓库")]
+resource_deletions = []
+fail_resource_add = {"value": True}
+pending_action_writes = []
 errors = []
-mode = {"value": "ready"}
+mode = {"value": "ready", "resource_refresh": False, "hold_next_action": False}
 pending_reads = []
 
 def click_select(row, label):
@@ -66,7 +69,14 @@ with sync_playwright() as p:
             elif mode["value"] == "error":
                 route.fulfill(status=503, json={"status": 503, "message": "暂时无法读取网站", "data": None})
             else:
-                route.fulfill(json={"status": 200, "message": "成功", "data": [] if mode["value"] == "empty" else sites})
+                data = [] if mode["value"] == "empty" else json.loads(json.dumps(sites))
+                if mode["resource_refresh"]:
+                    for site in data:
+                        ids = sorted(link["resource_id"] for link in resource_links if link["website_id"] == site["id"])
+                        site["resource_ids"] = ids
+                        selected = [resource for resource in resources if resource["id"] in ids]
+                        site["resource_names"] = ", ".join(f"{resource['provider']}: {resource['name']}" for resource in selected) or None
+                route.fulfill(json={"status": 200, "message": "成功", "data": data})
         elif url.endswith("/api/domains") and request.method == "GET":
             domains = [domain for site in sites for domain in site["domains"]]
             domains.append(dict(id=3, website_id=None, domain="unassigned.test", domain_role="备用域名", is_primary=0, registrar="test registrar", expiry_date="2027-02-01", registrar_date="2026-02-01", service_type="网站", status="离线"))
@@ -92,6 +102,11 @@ with sync_playwright() as p:
             route.fulfill(json={"status": 200, "message": "成功", "data": [link for link in resource_links if website_id is None or link["website_id"] == website_id]})
         elif url.endswith("/api/resources/links") and request.method == "POST":
             link = json.loads(request.post_data)
+            if fail_resource_add["value"] and link["website_id"] == 6 and link["resource_id"] == 1:
+                fail_resource_add["value"] = False
+                mode["resource_refresh"] = True
+                route.fulfill(status=400, json={"status": 400, "message": "模拟资源关联失败", "data": None})
+                return
             link.update(id=len(resource_links) + 1, resource_id=int(link["resource_id"]))
             resource_links.append(link)
             site = next(site for site in sites if site["id"] == link["website_id"])
@@ -101,6 +116,7 @@ with sync_playwright() as p:
             route.fulfill(status=201, json={"status": 201, "message": "资源关联成功", "data": link})
         elif url.endswith("/api/resources/links") and request.method == "DELETE":
             link_id = int(request.url.split("id=")[-1])
+            resource_deletions.append(link_id)
             removed = next(link for link in resource_links if link["id"] == link_id)
             resource_links.remove(removed)
             site = next(site for site in sites if site["id"] == removed["website_id"])
@@ -109,7 +125,11 @@ with sync_playwright() as p:
         elif "/api/websites/" in url and request.method == "PATCH" and url.rsplit("/", 1)[-1].isdigit():
             website_id = int(url.rsplit("/", 1)[-1])
             site = next(site for site in sites if site["id"] == website_id)
-            site.update(json.loads(request.post_data))
+            fields = json.loads(request.post_data)
+            if mode["hold_next_action"] and "next_action" in fields:
+                pending_action_writes.append((route, site, fields))
+                return
+            site.update(fields)
             route.fulfill(json={"status": 200, "message": "网站已更新", "data": site})
         elif url.endswith("/api/dashboard/summary"):
             route.fulfill(json={"status": 200, "message": "成功", "data": {}})
@@ -165,6 +185,14 @@ with sync_playwright() as p:
     assert page.locator(".portfolio-stage-heading h2").all_text_contents() == ["待评估", "验证", "增长", "维护", "暂停"]
     tabs = page.locator(".portfolio-stage-tabs")
     tabs.locator('[data-filter="all"]').click()
+    alpha_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Alpha build"))
+    click_select(alpha_row, "服务商 / 资源：Alpha build")
+    with page.expect_response(lambda response: response.url.endswith("/api/resources/links") and response.request.method == "POST") as failed_resource_add:
+        page.get_by_role("option", name="Cloudflare · Build Site", exact=True).click()
+    assert failed_resource_add.value.status == 400
+    assert resource_links == [dict(id=1, website_id=6, resource_id=2, role="代码仓库")]
+    assert resource_deletions == [], "old resources must remain until new associations succeed"
+    expect(alpha_row.locator('.el-select:has(input[aria-label="服务商 / 资源：Alpha build"])')).to_contain_text("GitHub")
     build_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
     with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as platform_response:
         click_select(build_row, "技术栈：Build one")
@@ -192,6 +220,23 @@ with sync_playwright() as p:
     with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as next_action_response:
         page.get_by_role("button", name="保存下一步").click()
     assert json.loads(next_action_response.value.request.post_data) == {"next_action": "发布专题页并检查点击变化", "next_action_status": "处理中", "next_action_due_date": "2026-12-01"}
+    build_row.get_by_role("button", name="编辑下一步：Build one").click()
+    next_action = page.get_by_role("textbox", name="下一步行动")
+    next_action.fill("保存期间保持锁定")
+    mode["hold_next_action"] = True
+    with page.expect_request(lambda request: request.url.endswith("/api/websites/1") and request.method == "PATCH") as pending_action_request:
+        page.get_by_role("button", name="保存下一步").click()
+    expect(next_action).to_be_disabled()
+    expect(page.get_by_role("combobox", name="下一步状态")).to_be_disabled()
+    expect(page.locator('.portfolio-next-editor:visible .el-date-editor input')).to_be_disabled()
+    expect(page.get_by_role("button", name="取消", exact=True)).to_be_disabled()
+    expect(build_row.get_by_role("button", name="编辑下一步：Build one")).to_be_disabled()
+    pending_route, pending_site, pending_fields = pending_action_writes.pop()
+    assert json.loads(pending_action_request.value.post_data) == {"next_action": "保存期间保持锁定"}
+    pending_site.update(pending_fields)
+    pending_route.fulfill(json={"status": 200, "message": "网站已更新", "data": pending_site})
+    mode["hold_next_action"] = False
+    expect(page.locator(".portfolio-next-editor:visible")).to_have_count(0)
     tabs.locator('[data-filter="待评估"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("潜力说明")
     expect(page.locator(".portfolio-table thead")).not_to_contain_text("本月收入")

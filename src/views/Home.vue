@@ -43,12 +43,12 @@
                     <el-select v-else-if="column.key === 'computer'" size="small" filterable allow-create clearable default-first-option :disabled="savingSiteIds.has(site.id) || !primaryDomain(site)" :model-value="primaryDomain(site)?.computer_name || ''" :aria-label="`电脑：${site.name}`" placeholder="未选择" @change="value => saveComputer(site, value)"><el-option v-for="name in computerNames" :key="name" :value="name" :label="name" /></el-select>
                     <el-popover v-else-if="column.key === 'next_action'" :visible="nextActionOpen[site.id] || false" trigger="click" placement="bottom-start" :width="340" @update:visible="value => nextActionOpen[site.id] = value">
                       <div class="portfolio-next-editor">
-                        <el-input v-model="nextActionDrafts[site.id].text" maxlength="300" aria-label="下一步行动" placeholder="填写经营下一步" />
-                        <el-select v-model="nextActionDrafts[site.id].status" aria-label="下一步状态"><el-option v-for="status in nextActionStatuses" :key="status" :value="status" :label="status" /></el-select>
-                        <el-date-picker v-model="nextActionDrafts[site.id].dueDate" type="date" value-format="YYYY-MM-DD" clearable aria-label="下一步截止日" placeholder="截止日期" />
-                        <div class="portfolio-next-editor-actions"><el-button size="small" @click="nextActionOpen[site.id] = false">取消</el-button><el-button size="small" type="primary" :loading="savingSiteIds.has(site.id)" @click="saveNextAction(site)">保存下一步</el-button></div>
+                        <el-input v-model="nextActionDrafts[site.id].text" maxlength="300" :disabled="savingSiteIds.has(site.id)" aria-label="下一步行动" placeholder="填写经营下一步" />
+                        <el-select v-model="nextActionDrafts[site.id].status" :disabled="savingSiteIds.has(site.id)" aria-label="下一步状态"><el-option v-for="status in nextActionStatuses" :key="status" :value="status" :label="status" /></el-select>
+                        <el-date-picker v-model="nextActionDrafts[site.id].dueDate" type="date" value-format="YYYY-MM-DD" clearable :disabled="savingSiteIds.has(site.id)" aria-label="下一步截止日" placeholder="截止日期" />
+                        <div class="portfolio-next-editor-actions"><el-button size="small" :disabled="savingSiteIds.has(site.id)" @click="nextActionOpen[site.id] = false">取消</el-button><el-button size="small" type="primary" :loading="savingSiteIds.has(site.id)" @click="saveNextAction(site)">保存下一步</el-button></div>
                       </div>
-                      <template #reference><button type="button" class="portfolio-next-trigger" :aria-label="`编辑下一步：${site.name}`" title="编辑下一步" @click="prepareNextAction(site)"><span class="portfolio-next-cell"><strong>{{ site.next_action || '未设置' }}</strong><small>{{ site.next_action_status }}<template v-if="site.next_action_due_date"> · {{ site.next_action_due_date }}</template></small><small v-if="site.open_task_count || site.review_count">待办 {{ site.open_task_count || 0 }} · 复查 {{ site.review_count || 0 }}</small></span><el-icon aria-hidden="true"><EditPen /></el-icon></button></template>
+                      <template #reference><button type="button" class="portfolio-next-trigger" :disabled="savingSiteIds.has(site.id)" :aria-label="`编辑下一步：${site.name}`" title="编辑下一步" @click="prepareNextAction(site)"><span class="portfolio-next-cell"><strong>{{ site.next_action || '未设置' }}</strong><small>{{ site.next_action_status }}<template v-if="site.next_action_due_date"> · {{ site.next_action_due_date }}</template></small><small v-if="site.open_task_count || site.review_count">待办 {{ site.open_task_count || 0 }} · 复查 {{ site.review_count || 0 }}</small></span><el-icon aria-hidden="true"><EditPen /></el-icon></button></template>
                     </el-popover>
                     <div v-else-if="column.key === 'tasks'" class="portfolio-number-cell"><strong>待办 {{ site.open_task_count || 0 }}</strong><small>复查 {{ site.review_count || 0 }}</small></div>
                     <div v-else-if="column.key === 'potential'" class="portfolio-potential-cell">{{ site.potential || '未记录' }}</div>
@@ -338,7 +338,6 @@ const resourceRole = (provider: ProviderType) => ({ github: '代码仓库', clou
 const saveResources = async (site: Website, value: number[]) => {
   if (savingSiteIds.has(site.id)) return
   savingSiteIds.add(site.id)
-  let changed = false
   try {
     await loadResourceOptions()
     const selectedIds = new Set(value.map(Number))
@@ -347,17 +346,17 @@ const saveResources = async (site: Website, value: number[]) => {
     const removals = links.filter(link => !selectedIds.has(link.resource_id))
     const additions = [...selectedIds].filter(id => !existingIds.has(id))
     if (!removals.length && !additions.length) return
-    for (const link of removals) { await api.delete(`/api/resources/links?id=${link.id}`); changed = true }
     for (const id of additions) {
       const resource = resourceOptions.value.find(item => item.id === id)
       if (!resource) throw new Error('所选资源不存在或已停用')
       await api.post('/api/resources/links', { website_id: site.id, resource_id: id, role: resourceRole(resource.provider), is_primary: false })
-      changed = true
     }
+    for (const link of removals) await api.delete(`/api/resources/links?id=${link.id}`)
     invalidateData('/api/websites', '/api/resources/links')
     await load(true)
   } catch (e) {
-    if (changed) { invalidateData('/api/websites', '/api/resources/links'); await load(true) }
+    invalidateData('/api/websites', '/api/resources/links')
+    await load(true)
     ElMessage.error(e instanceof Error ? e.message : '网站资源关联更新失败')
   } finally { savingSiteIds.delete(site.id) }
 }
