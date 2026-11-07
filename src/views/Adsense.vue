@@ -122,7 +122,7 @@ const saveIncome = async () => {
  if (saving.value || incomeLoading.value || !incomeLoaded.value || !selected.value?.id || incomeError.value) return
  if (incomeForm.value.amount_usd == null || !Number.isFinite(incomeForm.value.amount_usd) || incomeForm.value.amount_usd < 0) { ElMessage.error('请输入非负美元金额'); return }
  saving.value = true
- try { await api.post('/api/adsense/income', { adsense_account_id: selected.value.id, income_month: month.value, amount_usd: incomeForm.value.amount_usd, amount_cny: incomeForm.value.amount_cny ?? null, transfer_date: incomeForm.value.transfer_date || null, memo: incomeForm.value.memo }); incomeBaseline.value = JSON.stringify(incomeForm.value); invalidateData('/api/adsense/income', '/api/adsense/accounts', '/api/dashboard/summary'); await load(); ElMessage.success('收入已保存') }
+ try { await api.post('/api/adsense/income', { adsense_account_id: selected.value.id, income_month: month.value, amount_usd: incomeForm.value.amount_usd, amount_cny: incomeForm.value.amount_cny ?? null, transfer_date: incomeForm.value.transfer_date || null, memo: incomeForm.value.memo }); incomeBaseline.value = JSON.stringify(incomeForm.value); invalidateData('/api/adsense/income', '/api/adsense/accounts', '/api/websites', '/api/dashboard/summary'); await load(); ElMessage.success('收入已保存') }
  catch (e) { ElMessage.error(e instanceof Error ? e.message : '收入保存失败') }
  finally { saving.value = false }
 }

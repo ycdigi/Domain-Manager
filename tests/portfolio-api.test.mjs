@@ -12,6 +12,7 @@ const domains = await server.ssrLoadModule('/functions/api/domains/index.ts')
 const domainEdit = await server.ssrLoadModule('/functions/api/domains/[id].ts')
 const domainBatch = await server.ssrLoadModule('/functions/api/domains/batch/index.ts')
 const income = await server.ssrLoadModule('/functions/api/websites/[id]/income/index.ts')
+const adsenseIncome = await server.ssrLoadModule('/functions/api/adsense/income/index.ts')
 const effort = await server.ssrLoadModule('/functions/api/websites/[id]/effort/index.ts')
 const notes = await server.ssrLoadModule('/functions/api/websites/[id]/ai-notes/index.ts')
 const note = await server.ssrLoadModule('/functions/api/websites/[id]/ai-notes/[note_id]/index.ts')
@@ -165,11 +166,77 @@ test('website income and weekly effort preserve independent history', async () =
   const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
   for (const item of [{ source: 'AdSense', currency: 'USD', amount: 7 }, { source: 'Affiliate', currency: 'EUR', amount: 9 }]) await call(income.onRequestPost, context('/api/websites/1/income', { income_month: currentMonth, ...item }, 'POST'), 201)
   const portfolio = await call(sites.onRequestGet, context('/api/websites'))
-  assert.deepEqual(portfolio[0].current_income.sort((a, b) => a.currency.localeCompare(b.currency)), [{ source: 'Affiliate', currency: 'EUR', amount: 9 }, { source: 'AdSense', currency: 'USD', amount: 7 }])
+  assert.deepEqual(portfolio[0].current_income.sort((a, b) => a.currency.localeCompare(b.currency)), [{ id: 3, source: 'Affiliate', currency: 'EUR', amount: 9, origin: 'website' }, { id: 2, source: 'AdSense', currency: 'USD', amount: 7, origin: 'website' }])
   assert.equal((await call(income.onRequestGet, context('/api/websites/1/income'))).length, 3)
   await call(effort.onRequestPost, context('/api/websites/1/effort', { week_start: '2026-10-26', hours: 4.5 }, 'POST'), 201)
   await call(effort.onRequestPost, context('/api/websites/1/effort', { week_start: '2026-11-02', hours: 2 }, 'POST'), 201)
   assert.deepEqual(store.sql('SELECT week_start, hours FROM website_effort WHERE website_id=1 ORDER BY week_start;'), [{ week_start: '2026-10-26', hours: 4.5 }, { week_start: '2026-11-02', hours: 2 }])
+})
+
+test('portfolio income combines a uniquely linked AdSense account with explicit site allocations', async () => {
+  store.sql("INSERT INTO adsense_accounts (name, owner) VALUES ('Publisher', 'Owner');")
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Single AdSense site', adsense_account_id: 1, adsense_connected: '已开通', domain: { domain: 'single-adsense.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
+  await call(adsenseIncome.onRequestPost, context('/api/adsense/income', { adsense_account_id: 1, income_month: currentMonth, amount_usd: 100, amount_cny: 600 }, 'POST'), 200)
+  store.sql(`INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '${currentMonth}', 'AdSense', 'USD', 80), (1, '${currentMonth}', 'Affiliate', 'EUR', 8);`)
+
+  const site = (await call(sites.onRequestGet, context('/api/websites')))[0]
+  assert.deepEqual(site.current_income.sort((a, b) => a.currency.localeCompare(b.currency)), [
+    { id: null, source: 'AdSense', currency: 'CNY', amount: 600, origin: 'adsense_account' },
+    { id: 2, source: 'Affiliate', currency: 'EUR', amount: 8, origin: 'website' },
+    { id: 1, source: 'AdSense', currency: 'USD', amount: 80, origin: 'website' }
+  ])
+  assert.equal(site.current_income.find(row => row.origin === 'adsense_account').id, null)
+  const history = await call(income.onRequestGet, context('/api/websites/1/income'))
+  assert.equal(history.length, 3)
+  assert.deepEqual(history.find(row => row.currency === 'CNY'), { id: null, income_month: currentMonth, source: 'AdSense', currency: 'CNY', amount: 600, origin: 'adsense_account' })
+})
+
+test('portfolio does not allocate one AdSense account total to multiple linked websites', async () => {
+  store.sql("INSERT INTO adsense_accounts (name, owner) VALUES ('Shared Publisher', 'Owner');")
+  for (const [name, domain] of [['Shared one', 'shared-one.test'], ['Shared two', 'shared-two.test']]) {
+    await call(sites.onRequestPost, context('/api/websites', { name, adsense_account_id: 1, adsense_connected: '已开通', domain: { domain, registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  }
+  const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
+  store.sql(`INSERT INTO adsense_income (adsense_account_id, income_month, amount, amount_usd, amount_cny) VALUES (1, '${currentMonth}', 100, 100, 600);`)
+  store.sql(`INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '${currentMonth}', 'AdSense', 'USD', 45);`)
+
+  const portfolio = await call(sites.onRequestGet, context('/api/websites'))
+  assert.deepEqual(portfolio.map(site => site.current_income), [[{ id: 1, source: 'AdSense', currency: 'USD', amount: 45, origin: 'website' }], []])
+  assert.equal(portfolio[0].latest_income.month, currentMonth)
+  assert.equal(portfolio[1].latest_income, null)
+})
+
+test('legacy AdSense allocations match account rows without relying on capitalization', async () => {
+  store.sql("INSERT INTO adsense_accounts (name, owner) VALUES ('Legacy Publisher', 'Owner');")
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy allocation', adsense_account_id: 1, domain: { domain: 'legacy-allocation.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
+  store.sql(`INSERT INTO adsense_income (adsense_account_id, income_month, amount, amount_usd, amount_cny) VALUES (1, '${currentMonth}', 100, 100, 600);
+    INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '${currentMonth}', 'adsense', 'usd', 75);`)
+
+  const site = (await call(sites.onRequestGet, context('/api/websites')))[0]
+  assert.deepEqual(site.current_income.sort((a, b) => a.currency.localeCompare(b.currency)), [
+    { id: null, source: 'AdSense', currency: 'CNY', amount: 600, origin: 'adsense_account' },
+    { id: 1, source: 'adsense', currency: 'usd', amount: 75, origin: 'website' }
+  ])
+})
+
+test('portfolio separates current-month emptiness from the latest recorded month', async () => {
+  store.sql("INSERT INTO adsense_accounts (name, owner) VALUES ('Previous Month Publisher', 'Owner');")
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Previous Month site', adsense_account_id: 1, adsense_connected: '已开通', domain: { domain: 'previous-month.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql("INSERT INTO adsense_income (adsense_account_id, income_month, amount, amount_usd, amount_cny) VALUES (1, '2026-10', 574, 574, 3440); INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '2026-10', 'AdSense', 'USD', 574);")
+
+  const site = (await call(sites.onRequestGet, context('/api/websites')))[0]
+  assert.deepEqual(site.current_income, [])
+  assert.deepEqual(site.latest_income, {
+    month: '2026-10',
+    items: [
+      { id: null, source: 'AdSense', currency: 'CNY', amount: 3440, origin: 'adsense_account' },
+      { id: 1, source: 'AdSense', currency: 'USD', amount: 574, origin: 'website' }
+    ]
+  })
+  const history = await call(income.onRequestGet, context('/api/websites/1/income'))
+  assert.equal(history.length, 2)
 })
 
 test('a task can use its own waiting period and equal comparison windows', async () => {

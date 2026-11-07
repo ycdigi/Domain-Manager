@@ -52,7 +52,8 @@ export interface Website {
   resource_names?: string | null
   resource_ids?: number[]
   provider_account_ids?: number[]
-  current_income?: Array<{ source: string; currency: string; amount: number }>
+  current_income?: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }>
+  latest_income?: { month: string; items: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }> } | null
   latest_effort?: { week_start: string; hours: number } | null
 }
 
@@ -77,6 +78,6 @@ export interface WebsiteTask {
 }
 
 export const getWebsites = (force = false) => cachedGet<Website[]>('/api/websites', force)
-export const createWebsite = async (body: Record<string, unknown>) => { const result = await api.post<{ website: Website; domains: WebsiteDomain[] }>('/api/websites', body); invalidateData('/api/websites'); return result }
-export const updateWebsite = async (id: number, fields: Record<string, unknown>) => { const result = await api.patch<Website>(`/api/websites/${id}`, fields); invalidateData('/api/websites'); return result }
-export const deleteWebsite = async (id: number) => { const result = await api.delete(`/api/websites/${id}`); invalidateData('/api/websites'); return result }
+export const createWebsite = async (body: Record<string, unknown>) => { const result = await api.post<{ website: Website; domains: WebsiteDomain[] }>('/api/websites', body); invalidateData('/api/websites', ...(body.adsense_account_id == null ? [] : ['/api/adsense/accounts', '/api/dashboard/summary'])); return result }
+export const updateWebsite = async (id: number, fields: Record<string, unknown>) => { const result = await api.patch<Website>(`/api/websites/${id}`, fields); invalidateData('/api/websites', ...(!Object.prototype.hasOwnProperty.call(fields, 'adsense_account_id') ? [] : ['/api/adsense/accounts', '/api/dashboard/summary'])); return result }
+export const deleteWebsite = async (id: number) => { const result = await api.delete(`/api/websites/${id}`); invalidateData('/api/websites', '/api/adsense/accounts', '/api/dashboard/summary'); return result }

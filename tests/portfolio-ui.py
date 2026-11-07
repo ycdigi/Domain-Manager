@@ -16,6 +16,7 @@ sites = [
          open_task_count=0, review_count=0),
     dict(id=3, name="Assess one", stage="待评估", lifecycle="active", ownership="未分类", platform="其他",
          industry="其他", potential="验证需求", priority_order=0, adsense_connected="未知", gsc_connected="未知",
+         current_income=[], latest_income=dict(month="2026-10", items=[dict(source="AdSense", currency="USD", amount=574, origin="website"), dict(source="AdSense", currency="CNY", amount=3440, origin="adsense_account")]),
          domains=[dict(id=3, website_id=3, domain="assess.test", domain_role="主域名", is_primary=1, expiry_date="2027-02-01")],
          open_task_count=0, review_count=0),
     dict(id=4, name="Grow one", stage="增长", lifecycle="active", ownership="自营网站", platform="WordPress",
@@ -135,7 +136,9 @@ with sync_playwright() as p:
             route.fulfill(json={"status": 200, "message": "成功", "data": {}})
         elif "/api/websites/1/tasks" in url:
             route.fulfill(json={"status": 200, "message": "成功", "data": []})
-        elif "/api/websites/1/income" in url or "/api/websites/1/effort" in url:
+        elif "/api/websites/1/income" in url:
+            route.fulfill(json={"status": 200, "message": "成功", "data": [dict(id=None, income_month="2026-10", source="AdSense", currency="CNY", amount=3440, origin="adsense_account")]})
+        elif "/api/websites/1/effort" in url:
             route.fulfill(json={"status": 200, "message": "成功", "data": []})
         elif "/api/resources/links" in url or url.endswith("/api/resources") or url.endswith("/api/resources/accounts"):
             route.fulfill(json={"status": 200, "message": "成功", "data": []})
@@ -149,6 +152,11 @@ with sync_playwright() as p:
     expect(page.get_by_text("Build one", exact=True)).to_be_visible()
     expect(page.locator(".portfolio-table thead").first).to_contain_text("网站归属")
     expect(page.locator(".portfolio-table thead").first).to_contain_text("服务商 / 资源")
+    assess_row = page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Assess one"))
+    expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('本月未记录')
+    expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('USD 574.00')
+    expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('CNY 3440.00')
+    expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('最近记录：2026-10')
     paused_row = page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Pause one"))
     expect(paused_row.locator('.el-select:has(input[aria-label="技术栈：Pause one"])')).to_contain_text('Custom CMS')
     page.screenshot(path="/tmp/domain-manager-portfolio-table.png")
@@ -276,6 +284,7 @@ with sync_playwright() as p:
     expect(page.get_by_role("heading", name="Build one", exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="网站任务", exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="收入与投入", exact=True)).to_be_visible()
+    expect(page.get_by_text("2026-10 · AdSense · CNY · 账号收入", exact=True)).to_be_visible()
     expect(page.locator(".portfolio-table thead").first).to_contain_text("排序 / 详情")
     assert not errors, errors
     page.set_viewport_size({"width": 390, "height": 844})

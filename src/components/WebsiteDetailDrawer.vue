@@ -96,7 +96,7 @@
           <div>
             <h3>月收入</h3>
             <form class="portfolio-income-form" @submit.prevent="saveIncome"><el-date-picker v-model="incomeForm.income_month" type="month" value-format="YYYY-MM" placeholder="月份" aria-label="收入月份" /><el-input v-model="incomeForm.source" placeholder="来源" aria-label="收入来源" /><el-input v-model="incomeForm.currency" maxlength="3" placeholder="币种" aria-label="收入币种" /><el-input-number v-model="incomeForm.amount" :min="0" :precision="2" :step="0.01" :controls="false" aria-label="收入金额" /><el-button type="primary" :loading="savingIncome" native-type="submit">记录</el-button></form>
-            <div v-for="item in incomes" :key="item.id" class="portfolio-detail-row"><span>{{ item.income_month }} · {{ item.source }} · {{ item.currency }}</span><strong>{{ Number(item.amount).toFixed(2) }}</strong></div>
+            <div v-for="item in incomes" :key="`${item.income_month}-${item.source}-${item.currency}`" class="portfolio-detail-row"><span>{{ item.income_month }} · {{ item.source }} · {{ item.currency }}<template v-if="item.origin === 'adsense_account'"> · 账号收入</template></span><strong>{{ Number(item.amount).toFixed(2) }}</strong></div>
           </div>
           <div>
             <h3>每周投入</h3>
@@ -142,7 +142,7 @@ import { confirmAction, isDismissed } from '../utils/feedback'
 import type { Website, WebsiteDomain, WebsiteTask, WebsiteTaskType } from '../api/websites'
 import { normalizeWebsiteIndustry } from '../../shared/website-classification'
 
-interface IncomeRow { id: number; income_month: string; source: string; currency: string; amount: number }
+interface IncomeRow { id?: number | null; income_month: string; source: string; currency: string; amount: number; origin?: 'website' | 'adsense_account' }
 interface EffortRow { id: number; week_start: string; hours: number }
 interface OperationRow { id: number; operation_date: string; operation_kind: string }
 interface AiNote { id: number; kind: 'AI提示词' | '想法说明'; content: string; created_at?: string; updated_at?: string; version_count?: number }
@@ -255,7 +255,12 @@ const saveProfile = async () => {
     const wpChanged = profile.platform !== original.platform || nextWpStats.wp_calculator_count !== (original.wp_calculator_count ?? null) || nextWpStats.wp_article_count !== (original.wp_article_count ?? null) || nextWpStats.content_stats_updated_date !== (original.content_stats_updated_date || null)
     if (wpChanged) Object.assign(patch, nextWpStats)
     if (!Object.keys(patch).length) return
-    await api.patch(`/api/websites/${props.website.id}`, patch); profileOriginal = { ...profile }; profileBaseline.value = JSON.stringify(profile); notifyChanged(); ElMessage.success('经营信息已保存')
+    await api.patch(`/api/websites/${props.website.id}`, patch)
+    if (Object.prototype.hasOwnProperty.call(patch, 'adsense_account_id')) {
+      invalidateData('/api/adsense/accounts', '/api/dashboard/summary')
+      await loadAll()
+    }
+    profileOriginal = { ...profile }; profileBaseline.value = JSON.stringify(profile); notifyChanged(); ElMessage.success('经营信息已保存')
   }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '经营信息保存失败') }
   finally { saving.value = false }

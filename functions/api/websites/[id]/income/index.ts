@@ -1,5 +1,6 @@
 import type { Env } from '../../../../types'
 import { checkAuth } from '../../../../utils/auth'
+import { websiteIncomeRowsCte } from '../../../../domain/website-income'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const validMonth = (value: unknown) => typeof value === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(value)
@@ -7,8 +8,14 @@ const validMonth = (value: unknown) => typeof value === 'string' && /^\d{4}-(0[1
 export const onRequestGet: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
-        const rows = await context.env.DB.prepare('SELECT * FROM website_income WHERE website_id=? ORDER BY income_month DESC, source COLLATE NOCASE, currency COLLATE NOCASE').bind(context.params.id).all()
-        return json(rows.results || [])
+        const rows = await context.env.DB.prepare(`
+            ${websiteIncomeRowsCte}
+            SELECT id, income_month, source, currency, amount, origin
+            FROM website_income_rows
+            WHERE website_id=?
+            ORDER BY income_month DESC, source COLLATE NOCASE, currency COLLATE NOCASE
+        `).bind(context.params.id).all()
+        return json((rows.results || []).map(({ website_id: _websiteId, ...row }) => row))
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取网站收入失败') }
 }
 
