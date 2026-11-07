@@ -21,7 +21,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         if (params.has('lifecycle')) { where.push('w.lifecycle = ?'); values.push(params.get('lifecycle') || '') }
         const rows = await context.env.DB.prepare(`
             SELECT w.*,
-                (SELECT json_group_array(json_object('id', d.id, 'domain', d.domain, 'domain_role', d.domain_role, 'is_primary', d.is_primary, 'registrar', d.registrar, 'registrar_link', d.registrar_link, 'registrar_date', d.registrar_date, 'expiry_date', d.expiry_date, 'service_type', d.service_type, 'status', d.status, 'memo', d.memo, 'last_status_check_at', d.last_status_check_at))
+                (SELECT json_group_array(json_object('id', d.id, 'domain', d.domain, 'domain_role', d.domain_role, 'is_primary', d.is_primary, 'registrar', d.registrar, 'registrar_link', d.registrar_link, 'registrar_date', d.registrar_date, 'expiry_date', d.expiry_date, 'service_type', d.service_type, 'status', d.status, 'memo', d.memo, 'last_status_check_at', d.last_status_check_at, 'computer_name', d.computer_name))
                  FROM domains d WHERE d.website_id = w.id ORDER BY d.is_primary DESC, d.domain) AS domains_json,
                 (SELECT COUNT(*) FROM website_tasks t WHERE t.website_id = w.id AND t.task_type <> 'SEO复查' AND t.status <> '已完成') AS open_task_count,
                 (SELECT COUNT(*) FROM website_tasks t WHERE t.website_id = w.id AND t.task_type = 'SEO复查' AND t.status IN ('待做', '待跟进')) AS review_count,

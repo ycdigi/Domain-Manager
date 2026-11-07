@@ -40,8 +40,8 @@ monday = (today - datetime.timedelta(days=today.weekday())).isoformat()
 site_ids = []
 errors = []
 try:
-    for label in ['A', 'B']:
-        created = call('/api/websites', {'name': f'验收网站 {label} {stamp}', 'stage': '验证', 'domain': {
+    for label, stage in [('A', '验证'), ('B', '验证'), ('C', '增长'), ('D', '待评估'), ('E', '维护')]:
+        created = call('/api/websites', {'name': f'验收网站 {label} {stamp}', 'stage': stage, 'domain': {
             'domain': f'accept-{label.lower()}-{stamp}.test', 'registrar': '本地验收',
             'registrar_date': '2024-01-01', 'expiry_date': '2027-12-31', 'service_type': '网站'}}, 'POST', 201)
         site_ids.append(created['website']['id'])
@@ -83,6 +83,16 @@ try:
         page.add_init_script(f"localStorage.setItem('auth_token', {json.dumps(token)})")
         page.goto(BASE + '/home')
         page.wait_for_load_state('networkidle')
+        expect(page.locator('.portfolio-table thead').first).to_contain_text('网站归属')
+        expect(page.locator('.portfolio-table thead').first).to_contain_text('服务商 / 资源')
+        page.locator('.workspace-navigation').get_by_role('button', name='待评估', exact=True).click()
+        expect(page.locator('.portfolio-table thead')).to_contain_text('潜力说明')
+        page.locator('.workspace-navigation').get_by_role('button', name='验证', exact=True).click()
+        expect(page.locator('.portfolio-table thead')).to_contain_text('验证下一步')
+        expect(page.locator('.portfolio-table thead')).to_contain_text('任务 / 复查')
+        page.locator('.workspace-navigation').get_by_role('button', name='增长', exact=True).click()
+        expect(page.locator('.portfolio-table thead')).to_contain_text('最近每周投入')
+        page.locator('.workspace-navigation').get_by_role('button', name='全部网站', exact=True).click()
         expect(page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}')).to_be_visible()
         page.get_by_role('button', name=f'提高优先级：验收网站 B {stamp}').click()
         expect(page.locator('.portfolio-stage[aria-label="验证"] .portfolio-site-name').first).to_have_text(f'验收网站 B {stamp}')

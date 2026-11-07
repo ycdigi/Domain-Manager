@@ -12,6 +12,19 @@ sites = [
     dict(id=2, name="Stopped project", stage="维护", lifecycle="stopped", ownership="自营网站", platform="WordPress",
          domains=[dict(id=2, website_id=2, domain="stopped.test", domain_role="主域名", is_primary=1, expiry_date="2027-01-01")],
          open_task_count=0, review_count=0),
+    dict(id=3, name="Assess one", stage="待评估", lifecycle="active", ownership="未分类", platform="其他",
+         industry="其他", potential="验证需求", priority_order=0, adsense_connected="未知", gsc_connected="未知",
+         domains=[dict(id=3, website_id=3, domain="assess.test", domain_role="主域名", is_primary=1, expiry_date="2027-02-01")],
+         open_task_count=0, review_count=0),
+    dict(id=4, name="Grow one", stage="增长", lifecycle="active", ownership="自营网站", platform="WordPress",
+         industry="计算器", potential="拓展内容", priority_order=0, adsense_connected="已开通", gsc_connected="已开通",
+         daily_clicks=80, current_income=[dict(source="AdSense", currency="USD", amount=120)],
+         latest_effort=dict(week_start="2026-11-02", hours=4.5), domains=[dict(id=4, website_id=4, domain="grow.test", domain_role="主域名", is_primary=1, expiry_date="2027-03-01")],
+         open_task_count=2, review_count=1),
+    dict(id=5, name="Maintain one", stage="维护", lifecycle="active", ownership="自营网站", platform="Astro",
+         industry="资讯站", potential="", priority_order=0, adsense_connected="未知", gsc_connected="已开通",
+         domains=[dict(id=5, website_id=5, domain="maintain.test", domain_role="主域名", is_primary=1, expiry_date="2027-04-01", status="在线", last_status_check_at="2026-11-06")],
+         open_task_count=1, review_count=1),
 ]
 errors = []
 mode = {"value": "ready"}
@@ -19,7 +32,7 @@ pending_reads = []
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
-    page = browser.new_page(viewport={"width": 1440, "height": 1000})
+    page = browser.new_page(viewport={"width": 2048, "height": 1000})
     page.on("pageerror", lambda error: errors.append(str(error)))
     token = base64.b64encode(json.dumps({"token": "browser-test"}).encode()).decode()
     page.add_init_script(f"localStorage.setItem('auth_token', {json.dumps(token)})")
@@ -63,9 +76,24 @@ with sync_playwright() as p:
     page.wait_for_load_state("networkidle")
     expect(page.get_by_role("heading", name="网站组合", exact=True)).to_be_visible()
     expect(page.get_by_text("Build one", exact=True)).to_be_visible()
+    expect(page.locator(".portfolio-table thead").first).to_contain_text("网站归属")
+    expect(page.locator(".portfolio-table thead").first).to_contain_text("服务商 / 资源")
+    page.screenshot(path="/tmp/domain-manager-portfolio-table.png")
     expect(page.get_by_text("验证", exact=True).first).to_be_visible()
     expect(page.locator(".workspace-navigation").get_by_role("button", name="停止经营", exact=True)).to_be_visible()
     expect(page.get_by_text("Stopped project", exact=True)).not_to_be_visible()
+    navigation = page.locator(".workspace-navigation")
+    navigation.get_by_role("button", name="待评估", exact=True).click()
+    expect(page.locator(".portfolio-table thead")).to_contain_text("潜力说明")
+    expect(page.locator(".portfolio-table thead")).not_to_contain_text("本月收入")
+    navigation.get_by_role("button", name="验证", exact=True).click()
+    expect(page.locator(".portfolio-table thead")).to_contain_text("验证下一步")
+    expect(page.locator(".portfolio-table thead")).to_contain_text("任务 / 复查")
+    navigation.get_by_role("button", name="增长", exact=True).click()
+    expect(page.locator(".portfolio-table thead")).to_contain_text("最近每周投入")
+    navigation.get_by_role("button", name="维护", exact=True).click()
+    expect(page.locator(".portfolio-table thead")).to_contain_text("域名状态 / 检测时间")
+    navigation.get_by_role("button", name="全部网站", exact=True).click()
     page.locator(".workspace-navigation").get_by_role("button", name="停止经营", exact=True).click()
     expect(page.get_by_text("Stopped project", exact=True)).to_be_visible()
     expect(page.get_by_text("Build one", exact=True)).not_to_be_visible()
@@ -74,7 +102,7 @@ with sync_playwright() as p:
     expect(page.get_by_role("heading", name="Build one", exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="网站任务", exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="收入与投入", exact=True)).to_be_visible()
-    expect(page.get_by_text("状态 待做 · 截止 2026-11-14", exact=True)).to_be_visible()
+    expect(page.locator(".portfolio-table thead").first).to_contain_text("排序 / 详情")
     assert not errors, errors
     page.set_viewport_size({"width": 390, "height": 844})
     page.wait_for_timeout(500)

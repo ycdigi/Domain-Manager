@@ -19,6 +19,7 @@ export interface WebsiteDomain {
   status: '在线' | '离线'
   memo?: string | null
   last_status_check_at?: string | null
+  computer_name?: string | null
 }
 
 export interface Website {
