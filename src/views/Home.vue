@@ -10,6 +10,7 @@
       <el-input v-model="search" :prefix-icon="Search" clearable placeholder="搜索网站、域名、下一步行动" aria-label="搜索网站" />
       <nav class="portfolio-stage-tabs" aria-label="经营阶段筛选">
         <button v-for="tab in portfolioTabs" :key="tab.value" type="button" class="portfolio-stage-tab" :class="{ 'is-active': activePortfolio === tab.value }" :data-filter="tab.value" :aria-pressed="activePortfolio === tab.value" @click="selectPortfolio(tab.value)"><span>{{ tab.label }}</span><small>{{ tab.count }}</small></button>
+        <button v-if="sortKey" type="button" class="portfolio-sort-reset" aria-label="恢复默认排序" title="恢复默认排序" @click="resetSort">恢复默认排序</button>
       </nav>
     </div>
 
@@ -54,7 +55,7 @@
                     <div v-else-if="column.key === 'potential'" class="portfolio-potential-cell">{{ site.potential || '未记录' }}</div>
                     <div v-else-if="column.key === 'domain_status'" class="portfolio-domain-status-cell"><strong>{{ primaryDomain(site)?.status || '未检查' }}</strong><small>{{ primaryDomain(site)?.last_status_check_at || '无检测时间' }}</small></div>
                     <div v-else-if="column.key === 'stage'" class="portfolio-stage-cell"><el-select size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.stage" :aria-label="`网站阶段：${site.name}`" @change="value => saveSite(site, { stage: value })"><el-option v-for="item in stages" :key="item" :value="item" :label="item" /></el-select></div>
-                    <div v-else-if="column.key === 'actions'" class="portfolio-actions-cell"><el-select v-if="scenarioFor(stage) !== 'all'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.stage" :aria-label="`网站阶段：${site.name}`" @change="value => saveSite(site, { stage: value })"><el-option v-for="item in stages" :key="item" :value="item" :label="item" /></el-select><el-button text :icon="ArrowUp" :disabled="Boolean(sortKey) || index === 0" :title="sortKey ? '恢复默认排序后可调整优先级' : '提高优先级'" :aria-label="`提高优先级：${site.name}`" @click="move(site, -1)" /><el-button text :icon="ArrowDown" :disabled="Boolean(sortKey) || index === grouped[stage].length - 1" :title="sortKey ? '恢复默认排序后可调整优先级' : '降低优先级'" :aria-label="`降低优先级：${site.name}`" @click="move(site, 1)" /></div>
+                    <div v-else-if="column.key === 'actions'" class="portfolio-actions-cell"><el-select v-if="scenarioFor(stage) !== 'all'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.stage" :aria-label="`网站阶段：${site.name}`" @change="value => saveSite(site, { stage: value })"><el-option v-for="item in stages" :key="item" :value="item" :label="item" /></el-select><el-button text :icon="View" :disabled="savingSiteIds.has(site.id)" title="查看详情" :aria-label="`查看详情：${site.name}`" @click="openSite(site)" /><el-button text :icon="ArrowUp" :disabled="Boolean(sortKey) || index === 0" :title="sortKey ? '恢复默认排序后可调整优先级' : '提高优先级'" :aria-label="`提高优先级：${site.name}`" @click="move(site, -1)" /><el-button text :icon="ArrowDown" :disabled="Boolean(sortKey) || index === grouped[stage].length - 1" :title="sortKey ? '恢复默认排序后可调整优先级' : '降低优先级'" :aria-label="`降低优先级：${site.name}`" @click="move(site, 1)" /></div>
                   </td>
                 </tr>
               </tbody>
@@ -77,7 +78,7 @@
             <el-select v-else-if="column.key === 'ownership'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.ownership" :aria-label="`网站归属：${site.name}`" @change="value => saveSite(site, { ownership: value })"><el-option v-for="item in ownershipOptions" :key="item" :value="item" :label="item" /></el-select>
             <span v-else-if="column.key === 'expiry'">{{ primaryDomain(site)?.expiry_date || '未填写' }}</span>
             <el-select v-else-if="column.key === 'computer'" size="small" filterable allow-create clearable default-first-option :disabled="savingSiteIds.has(site.id) || !primaryDomain(site)" :model-value="primaryDomain(site)?.computer_name || ''" :aria-label="`电脑：${site.name}`" placeholder="未选择" @change="value => saveComputer(site, value)"><el-option v-for="name in computerNames" :key="name" :value="name" :label="name" /></el-select>
-            <div v-else-if="column.key === 'actions'" class="portfolio-actions-cell"><el-button size="small" type="primary" :disabled="savingSiteIds.has(site.id)" @click="saveSite(site, { lifecycle: 'active' })">恢复经营</el-button><el-button size="small" text type="danger" @click="removeSite(site)">删除网站</el-button></div>
+            <div v-else-if="column.key === 'actions'" class="portfolio-actions-cell"><el-button text :icon="View" :disabled="savingSiteIds.has(site.id)" title="查看详情" :aria-label="`查看详情：${site.name}`" @click="openSite(site)" /><el-button size="small" type="primary" :disabled="savingSiteIds.has(site.id)" @click="saveSite(site, { lifecycle: 'active' })">恢复经营</el-button><el-button size="small" text type="danger" @click="removeSite(site)">删除网站</el-button></div>
           </td></tr></tbody></table>
         </div>
       </div>
@@ -106,7 +107,7 @@
 import { computed, onActivated, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDown, ArrowUp, EditPen, Plus, Refresh, Search, Sort } from '@element-plus/icons-vue'
+import { ArrowDown, ArrowUp, EditPen, Plus, Refresh, Search, Sort, View } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
@@ -167,62 +168,62 @@ const platformLabel = (site: Website) => site.platform === '其他' ? site.platf
 const scenarioFor = (stage: WebsiteStage) => route.query.stage === stage ? stage : 'all'
 const portfolioColumns: Record<string, PortfolioColumn[]> = {
   all: [
-    { key: 'identity', label: '网站 / 主域名', width: 240, class: 'portfolio-site-column' },
-    { key: 'platform', label: '技术栈', width: 100 },
-    { key: 'ownership', label: '网站归属', width: 140 },
-    { key: 'industry', label: '类型', width: 100 },
-    { key: 'clicks', label: '日点击', width: 115 },
-    { key: 'adsense', label: 'AdSense', width: 110 },
-    { key: 'income', label: '本月收入', width: 140 },
-    { key: 'resources', label: '服务商 / 资源', width: 170 },
-    { key: 'expiry', label: '到期日期', width: 125 },
-    { key: 'computer', label: '电脑', width: 145 },
-    { key: 'next_action', label: '下一步', width: 190 },
-    { key: 'stage', label: '阶段', width: 112 },
-    { key: 'actions', label: '排序 / 详情', width: 118, sortable: false }
+    { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
+    { key: 'platform', label: '技术栈', width: 88 },
+    { key: 'ownership', label: '网站归属', width: 112 },
+    { key: 'industry', label: '类型', width: 86 },
+    { key: 'clicks', label: '日点击', width: 100 },
+    { key: 'adsense', label: 'AdSense', width: 88 },
+    { key: 'income', label: '本月收入', width: 118 },
+    { key: 'resources', label: '服务商 / 资源', width: 138 },
+    { key: 'expiry', label: '到期日期', width: 108 },
+    { key: 'computer', label: '电脑', width: 112 },
+    { key: 'next_action', label: '下一步', width: 158 },
+    { key: 'stage', label: '阶段', width: 88 },
+    { key: 'actions', label: '操作', width: 128, sortable: false }
   ],
   '待评估': [
-    { key: 'identity', label: '网站 / 主域名', width: 240, class: 'portfolio-site-column' },
-    { key: 'platform', label: '技术栈', width: 115 }, { key: 'ownership', label: '网站归属', width: 145 },
-    { key: 'industry', label: '网站类型', width: 115 }, { key: 'adsense', label: 'AdSense', width: 115 },
-    { key: 'gsc', label: 'GSC', width: 105 }, { key: 'potential', label: '潜力说明', width: 230 },
-    { key: 'expiry', label: '域名到期', width: 130 }, { key: 'next_action', label: '经营下一步', width: 205 },
-    { key: 'actions', label: '阶段 / 排序 / 详情', width: 205, sortable: false }
+    { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
+    { key: 'platform', label: '技术栈', width: 94 }, { key: 'ownership', label: '网站归属', width: 108 },
+    { key: 'industry', label: '网站类型', width: 94 }, { key: 'adsense', label: 'AdSense', width: 88 },
+    { key: 'gsc', label: 'GSC', width: 82 }, { key: 'potential', label: '潜力说明', width: 170 },
+    { key: 'expiry', label: '域名到期', width: 108 }, { key: 'next_action', label: '经营下一步', width: 170 },
+    { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
   ],
   '验证': [
-    { key: 'identity', label: '网站 / 主域名', width: 240, class: 'portfolio-site-column' },
-    { key: 'industry', label: '网站类型', width: 115 }, { key: 'clicks', label: '日点击 / 更新时间', width: 145 },
-    { key: 'gsc', label: 'GSC', width: 105 }, { key: 'adsense', label: 'AdSense', width: 115 },
-    { key: 'income', label: '本月收入', width: 150 }, { key: 'tasks', label: '任务 / 复查', width: 120 },
-    { key: 'next_action', label: '验证下一步', width: 220 }, { key: 'expiry', label: '域名到期', width: 130 },
-    { key: 'actions', label: '阶段 / 排序 / 详情', width: 205, sortable: false }
+    { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
+    { key: 'industry', label: '网站类型', width: 94 }, { key: 'clicks', label: '日点击 / 更新时间', width: 118 },
+    { key: 'gsc', label: 'GSC', width: 82 }, { key: 'adsense', label: 'AdSense', width: 88 },
+    { key: 'income', label: '本月收入', width: 120 }, { key: 'tasks', label: '任务 / 复查', width: 105 },
+    { key: 'next_action', label: '验证下一步', width: 175 }, { key: 'expiry', label: '域名到期', width: 108 },
+    { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
   ],
   '增长': [
-    { key: 'identity', label: '网站 / 主域名', width: 240, class: 'portfolio-site-column' },
-    { key: 'clicks', label: '日点击 / 更新时间', width: 145 }, { key: 'income', label: '本月收入', width: 160 },
-    { key: 'effort', label: '最近每周投入', width: 135 }, { key: 'adsense', label: 'AdSense', width: 115 },
-    { key: 'tasks', label: '任务 / 复查', width: 125 }, { key: 'resources', label: '服务商 / 资源', width: 190 },
-    { key: 'next_action', label: '增长下一步', width: 220 }, { key: 'actions', label: '阶段 / 排序 / 详情', width: 205, sortable: false }
+    { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
+    { key: 'clicks', label: '日点击 / 更新时间', width: 118 }, { key: 'income', label: '本月收入', width: 125 },
+    { key: 'effort', label: '最近每周投入', width: 108 }, { key: 'adsense', label: 'AdSense', width: 88 },
+    { key: 'tasks', label: '任务 / 复查', width: 105 }, { key: 'resources', label: '服务商 / 资源', width: 145 },
+    { key: 'next_action', label: '增长下一步', width: 175 }, { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
   ],
   '维护': [
-    { key: 'identity', label: '网站 / 主域名', width: 240, class: 'portfolio-site-column' },
-    { key: 'next_action', label: '维护事项 / 截止', width: 220 }, { key: 'tasks', label: '待办 / 到期复查', width: 130 },
-    { key: 'domain_status', label: '域名状态 / 检测时间', width: 155 }, { key: 'expiry', label: '域名到期', width: 130 },
-    { key: 'computer', label: '电脑', width: 155 }, { key: 'clicks', label: '点击 / 更新时间', width: 145 },
-    { key: 'resources', label: '服务商 / 资源', width: 185 }, { key: 'actions', label: '阶段 / 排序 / 详情', width: 205, sortable: false }
+    { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
+    { key: 'next_action', label: '维护事项 / 截止', width: 175 }, { key: 'tasks', label: '待办 / 到期复查', width: 110 },
+    { key: 'domain_status', label: '域名状态 / 检测时间', width: 135 }, { key: 'expiry', label: '域名到期', width: 108 },
+    { key: 'computer', label: '电脑', width: 110 }, { key: 'clicks', label: '点击 / 更新时间', width: 118 },
+    { key: 'resources', label: '服务商 / 资源', width: 145 }, { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
   ],
   '暂停': [
-    { key: 'identity', label: '网站 / 主域名', width: 240, class: 'portfolio-site-column' },
-    { key: 'ownership', label: '网站归属', width: 145 }, { key: 'expiry', label: '域名到期', width: 130 },
-    { key: 'domain_status', label: '域名状态 / 检测时间', width: 155 }, { key: 'resources', label: '服务商 / 资源', width: 185 },
-    { key: 'potential', label: '潜力 / 暂停原因', width: 230 }, { key: 'actions', label: '阶段 / 排序 / 详情', width: 205, sortable: false }
+    { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
+    { key: 'ownership', label: '网站归属', width: 108 }, { key: 'expiry', label: '域名到期', width: 108 },
+    { key: 'domain_status', label: '域名状态 / 检测时间', width: 135 }, { key: 'resources', label: '服务商 / 资源', width: 145 },
+    { key: 'potential', label: '潜力 / 暂停原因', width: 175 }, { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
   ]
 }
 const stoppedColumns: PortfolioColumn[] = [
-  { key: 'identity', label: '网站 / 主域名', width: 270, class: 'portfolio-site-column' },
-  { key: 'stage', label: '阶段', width: 130 }, { key: 'platform', label: '技术栈', width: 130 },
-  { key: 'ownership', label: '归属', width: 150 }, { key: 'expiry', label: '到期日期', width: 150 },
-  { key: 'computer', label: '电脑', width: 160 }, { key: 'actions', label: '操作', width: 180, sortable: false }
+  { key: 'identity', label: '网站 / 主域名', width: 220, class: 'portfolio-site-column' },
+  { key: 'stage', label: '阶段', width: 100 }, { key: 'platform', label: '技术栈', width: 105 },
+  { key: 'ownership', label: '归属', width: 115 }, { key: 'expiry', label: '到期日期', width: 112 },
+  { key: 'computer', label: '电脑', width: 120 }, { key: 'actions', label: '操作', width: 220, sortable: false }
 ]
 const columnsFor = (stage: WebsiteStage) => portfolioColumns[scenarioFor(stage)] || portfolioColumns.all
 const sortValue = (site: Website, key: PortfolioColumnKey): string | number => {
@@ -248,10 +249,11 @@ const sortValue = (site: Website, key: PortfolioColumnKey): string | number => {
     case 'actions': return ''
   }
 }
+const incomeEntries = (site: Website) => [...(site.current_income?.length ? site.current_income : site.latest_income?.items || [])].sort((a, b) =>
+  a.currency.localeCompare(b.currency) || a.source.localeCompare(b.source) || Number(a.amount) - Number(b.amount)
+)
 const compareIncome = (left: Website, right: Website) => {
-  const entries = (site: Website) => [...(site.current_income || [])].sort((a, b) =>
-    a.currency.localeCompare(b.currency) || a.source.localeCompare(b.source) || Number(a.amount) - Number(b.amount)
-  )
+  const entries = (site: Website) => incomeEntries(site)
   const leftEntries = entries(left); const rightEntries = entries(right)
   for (let index = 0; index < Math.min(leftEntries.length, rightEntries.length); index++) {
     const a = leftEntries[index]; const b = rightEntries[index]
@@ -280,6 +282,7 @@ const toggleSort = (key: PortfolioColumnKey) => {
   else if (sortKey.value === key) sortDirection.value = 'desc'
   else { sortKey.value = key; sortDirection.value = 'asc' }
 }
+const resetSort = () => { sortKey.value = ''; sortDirection.value = 'asc' }
 const stoppedSites = computed(() => {
   const sites = websites.value.filter(site => site.lifecycle === 'stopped' && matchesSearch(site))
   return sortKey.value ? sites.sort((a, b) => compareSites(a, b, sortKey.value as PortfolioColumnKey) || a.id - b.id) : sites

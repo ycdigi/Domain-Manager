@@ -21,7 +21,7 @@ sites = [
          open_task_count=0, review_count=0),
     dict(id=4, name="Grow one", stage="增长", lifecycle="active", ownership="自营网站", platform="WordPress",
          industry="计算器", potential="拓展内容", priority_order=0, adsense_connected="已开通", gsc_connected="已开通",
-         daily_clicks=80, current_income=[dict(source="AdSense", currency="USD", amount=20)],
+         daily_clicks=80, current_income=[], latest_income=dict(month="2026-10", items=[dict(source="AdSense", currency="USD", amount=20, origin="website")]),
          latest_effort=dict(week_start="2026-11-02", hours=4.5), domains=[dict(id=4, website_id=4, domain="grow.test", domain_role="主域名", is_primary=1, expiry_date="2027-03-01")],
          open_task_count=2, review_count=1),
     dict(id=5, name="Maintain one", stage="维护", lifecycle="active", ownership="自营网站", platform="Astro",
@@ -257,6 +257,10 @@ with sync_playwright() as p:
     expect(page.locator(".portfolio-table thead")).to_contain_text("最近每周投入")
     growth_table = page.locator('.portfolio-stage[aria-label="增长"] .portfolio-table')
     assert_sortable_columns(growth_table)
+    grow_row = growth_table.locator('.portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Grow one"))
+    expect(grow_row.locator('.portfolio-money-cell')).to_contain_text('本月未记录')
+    expect(grow_row.locator('.portfolio-money-cell')).to_contain_text('USD 20.00')
+    expect(grow_row.locator('.portfolio-money-cell')).to_contain_text('最近记录：2026-10')
     growth_table.get_by_role('button', name='按服务商 / 资源升序排序', exact=True).click()
     assert growth_table.locator('tbody .portfolio-site-name').all_text_contents() == ['Grow one', 'Build one']
     growth_table.get_by_role('button', name='按服务商 / 资源降序排序', exact=True).click()
@@ -280,12 +284,16 @@ with sync_playwright() as p:
     assert_sortable_columns(stopped_table)
     expect(stopped_table.get_by_role('combobox', name='网站阶段：Stopped project')).to_be_visible()
     tabs.locator('[data-filter="all"]').click()
+    expect(page.get_by_role("button", name="查看详情：Build one")).to_be_visible()
+    page.get_by_role("button", name="查看详情：Build one").click()
+    expect(page.get_by_role("heading", name="Build one", exact=True)).to_be_visible()
+    page.locator('.website-detail-drawer .el-drawer__close-btn').click()
     page.get_by_role("button", name="查看网站：Build one").click()
     expect(page.get_by_role("heading", name="Build one", exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="网站任务", exact=True)).to_be_visible()
     expect(page.get_by_role("heading", name="收入与投入", exact=True)).to_be_visible()
     expect(page.get_by_text("2026-10 · AdSense · CNY · 账号收入", exact=True)).to_be_visible()
-    expect(page.locator(".portfolio-table thead").first).to_contain_text("排序 / 详情")
+    expect(page.locator(".portfolio-table thead").first).to_contain_text("操作")
     assert not errors, errors
     page.set_viewport_size({"width": 390, "height": 844})
     page.wait_for_timeout(500)

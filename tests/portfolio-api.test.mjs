@@ -34,6 +34,7 @@ const call = async (handler, ctx, status = 200) => {
   assert.equal(response.status, status, JSON.stringify(body))
   return body.data
 }
+const shanghaiDateAfter = days => new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date(Date.now() + days * 86_400_000))
 beforeEach(async () => {
   store.init()
   const auth = await server.ssrLoadModule('/functions/utils/auth.ts')
@@ -298,7 +299,7 @@ test('AI completion of an existing SEO task creates the same follow-up as manual
   await call(sync.onRequestPost, context('/api/ai/sync', { website_id: 1, task_updates: [{ task_id: 1, status: '已完成', completion_summary: '标题已更新', result_url: 'https://ai-complete.test', baseline: { period_start: '2026-10-10', period_end: '2026-11-06', clicks: 55 } }] }, 'POST', true))
   const followup = store.sql("SELECT title, due_at FROM website_tasks WHERE review_of_task_id=1;")[0]
   assert.equal(followup.title, '复查：Fix headings')
-  assert.equal(followup.due_at, '2026-12-05')
+  assert.equal(followup.due_at, shanghaiDateAfter(28))
   assert.equal(store.sql("SELECT clicks FROM website_click_snapshots WHERE task_id=(SELECT id FROM website_tasks WHERE review_of_task_id=1) AND period_kind='before';")[0]?.clicks, 55)
 })
 
