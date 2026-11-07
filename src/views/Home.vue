@@ -7,11 +7,21 @@
 
     <div v-if="error" class="page-error" role="alert"><span>{{ error }}</span><el-button @click="load(true)">重试</el-button></div>
     <div class="portfolio-toolbar">
-      <el-input v-model="search" :prefix-icon="Search" clearable placeholder="搜索网站、域名、下一步行动" aria-label="搜索网站" />
+      <el-input v-model="search" class="portfolio-search" :prefix-icon="Search" clearable placeholder="搜索网站、域名、下一步行动" aria-label="搜索网站" />
       <nav class="portfolio-stage-tabs" aria-label="经营阶段筛选">
         <button v-for="tab in portfolioTabs" :key="tab.value" type="button" class="portfolio-stage-tab" :class="{ 'is-active': activePortfolio === tab.value }" :data-filter="tab.value" :aria-pressed="activePortfolio === tab.value" @click="selectPortfolio(tab.value)"><span>{{ tab.label }}</span><small>{{ tab.count }}</small></button>
         <button v-if="sortKey" type="button" class="portfolio-sort-reset" aria-label="恢复默认排序" title="恢复默认排序" @click="resetSort">恢复默认排序</button>
       </nav>
+    </div>
+
+    <div v-if="selectedIds.size" class="portfolio-bulk-toolbar" role="region" aria-label="批量操作">
+      <strong>已选 {{ selectedIds.size }} 个网站</strong>
+      <el-select v-model="bulkStage" size="small" aria-label="批量设置阶段" placeholder="批量设置阶段">
+        <el-option v-for="item in stages" :key="item" :value="item" :label="item" />
+      </el-select>
+      <el-button size="small" type="primary" :loading="bulkUpdating" @click="applyBulkUpdate({ stage: bulkStage })">设置阶段</el-button>
+      <el-button size="small" :loading="bulkUpdating" @click="applyBulkUpdate({ lifecycle: view === 'stopped' ? 'active' : 'stopped' })">{{ view === 'stopped' ? '恢复经营' : '停止经营' }}</el-button>
+      <el-button size="small" text :disabled="bulkUpdating" @click="clearSelection">清空选择</el-button>
     </div>
 
     <div v-if="loading && !websites.length" class="portfolio-empty">正在加载网站…</div>
@@ -21,11 +31,12 @@
         <div v-if="grouped[stage].length" class="portfolio-list">
           <div class="portfolio-table-wrap">
             <table class="portfolio-table" :class="`portfolio-table-${scenarioFor(stage)}`">
-              <thead><tr><th v-for="column in columnsFor(stage)" :key="column.key" :class="column.class" :style="{ width: `${column.width}px` }" :aria-sort="sortAria(column.key)"><button v-if="column.sortable !== false" type="button" class="portfolio-sort-trigger" :aria-label="sortActionLabel(column)" :title="sortActionLabel(column)" @click="toggleSort(column.key)"><span>{{ column.label }}</span><el-icon aria-hidden="true"><ArrowUp v-if="sortKey === column.key && sortDirection === 'asc'" /><ArrowDown v-else-if="sortKey === column.key" /><Sort v-else /></el-icon></button><span v-else>{{ column.label }}</span></th></tr></thead>
+              <thead><tr><th v-for="column in columnsFor(stage)" :key="column.key" :class="column.class" :style="{ width: `${column.width}px` }" :aria-sort="sortAria(column.key)"><div v-if="column.key === 'identity'" class="portfolio-header-with-selection"><el-checkbox :model-value="allVisibleSelected(grouped[stage])" :indeterminate="someVisibleSelected(grouped[stage])" :aria-label="`选择全部${stage}网站`" @change="value => toggleVisibleSelection(grouped[stage], Boolean(value))" /><button v-if="column.sortable !== false" type="button" class="portfolio-sort-trigger" :aria-label="sortActionLabel(column)" :title="sortActionLabel(column)" @click="toggleSort(column.key)"><span>{{ column.label }}</span><el-icon aria-hidden="true"><ArrowUp v-if="sortKey === column.key && sortDirection === 'asc'" /><ArrowDown v-else-if="sortKey === column.key" /><Sort v-else /></el-icon></button><span v-else>{{ column.label }}</span></div><button v-else-if="column.sortable !== false" type="button" class="portfolio-sort-trigger" :aria-label="sortActionLabel(column)" :title="sortActionLabel(column)" @click="toggleSort(column.key)"><span>{{ column.label }}</span><el-icon aria-hidden="true"><ArrowUp v-if="sortKey === column.key && sortDirection === 'asc'" /><ArrowDown v-else-if="sortKey === column.key" /><Sort v-else /></el-icon></button><span v-else>{{ column.label }}</span></th></tr></thead>
               <tbody>
                 <tr v-for="site in grouped[stage]" :key="site.id" class="portfolio-row">
                   <td v-for="column in columnsFor(stage)" :key="column.key" :class="column.class">
                     <div v-if="column.key === 'identity'" class="portfolio-identity">
+                      <el-checkbox :model-value="isSelected(site.id)" :aria-label="`选择网站：${site.name}`" @change="value => setSelected(site.id, Boolean(value))" />
                       <span class="portfolio-site-status" :class="primaryDomain(site)?.status === '在线' ? 'is-online' : primaryDomain(site)?.status === '离线' ? 'is-offline' : 'is-unknown'" :title="primaryDomain(site)?.status || '未检查'" aria-hidden="true"></span>
                       <button class="portfolio-site-name" :aria-label="`查看网站：${site.name}`" @click="openSite(site)">{{ site.name }}</button>
                       <a v-if="primaryDomain(site)" class="portfolio-primary-domain" :href="`https://${primaryDomain(site)!.domain}`" target="_blank" rel="noopener noreferrer">{{ primaryDomain(site)!.domain }}</a>
@@ -79,8 +90,8 @@
       <header class="portfolio-stage-heading"><h2>停止经营</h2><span>{{ stoppedSites.length }}</span></header>
       <div v-if="stoppedSites.length" class="portfolio-list">
         <div class="portfolio-table-wrap">
-          <table class="portfolio-table portfolio-stopped-table"><thead><tr><th v-for="column in stoppedColumns" :key="column.key" :class="column.class" :style="{ width: `${column.width}px` }" :aria-sort="sortAria(column.key)"><button v-if="column.sortable !== false" type="button" class="portfolio-sort-trigger" :aria-label="sortActionLabel(column)" :title="sortActionLabel(column)" @click="toggleSort(column.key)"><span>{{ column.label }}</span><el-icon aria-hidden="true"><ArrowUp v-if="sortKey === column.key && sortDirection === 'asc'" /><ArrowDown v-else-if="sortKey === column.key" /><Sort v-else /></el-icon></button><span v-else>{{ column.label }}</span></th></tr></thead><tbody><tr v-for="site in stoppedSites" :key="site.id" class="portfolio-row"><td v-for="column in stoppedColumns" :key="column.key" :class="column.class">
-            <div v-if="column.key === 'identity'" class="portfolio-identity"><span class="portfolio-site-status is-unknown" aria-hidden="true"></span><button class="portfolio-site-name" :aria-label="`查看网站：${site.name}`" @click="openSite(site)">{{ site.name }}</button><a v-if="primaryDomain(site)" class="portfolio-primary-domain" :href="`https://${primaryDomain(site)!.domain}`" target="_blank" rel="noopener noreferrer">{{ primaryDomain(site)!.domain }}</a></div>
+          <table class="portfolio-table portfolio-stopped-table"><thead><tr><th v-for="column in stoppedColumns" :key="column.key" :class="column.class" :style="{ width: `${column.width}px` }" :aria-sort="sortAria(column.key)"><div v-if="column.key === 'identity'" class="portfolio-header-with-selection"><el-checkbox :model-value="allVisibleSelected(stoppedSites)" :indeterminate="someVisibleSelected(stoppedSites)" aria-label="选择全部停止经营网站" @change="value => toggleVisibleSelection(stoppedSites, Boolean(value))" /><button v-if="column.sortable !== false" type="button" class="portfolio-sort-trigger" :aria-label="sortActionLabel(column)" :title="sortActionLabel(column)" @click="toggleSort(column.key)"><span>{{ column.label }}</span><el-icon aria-hidden="true"><ArrowUp v-if="sortKey === column.key && sortDirection === 'asc'" /><ArrowDown v-else-if="sortKey === column.key" /><Sort v-else /></el-icon></button><span v-else>{{ column.label }}</span></div><button v-else-if="column.sortable !== false" type="button" class="portfolio-sort-trigger" :aria-label="sortActionLabel(column)" :title="sortActionLabel(column)" @click="toggleSort(column.key)"><span>{{ column.label }}</span><el-icon aria-hidden="true"><ArrowUp v-if="sortKey === column.key && sortDirection === 'asc'" /><ArrowDown v-else-if="sortKey === column.key" /><Sort v-else /></el-icon></button><span v-else>{{ column.label }}</span></th></tr></thead><tbody><tr v-for="site in stoppedSites" :key="site.id" class="portfolio-row"><td v-for="column in stoppedColumns" :key="column.key" :class="column.class">
+            <div v-if="column.key === 'identity'" class="portfolio-identity"><el-checkbox :model-value="isSelected(site.id)" :aria-label="`选择网站：${site.name}`" @change="value => setSelected(site.id, Boolean(value))" /><span class="portfolio-site-status is-unknown" aria-hidden="true"></span><button class="portfolio-site-name" :aria-label="`查看网站：${site.name}`" @click="openSite(site)">{{ site.name }}</button><a v-if="primaryDomain(site)" class="portfolio-primary-domain" :href="`https://${primaryDomain(site)!.domain}`" target="_blank" rel="noopener noreferrer">{{ primaryDomain(site)!.domain }}</a></div>
             <el-select v-else-if="column.key === 'stage'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.stage" :aria-label="`网站阶段：${site.name}`" @change="value => saveSite(site, { stage: value })"><el-option v-for="item in stages" :key="item" :value="item" :label="item" /></el-select>
             <el-select v-else-if="column.key === 'platform'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.platform" :aria-label="`技术栈：${site.name}`" @change="value => savePlatform(site, value)"><el-option v-for="item in platforms" :key="item" :value="item" :label="item === '其他' && site.platform === '其他' ? platformLabel(site) : item" /></el-select>
             <el-select v-else-if="column.key === 'ownership'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.ownership" :aria-label="`网站归属：${site.name}`" @change="value => saveSite(site, { ownership: value })"><el-option v-for="item in ownershipOptions" :key="item" :value="item" :label="item" /></el-select>
@@ -119,7 +130,7 @@ import { EditPen, Plus, Refresh, Search, Sort, View } from '@element-plus/icons-
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
-import { createWebsite, deleteWebsite, getWebsites, updateWebsite, type Website, type WebsiteStage } from '../api/websites'
+import { bulkUpdateWebsites, createWebsite, deleteWebsite, getWebsites, updateWebsite, type Website, type WebsiteStage } from '../api/websites'
 import type { ProviderResource, ProviderType } from '../../functions/types'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
@@ -145,6 +156,9 @@ const resourceOptionsLoading = ref(false)
 const loading = ref(false)
 const saving = ref(false)
 const savingSiteIds = reactive(new Set<number>())
+const selectedIds = reactive(new Set<number>())
+const bulkStage = ref<WebsiteStage>('待评估')
+const bulkUpdating = ref(false)
 const error = ref('')
 const search = ref('')
 const sortKey = ref<PortfolioColumnKey | ''>('')
@@ -169,6 +183,16 @@ const matchesSearch = (site: Website) => {
   if (route.query.platform && site.platform !== route.query.platform) return false
   const query = search.value.trim().toLowerCase()
   return !query || `${site.name} ${site.next_action || ''} ${site.domains.map(domain => domain.domain).join(' ')}`.toLowerCase().includes(query)
+}
+const isSelected = (siteId: number) => selectedIds.has(siteId)
+const setSelected = (siteId: number, selected: boolean) => {
+  if (selected) selectedIds.add(siteId)
+  else selectedIds.delete(siteId)
+}
+const allVisibleSelected = (sites: Website[]) => sites.length > 0 && sites.every(site => selectedIds.has(site.id))
+const someVisibleSelected = (sites: Website[]) => sites.some(site => selectedIds.has(site.id)) && !allVisibleSelected(sites)
+const toggleVisibleSelection = (sites: Website[], selected: boolean) => {
+  for (const site of sites) setSelected(site.id, selected)
 }
 const clickLabel = (site: Website) => {
   if (site.daily_clicks != null) return String(site.daily_clicks)
@@ -324,6 +348,8 @@ const load = async (force = false) => {
   loading.value = true; error.value = ''
   try {
     websites.value = await getWebsites(force)
+    const knownIds = new Set(websites.value.map(site => site.id))
+    for (const id of [...selectedIds]) if (!knownIds.has(id)) selectedIds.delete(id)
     for (const site of websites.value) if (!nextActionDrafts[site.id]) {
       nextActionDrafts[site.id] = { text: site.next_action || '', status: site.next_action_status, dueDate: site.next_action_due_date || '' }
       nextActionOriginals[site.id] = { ...nextActionDrafts[site.id] }
@@ -332,6 +358,19 @@ const load = async (force = false) => {
   }
   catch (e) { error.value = e instanceof Error ? e.message : '网站加载失败' }
   finally { loading.value = false }
+}
+const clearSelection = () => selectedIds.clear()
+const applyBulkUpdate = async (fields: Record<string, unknown>) => {
+  const websiteIds = [...selectedIds]
+  if (!websiteIds.length || bulkUpdating.value) return
+  bulkUpdating.value = true
+  try {
+    const result = await bulkUpdateWebsites(websiteIds, fields)
+    clearSelection()
+    await load(true)
+    ElMessage.success(`已更新 ${result.accepted} 个网站`)
+  } catch (e) { ElMessage.error(e instanceof Error ? e.message : '网站批量更新失败') }
+  finally { bulkUpdating.value = false }
 }
 const saveSite = async (site: Website, fields: Record<string, unknown>) => {
   if (savingSiteIds.has(site.id)) return false
@@ -435,6 +474,9 @@ const removeSite = async (site: Website) => {
 }
 watch(() => route.query.site, syncSelectedSite)
 watch(websites, syncSelectedSite)
-watch(activePortfolio, () => { sortKey.value = ''; sortDirection.value = 'asc' })
+watch(activePortfolio, (value, previous) => {
+  sortKey.value = ''; sortDirection.value = 'asc'
+  if ((value === 'stopped') !== (previous === 'stopped')) clearSelection()
+})
 onActivated(() => { void load(true) })
 </script>

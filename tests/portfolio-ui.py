@@ -132,6 +132,12 @@ with sync_playwright() as p:
                 return
             site.update(fields)
             route.fulfill(json={"status": 200, "message": "网站已更新", "data": site})
+        elif url.endswith("/api/websites/batch") and request.method == "PATCH":
+            body = json.loads(request.post_data)
+            for site in sites:
+                if site["id"] in body["website_ids"]:
+                    site.update(body["fields"])
+            route.fulfill(json={"status": 200, "message": "网站批量更新成功", "data": {"accepted": len(body["website_ids"]), "website_ids": body["website_ids"]}})
         elif url.endswith("/api/dashboard/summary"):
             route.fulfill(json={"status": 200, "message": "成功", "data": {}})
         elif "/api/websites/1/tasks" in url:
@@ -295,6 +301,25 @@ with sync_playwright() as p:
     expect(page.get_by_role("heading", name="收入与投入", exact=True)).to_be_visible()
     expect(page.get_by_text("2026-10 · AdSense · CNY · 账号收入", exact=True)).to_be_visible()
     expect(page.locator(".portfolio-table thead").first).to_contain_text("操作")
+    page.locator('.website-detail-drawer .el-drawer__close-btn').click()
+    assess_header_checkbox = page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-header-with-selection .el-checkbox[aria-label="选择全部待评估网站"]')
+    assess_header_checkbox.click()
+    expect(page.get_by_role("region", name="批量操作")).to_contain_text("已选 1 个网站")
+    assess_header_checkbox.click()
+    expect(page.get_by_role("region", name="批量操作")).to_have_count(0)
+    assess_checkbox = page.locator('.el-checkbox[aria-label="选择网站：Assess one"]')
+    alpha_checkbox = page.locator('.el-checkbox[aria-label="选择网站：Alpha build"]')
+    expect(assess_checkbox).to_be_visible()
+    assess_checkbox.click()
+    alpha_checkbox.click()
+    expect(page.get_by_role("region", name="批量操作")).to_contain_text("已选 2 个网站")
+    page.locator('.portfolio-bulk-toolbar .el-select__wrapper').click()
+    page.get_by_role("option", name="增长", exact=True).last.click()
+    with page.expect_response(lambda response: response.url.endswith("/api/websites/batch") and response.request.method == "PATCH") as bulk_response:
+        page.get_by_role("button", name="设置阶段", exact=True).click()
+    assert json.loads(bulk_response.value.request.post_data) == {"website_ids": [3, 6], "fields": {"stage": "增长"}}
+    expect(page.get_by_role("region", name="批量操作")).to_have_count(0)
+    page.get_by_role("button", name="查看网站：Build one").click()
     assert not errors, errors
     page.set_viewport_size({"width": 390, "height": 844})
     page.wait_for_timeout(500)

@@ -6,6 +6,7 @@ import { database } from './helpers/database.mjs'
 const server = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true, include: [] }, server: { middlewareMode: true }, appType: 'custom' })
 const sites = await server.ssrLoadModule('/functions/api/websites/index.ts')
 const siteEdit = await server.ssrLoadModule('/functions/api/websites/[id].ts')
+const siteBatch = await server.ssrLoadModule('/functions/api/websites/batch/index.ts')
 const tasks = await server.ssrLoadModule('/functions/api/websites/[id]/tasks/index.ts')
 const taskEdit = await server.ssrLoadModule('/functions/api/websites/[id]/tasks/[task_id].ts')
 const domains = await server.ssrLoadModule('/functions/api/domains/index.ts')
@@ -49,6 +50,15 @@ test('website creation requires and stores its first domain', async () => {
   assert.equal(created.website.stage, '待评估')
   assert.equal(created.domains.length, 1)
   await call(sites.onRequestPost, context('/api/websites', { name: 'No domain' }, 'POST'), 400)
+})
+
+test('website batch updates validate every selected website before applying changes', async () => {
+  for (const [name, domain] of [['Batch one', 'batch-one.test'], ['Batch two', 'batch-two.test']]) await call(sites.onRequestPost, context('/api/websites', { name, domain: { domain, registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  await call(siteBatch.onRequestPatch, context('/api/websites/batch', { website_ids: [1, 2], fields: { stage: '增长' } }, 'PATCH'))
+  assert.deepEqual(store.sql('SELECT id, stage FROM websites ORDER BY id;'), [{ id: 1, stage: '增长' }, { id: 2, stage: '增长' }])
+  await call(siteBatch.onRequestPatch, context('/api/websites/batch', { website_ids: [1, 999], fields: { lifecycle: 'stopped' } }, 'PATCH'), 404)
+  assert.deepEqual(store.sql('SELECT id, lifecycle FROM websites ORDER BY id;'), [{ id: 1, lifecycle: 'active' }, { id: 2, lifecycle: 'active' }])
+  await call(siteBatch.onRequestPatch, context('/api/websites/batch', { website_ids: [1], fields: { stage: '无效阶段' } }, 'PATCH'), 400)
 })
 
 test('a website cannot lose its final domain through domain deletion', async () => {
