@@ -43,6 +43,8 @@ export interface Website {
   content_stats_updated_date?: string | null
   potential?: string | null
   priority_order: number
+  new_site_override?: number | null
+  is_new_site?: boolean
   next_action?: string | null
   next_action_due_date?: string | null
   next_action_status: '待做' | '处理中' | '已完成'

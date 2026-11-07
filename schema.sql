@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS websites (
     next_action TEXT,
     next_action_due_date TEXT,
     next_action_status TEXT NOT NULL DEFAULT '待做' CHECK (next_action_status IN ('待做', '处理中', '已完成')),
+    new_site_override INTEGER CHECK (new_site_override IN (0, 1)),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (adsense_account_id) REFERENCES adsense_accounts(id)
 );

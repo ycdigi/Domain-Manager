@@ -35,6 +35,7 @@
     "db:migrate:v1.13.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.13.0.sql --yes",
     "db:migrate:v1.14.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.14.0.sql --yes",
     "db:migrate:v1.15.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.15.0.sql --yes",
+    "db:migrate:v1.16.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.16.0.sql --yes",
     "db:verify:remote": "wrangler d1 execute domains-db --remote --command \"SELECT name FROM sqlite_schema WHERE type='table' AND name IN ('websites','domains','website_income','website_effort','website_tasks','website_click_snapshots','website_resources','website_operations','website_ai_notes','website_ai_note_versions','adsense_accounts','adsense_income','provider_accounts','provider_resources','provider_credentials');\"",
     "db:execute": "npm run db:init:remote",
     "db:local": "wrangler d1 execute domains-db --local --file=./schema.sql --yes",

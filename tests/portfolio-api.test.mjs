@@ -52,6 +52,19 @@ test('website creation requires and stores its first domain', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'No domain' }, 'POST'), 400)
 })
 
+test('website newness uses the primary domain registration date and supports manual override', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Recent site', domain: { domain: 'recent.test', registrar: 'r', registrar_date: '2026-10-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Old site', domain: { domain: 'old.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  const initial = await call(sites.onRequestGet, context('/api/websites'))
+  assert.deepEqual(initial.map(site => site.is_new_site), [true, false])
+  await call(siteEdit.onRequestPatch, context('/api/websites/2', { new_site_override: 1 }, 'PATCH', false, '2'))
+  assert.equal((await call(sites.onRequestGet, context('/api/websites')))[1].is_new_site, true)
+  await call(siteEdit.onRequestPatch, context('/api/websites/1', { new_site_override: 0 }, 'PATCH'))
+  assert.equal((await call(sites.onRequestGet, context('/api/websites')))[0].is_new_site, false)
+  await call(siteEdit.onRequestPatch, context('/api/websites/1', { new_site_override: null }, 'PATCH'))
+  assert.equal((await call(sites.onRequestGet, context('/api/websites')))[0].is_new_site, true)
+})
+
 test('website batch updates validate every selected website before applying changes', async () => {
   for (const [name, domain] of [['Batch one', 'batch-one.test'], ['Batch two', 'batch-two.test']]) await call(sites.onRequestPost, context('/api/websites', { name, domain: { domain, registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   await call(siteBatch.onRequestPatch, context('/api/websites/batch', { website_ids: [1, 2], fields: { stage: '增长' } }, 'PATCH'))

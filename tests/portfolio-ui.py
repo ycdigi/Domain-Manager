@@ -17,7 +17,7 @@ sites = [
     dict(id=3, name="Assess one", stage="待评估", lifecycle="active", ownership="未分类", platform="其他",
          industry="其他", potential="验证需求", priority_order=0, adsense_connected="未知", gsc_connected="未知",
          current_income=[], latest_income=dict(month="2026-10", items=[dict(source="AdSense", currency="USD", amount=574, origin="website"), dict(source="AdSense", currency="CNY", amount=3440, origin="adsense_account")]), income_totals=[dict(currency="USD", amount=574)],
-         domains=[dict(id=3, website_id=3, domain="assess.test", domain_role="主域名", is_primary=1, expiry_date="2027-02-01")],
+         domains=[dict(id=3, website_id=3, domain="assess.test", domain_role="主域名", is_primary=1, registrar_date="2026-10-01", expiry_date="2027-02-01")],
          open_task_count=0, review_count=0),
     dict(id=4, name="Grow one", stage="增长", lifecycle="active", ownership="自营网站", platform="WordPress",
          industry="计算器", potential="拓展内容", priority_order=0, adsense_connected="已开通", gsc_connected="已开通",
@@ -156,6 +156,10 @@ with sync_playwright() as p:
     page.wait_for_load_state("networkidle")
     expect(page.get_by_role("heading", name="网站组合", exact=True)).to_be_visible()
     expect(page.get_by_text("Build one", exact=True)).to_be_visible()
+    page.locator('.portfolio-stage-tabs [data-filter="new"]').click()
+    expect(page.get_by_role("button", name="查看网站：Assess one")).to_be_visible()
+    expect(page.get_by_role("button", name="查看网站：Build one")).not_to_be_visible()
+    page.locator('.portfolio-stage-tabs [data-filter="all"]').click()
     expect(page.locator(".portfolio-table thead").first).to_contain_text("网站归属")
     expect(page.locator(".portfolio-table thead").first).to_contain_text("服务商 / 资源")
     assess_row = page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Assess one"))

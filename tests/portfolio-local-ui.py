@@ -98,6 +98,17 @@ try:
         page.locator('.portfolio-stage-tabs [data-filter="增长"]').click()
         expect(page.locator('.portfolio-table thead')).to_contain_text('最近每周投入')
         page.locator('.portfolio-stage-tabs [data-filter="all"]').click()
+        page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}').click()
+        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='经营信息', exact=True))
+        new_site_select = profile_section.locator('.el-form-item').filter(has_text='新站分类').locator('.el-select__wrapper')
+        new_site_select.click()
+        page.get_by_role('option', name='手动标记为新站', exact=True).click()
+        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as new_site_response:
+            profile_section.get_by_role('button', name='保存', exact=True).click()
+        assert new_site_response.value.ok, new_site_response.value.text()
+        assert json.loads(new_site_response.value.request.post_data) == {'new_site_override': 1}
+        page.wait_for_timeout(300)
+        page.locator('.website-detail-drawer .el-drawer__close-btn').click()
         expect(page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}')).to_be_visible()
         expect(page.get_by_role('button', name=f'查看详情：验收网站 B {stamp}')).to_be_visible()
         site_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}'))
@@ -156,7 +167,7 @@ try:
         with page.expect_response(lambda response: response.url.endswith('/api/websites') and response.request.method == 'GET'):
             page.get_by_role('button', name='刷新网站', exact=True).evaluate('button => button.click()')
         profile_section.get_by_role('textbox', name='网站名称', exact=True).fill(f'验收网站 A {stamp} 修改')
-        profile_section.locator('.el-form-item').nth(1).locator('.el-select__wrapper').click()
+        profile_section.locator('.el-form-item').filter(has_text='阶段').locator('.el-select__wrapper').click()
         page.get_by_role('option', name='维护', exact=True).click()
         with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as profile_response:
             profile_section.get_by_role('button', name='保存', exact=True).click()

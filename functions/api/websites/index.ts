@@ -4,9 +4,10 @@ import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 import { validateWebsiteFields } from '../../domain/website-validation'
 import { websiteIncomeRowsCte } from '../../domain/website-income'
 import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
+import { isWebsiteNew } from '../../../shared/website-newness'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status'])
+const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override'])
 
 const validSiteFields = (fields: Record<string, unknown>) => {
     return validateWebsiteFields(fields)
@@ -17,6 +18,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
     try {
         const params = new URL(context.request.url).searchParams
         const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
+        const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
         const where: string[] = []
         const values: string[] = []
         if (params.has('stage')) { where.push('w.stage = ?'); values.push(params.get('stage') || '') }
@@ -64,6 +66,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         for (const item of incomeTotals.results || []) incomeTotalsByWebsite.set(item.website_id, [...(incomeTotalsByWebsite.get(item.website_id) || []), { currency: item.currency, amount: Number(item.amount) }])
         return json((rows.results || []).map(row => {
             const { domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, ...site } = row
+            const domains = JSON.parse(String(domainsJson || '[]'))
             const siteIncomes = incomeByWebsite.get(Number(site.id)) || []
             const currentIncome = siteIncomes.filter(item => item.income_month === currentMonth)
             const latestMonth = siteIncomes[0]?.income_month
@@ -72,7 +75,8 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             return {
                 ...site,
                 industry: normalizeWebsiteIndustry(site.industry),
-                domains: JSON.parse(String(domainsJson || '[]')),
+                domains,
+                is_new_site: isWebsiteNew(site.new_site_override as number | null | undefined, domains.find((domain: { is_primary?: number }) => domain.is_primary)?.registrar_date || domains[0]?.registrar_date, today),
                 current_income: currentIncome.map(presentIncome),
                 latest_income: latestMonth && latestIncome ? { month: latestMonth, items: latestIncome.map(presentIncome) } : null,
                 income_totals: incomeTotalsByWebsite.get(Number(site.id)) || [],

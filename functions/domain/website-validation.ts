@@ -1,7 +1,7 @@
 import { dailyClicksRanges, isValidDate } from '../utils/domain-validation'
 import { isWebsiteIndustry, normalizeWebsiteIndustry, websiteIndustries } from '../../shared/website-classification'
 
-const choices: Record<string, string[]> = {
+const choices: Record<string, Array<string | number>> = {
     stage: ['待评估', '验证', '增长', '维护', '暂停'],
     lifecycle: ['active', 'stopped'],
     ownership: ['未分类', '自营网站', '企业客户网站'],
@@ -9,7 +9,8 @@ const choices: Record<string, string[]> = {
     platform: ['WordPress', 'Astro', 'Next.js', '其他'],
     adsense_connected: ['未知', '已开通', '未开通'],
     gsc_connected: ['未知', '已开通', '未开通'],
-    next_action_status: ['待做', '处理中', '已完成']
+    next_action_status: ['待做', '处理中', '已完成'],
+    new_site_override: [0, 1]
 }
 const dates = ['adsense_opened_date', 'seo_last_date', 'clicks_updated_date', 'content_stats_updated_date', 'next_action_due_date']
 const counts = ['daily_clicks', 'wp_calculator_count', 'wp_article_count', 'priority_order']
@@ -19,9 +20,9 @@ export const isUnchangedLegacyIndustry = (value: unknown, current: unknown) =>
 
 export const validateWebsiteFields = (fields: Record<string, unknown>, current: Record<string, unknown> = {}) => {
     for (const [key, values] of Object.entries(choices)) {
-        if (fields[key] === undefined || key === 'industry' && fields[key] === null) continue
+        if (fields[key] === undefined || key === 'industry' && fields[key] === null || key === 'new_site_override' && fields[key] === null) continue
         if (key === 'industry' && isUnchangedLegacyIndustry(fields[key], current[key])) continue
-        if (fields[key] === null || !values.includes(String(fields[key]))) return `${key} 值无效`
+        if (fields[key] === null || !values.some(value => String(value) === String(fields[key]))) return `${key} 值无效`
     }
     if (fields.name !== undefined && (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.length > 200)) return '网站名称必填且不能超过 200 个字符'
     if (fields.platform_other != null && (typeof fields.platform_other !== 'string' || fields.platform_other.length > 100)) return '其他技术栈名称不能超过 100 个字符'

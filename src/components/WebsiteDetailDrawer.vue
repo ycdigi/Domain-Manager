@@ -7,6 +7,7 @@
         <div class="portfolio-detail-grid">
           <el-form-item label="网站名称"><el-input v-model="profile.name" maxlength="200" /></el-form-item>
           <el-form-item label="阶段"><el-select v-model="profile.stage"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select></el-form-item>
+          <el-form-item label="新站分类"><el-select v-model="profile.new_site_mode"><el-option label="自动判断" value="auto" /><el-option label="手动标记为新站" value="new" /><el-option label="手动设为普通站" value="regular" /></el-select></el-form-item>
           <el-form-item label="状态"><el-select v-model="profile.lifecycle"><el-option label="经营中" value="active" /><el-option label="停止经营" value="stopped" /></el-select></el-form-item>
           <el-form-item label="网站归属"><el-select v-model="profile.ownership"><el-option v-for="item in ownerships" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item label="技术栈"><el-select v-model="profile.platform"><el-option v-for="item in platforms" :key="item" :label="item" :value="item" /></el-select></el-form-item>
@@ -159,7 +160,7 @@ const platforms = ['WordPress', 'Astro', 'Next.js', '其他']
 const industries = ['计算器', '资讯站', '其他']
 const serviceStates = ['未知', '已开通', '未开通']
 const taskTypes: WebsiteTaskType[] = ['SEO', '内容', '技术', '其他']
-const profile = reactive<{ name: string; stage: string; lifecycle: string; ownership: string; platform: string; platform_other: string; industry: string; adsense_connected: string; adsense_account_id?: number; adsense_opened_date: string; gsc_connected: string; daily_clicks?: number; daily_clicks_range: string; clicks_updated_date: string; wp_calculator_count?: number; wp_article_count?: number; content_stats_updated_date: string; potential: string; next_action: string; next_action_due_date: string; next_action_status: string }>({ name: '', stage: '待评估', lifecycle: 'active', ownership: '自营网站', platform: '其他', platform_other: '', industry: '', adsense_connected: '未知', adsense_account_id: undefined, adsense_opened_date: '', gsc_connected: '未知', daily_clicks: undefined, daily_clicks_range: '', clicks_updated_date: '', wp_calculator_count: undefined, wp_article_count: undefined, content_stats_updated_date: '', potential: '', next_action: '', next_action_due_date: '', next_action_status: '待做' })
+const profile = reactive<{ name: string; stage: string; new_site_mode: 'auto' | 'new' | 'regular'; lifecycle: string; ownership: string; platform: string; platform_other: string; industry: string; adsense_connected: string; adsense_account_id?: number; adsense_opened_date: string; gsc_connected: string; daily_clicks?: number; daily_clicks_range: string; clicks_updated_date: string; wp_calculator_count?: number; wp_article_count?: number; content_stats_updated_date: string; potential: string; next_action: string; next_action_due_date: string; next_action_status: string }>({ name: '', stage: '待评估', new_site_mode: 'auto', lifecycle: 'active', ownership: '自营网站', platform: '其他', platform_other: '', industry: '', adsense_connected: '未知', adsense_account_id: undefined, adsense_opened_date: '', gsc_connected: '未知', daily_clicks: undefined, daily_clicks_range: '', clicks_updated_date: '', wp_calculator_count: undefined, wp_article_count: undefined, content_stats_updated_date: '', potential: '', next_action: '', next_action_due_date: '', next_action_status: '待做' })
 const adsenseAccounts = ref<Array<{ id: number; name: string }>>([])
 const domains = ref<WebsiteDomain[]>([])
 const tasks = ref<WebsiteTask[]>([])
@@ -189,16 +190,16 @@ let profileWebsiteId: number | undefined
 let loadVersion = 0
 const profileDirty = computed(() => Boolean(props.visible && profileBaseline.value && JSON.stringify(profile) !== profileBaseline.value))
 useUnsavedChanges(profileDirty)
+const markProfileClean = () => { profileOriginal = JSON.parse(JSON.stringify(profile)); profileBaseline.value = JSON.stringify(profile) }
 const notifyChanged = () => { invalidateData('/api/websites'); emit('changed') }
 const loadAll = async () => {
   if (!props.website) return
   const version = ++loadVersion
   error.value = ''
   if (profileWebsiteId !== props.website.id) {
-  Object.assign(profile, { name: props.website.name, stage: props.website.stage, lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
+  Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
     profileWebsiteId = props.website.id
-    profileOriginal = { ...profile }
-    profileBaseline.value = JSON.stringify(profile)
+    markProfileClean()
     tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []
   }
   domains.value = queue.applyPendingDomains(props.website.domains || [])
@@ -218,6 +219,7 @@ const saveProfile = async () => {
     if (!original) return
     addIfChanged('name', profile.name, original.name)
     addIfChanged('stage', profile.stage, original.stage)
+    addIfChanged('new_site_override', profile.new_site_mode === 'new' ? 1 : profile.new_site_mode === 'regular' ? 0 : null, original.new_site_mode === 'new' ? 1 : original.new_site_mode === 'regular' ? 0 : null)
     addIfChanged('lifecycle', profile.lifecycle, original.lifecycle)
     addIfChanged('ownership', profile.ownership, original.ownership)
     addIfChanged('industry', profile.industry || null, original.industry || null)
@@ -260,7 +262,7 @@ const saveProfile = async () => {
       invalidateData('/api/adsense/accounts', '/api/dashboard/summary')
       await loadAll()
     }
-    profileOriginal = { ...profile }; profileBaseline.value = JSON.stringify(profile); notifyChanged(); ElMessage.success('经营信息已保存')
+    markProfileClean(); notifyChanged(); ElMessage.success('经营信息已保存')
   }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '经营信息保存失败') }
   finally { saving.value = false }

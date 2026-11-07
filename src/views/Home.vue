@@ -133,7 +133,8 @@ import { confirmAction, isDismissed } from '../utils/feedback'
 import { bulkUpdateWebsites, createWebsite, deleteWebsite, getWebsites, updateWebsite, type Website, type WebsiteStage } from '../api/websites'
 import type { ProviderResource, ProviderType } from '../../functions/types'
 import { api } from '../utils/request'
-import { invalidateData } from '../utils/workspaceCache'
+import { invalidateData, localDate } from '../utils/workspaceCache'
+import { isWebsiteNew } from '../../shared/website-newness'
 import '../styles/home/home.css'
 
 const stages: WebsiteStage[] = ['待评估', '验证', '增长', '维护', '暂停']
@@ -169,7 +170,7 @@ const nextActionOriginals = reactive<Record<number, NextActionDraft>>({})
 const clickEditorOpen = reactive<Record<number, boolean>>({})
 const clickDrafts = reactive<Record<number, ClickDraft>>({})
 const view = computed<'active' | 'stopped'>(() => route.query.view === 'stopped' ? 'stopped' : 'active')
-const activePortfolio = computed(() => view.value === 'stopped' ? 'stopped' : typeof route.query.stage === 'string' ? route.query.stage : 'all')
+const activePortfolio = computed(() => view.value === 'stopped' ? 'stopped' : route.query.new === '1' ? 'new' : typeof route.query.stage === 'string' ? route.query.stage : 'all')
 const createVisible = ref(false)
 const detailVisible = computed({ get: () => Boolean(route.query.site && selected.value), set: value => { if (!value && route.query.site) { const query = { ...route.query }; delete query.site; void router.replace({ query }) } } })
 const selected = ref<Website>()
@@ -200,6 +201,7 @@ const clickLabel = (site: Website) => {
 }
 const primaryDomain = (site: Website) => site.domains.find(domain => domain.is_primary) || site.domains[0]
 const platformLabel = (site: Website) => site.platform === '其他' ? site.platform_other || '其他' : site.platform
+const isNewSite = (site: Website) => site.is_new_site ?? isWebsiteNew(site.new_site_override, primaryDomain(site)?.registrar_date, localDate())
 const scenarioFor = (stage: WebsiteStage) => route.query.stage === stage ? stage : 'all'
 const portfolioColumns: Record<string, PortfolioColumn[]> = {
   all: [
@@ -326,21 +328,25 @@ const visibleStages = computed(() => {
   const visible = stages.filter(stage => !route.query.stage || route.query.stage === stage)
   return sortKey.value === 'stage' ? visible.sort((a, b) => (stages.indexOf(a) - stages.indexOf(b)) * (sortDirection.value === 'asc' ? 1 : -1)) : visible
 })
-const grouped = computed(() => Object.fromEntries(stages.map(stage => [stage, websites.value.filter(site => site.lifecycle === 'active' && site.stage === stage && matchesSearch(site)).sort((a, b) => {
+const grouped = computed(() => Object.fromEntries(stages.map(stage => [stage, websites.value.filter(site => site.lifecycle === 'active' && site.stage === stage && (route.query.new !== '1' || isNewSite(site)) && matchesSearch(site)).sort((a, b) => {
   const sorted = sortKey.value ? compareSites(a, b, sortKey.value) : 0
   return sorted || a.priority_order - b.priority_order || a.id - b.id
 })])) as Record<WebsiteStage, Website[]>)
+const activeSites = computed(() => websites.value.filter(site => site.lifecycle === 'active' && matchesSearch(site)))
+const newSites = computed(() => activeSites.value.filter(isNewSite))
 const portfolioTabs = computed(() => [
-  { label: '全部网站', value: 'all', count: stages.reduce((total, stage) => total + grouped.value[stage].length, 0) },
-  ...stages.map(stage => ({ label: stage, value: stage, count: grouped.value[stage].length })),
+  { label: '全部网站', value: 'all', count: activeSites.value.length },
+  { label: '新站', value: 'new', count: newSites.value.length },
+  ...stages.map(stage => ({ label: stage, value: stage, count: activeSites.value.filter(site => site.stage === stage).length })),
   { label: '停止经营', value: 'stopped', count: stoppedSites.value.length }
 ])
 const selectPortfolio = (value: string) => {
   sortKey.value = ''
   sortDirection.value = 'asc'
   const query = { ...route.query }
-  delete query.site; delete query.stage; delete query.view
+  delete query.site; delete query.stage; delete query.view; delete query.new
   if (value === 'stopped') query.view = 'stopped'
+  else if (value === 'new') query.new = '1'
   else if (value !== 'all') query.stage = value
   void router.push({ query })
 }
