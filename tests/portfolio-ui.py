@@ -7,7 +7,9 @@ sites = [
     dict(id=1, name="Build one", stage="验证", lifecycle="active", ownership="自营网站", platform="Astro",
          industry="资讯站", potential="先验证搜索需求", priority_order=0, next_action="发布首篇内容",
          next_action_due_date="2026-11-14", next_action_status="待做", adsense_connected="未知", gsc_connected="已开通",
-         daily_clicks=12, domains=[dict(id=1, website_id=1, domain="build-one.test", domain_role="主域名", is_primary=1, expiry_date="2027-01-01")],
+         current_income=[dict(source="AdSense", currency="USD", amount=120)],
+         daily_clicks=12, domains=[dict(id=1, website_id=1, domain="build-one.test", domain_role="主域名", is_primary=1, expiry_date="2027-01-01", computer_name="Mac Mini Luokun")],
+         resource_ids=[], resource_names=None,
          open_task_count=1, review_count=0),
     dict(id=2, name="Stopped project", stage="维护", lifecycle="stopped", ownership="自营网站", platform="WordPress",
          domains=[dict(id=2, website_id=2, domain="stopped.test", domain_role="主域名", is_primary=1, expiry_date="2027-01-01")],
@@ -18,17 +20,35 @@ sites = [
          open_task_count=0, review_count=0),
     dict(id=4, name="Grow one", stage="增长", lifecycle="active", ownership="自营网站", platform="WordPress",
          industry="计算器", potential="拓展内容", priority_order=0, adsense_connected="已开通", gsc_connected="已开通",
-         daily_clicks=80, current_income=[dict(source="AdSense", currency="USD", amount=120)],
+         daily_clicks=80, current_income=[dict(source="AdSense", currency="USD", amount=20)],
          latest_effort=dict(week_start="2026-11-02", hours=4.5), domains=[dict(id=4, website_id=4, domain="grow.test", domain_role="主域名", is_primary=1, expiry_date="2027-03-01")],
          open_task_count=2, review_count=1),
     dict(id=5, name="Maintain one", stage="维护", lifecycle="active", ownership="自营网站", platform="Astro",
          industry="资讯站", potential="", priority_order=0, adsense_connected="未知", gsc_connected="已开通",
          domains=[dict(id=5, website_id=5, domain="maintain.test", domain_role="主域名", is_primary=1, expiry_date="2027-04-01", status="在线", last_status_check_at="2026-11-06")],
          open_task_count=1, review_count=1),
+    dict(id=6, name="Alpha build", stage="验证", lifecycle="active", ownership="自营网站", platform="Astro",
+         industry="资讯站", priority_order=1, next_action="提交初版", next_action_status="待做", adsense_connected="未知", gsc_connected="未知",
+         domains=[dict(id=6, website_id=6, domain="alpha-build.test", domain_role="主域名", is_primary=1, expiry_date="2027-05-01", computer_name="Windows PC")],
+         resource_ids=[], resource_names=None, open_task_count=0, review_count=0),
+    dict(id=7, name="Pause one", stage="暂停", lifecycle="active", ownership="自营网站", platform="其他",
+         platform_other="Custom CMS", industry="其他", priority_order=0, potential="等待预算", adsense_connected="未知", gsc_connected="未知",
+         domains=[dict(id=7, website_id=7, domain="pause.test", domain_role="主域名", is_primary=1, expiry_date="2027-06-01")],
+         resource_ids=[], resource_names=None, open_task_count=0, review_count=0),
 ]
+resources = [dict(id=1, provider="cloudflare", name="Build Site", status="正常"), dict(id=2, provider="github", name="Source Repo", status="正常")]
+resource_links = []
 errors = []
 mode = {"value": "ready"}
 pending_reads = []
+
+def click_select(row, label):
+    row.locator(f'.el-select:has(input[aria-label="{label}"]) .el-select__wrapper').click()
+
+def assert_sortable_columns(table):
+    columns = table.locator('thead th').count()
+    controls = table.locator('thead button.portfolio-sort-trigger').count()
+    assert controls == columns - 1, f'expected every data column to sort, got {controls} sort controls for {columns} columns'
 
 with sync_playwright() as p:
     browser = p.chromium.launch(headless=True)
@@ -60,6 +80,37 @@ with sync_playwright() as p:
             route.fulfill(json={"status": 200, "message": "成功", "data": {"accepted": 1}})
         elif url.endswith("/api/domains/3") and request.method == "PATCH":
             route.fulfill(json={"status": 200, "message": "已更新", "data": {"id": 3, "website_id": 1, "domain": "unassigned.test", "status": "离线"}})
+        elif url.startswith("http://127.0.0.1:5173/api/domains/") and request.method == "PATCH":
+            domain_id = int(url.rsplit("/", 1)[-1])
+            domain = next(domain for site in sites for domain in site["domains"] if domain["id"] == domain_id)
+            domain.update(json.loads(request.post_data))
+            route.fulfill(json={"status": 200, "message": "域名已更新", "data": domain})
+        elif url.endswith("/api/resources") and request.method == "GET":
+            route.fulfill(json={"status": 200, "message": "成功", "data": resources})
+        elif url.endswith("/api/resources/links") and request.method == "GET":
+            website_id = int(request.url.split("website_id=")[-1]) if "website_id=" in request.url else None
+            route.fulfill(json={"status": 200, "message": "成功", "data": [link for link in resource_links if website_id is None or link["website_id"] == website_id]})
+        elif url.endswith("/api/resources/links") and request.method == "POST":
+            link = json.loads(request.post_data)
+            link.update(id=len(resource_links) + 1, resource_id=int(link["resource_id"]))
+            resource_links.append(link)
+            site = next(site for site in sites if site["id"] == link["website_id"])
+            site["resource_ids"] = sorted(set(site.get("resource_ids", []) + [link["resource_id"]]))
+            selected = [resource for resource in resources if resource["id"] in site["resource_ids"]]
+            site["resource_names"] = ", ".join(f"{resource['provider']}: {resource['name']}" for resource in selected) or None
+            route.fulfill(status=201, json={"status": 201, "message": "资源关联成功", "data": link})
+        elif url.endswith("/api/resources/links") and request.method == "DELETE":
+            link_id = int(request.url.split("id=")[-1])
+            removed = next(link for link in resource_links if link["id"] == link_id)
+            resource_links.remove(removed)
+            site = next(site for site in sites if site["id"] == removed["website_id"])
+            site["resource_ids"] = [resource_id for resource_id in site.get("resource_ids", []) if resource_id != removed["resource_id"]]
+            route.fulfill(json={"status": 200, "message": "资源关联已解除", "data": None})
+        elif "/api/websites/" in url and request.method == "PATCH" and url.rsplit("/", 1)[-1].isdigit():
+            website_id = int(url.rsplit("/", 1)[-1])
+            site = next(site for site in sites if site["id"] == website_id)
+            site.update(json.loads(request.post_data))
+            route.fulfill(json={"status": 200, "message": "网站已更新", "data": site})
         elif url.endswith("/api/dashboard/summary"):
             route.fulfill(json={"status": 200, "message": "成功", "data": {}})
         elif "/api/websites/1/tasks" in url:
@@ -78,6 +129,8 @@ with sync_playwright() as p:
     expect(page.get_by_text("Build one", exact=True)).to_be_visible()
     expect(page.locator(".portfolio-table thead").first).to_contain_text("网站归属")
     expect(page.locator(".portfolio-table thead").first).to_contain_text("服务商 / 资源")
+    paused_row = page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Pause one"))
+    expect(paused_row.locator('.el-select:has(input[aria-label="技术栈：Pause one"])')).to_contain_text('Custom CMS')
     page.screenshot(path="/tmp/domain-manager-portfolio-table.png")
     expect(page.get_by_text("验证", exact=True).first).to_be_visible()
     tabs = page.locator(".portfolio-stage-tabs")
@@ -95,20 +148,84 @@ with sync_playwright() as p:
     expect(page.get_by_role("button", name="查看网站：Grow one")).not_to_be_visible()
     navigation.get_by_role("button", name="全部技术栈", exact=True).click()
     navigation.get_by_role("button", name="全部归属", exact=True).click()
+
+    verify_table = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-table')
+    verify_table.get_by_role("button", name="按网站 / 主域名升序排序", exact=True).click()
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Alpha build", "Build one"]
+    verify_table.get_by_role("button", name="按网站 / 主域名降序排序", exact=True).click()
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Build one", "Alpha build"]
+    expect(verify_table.get_by_role("button", name="提高优先级：Build one")).to_be_disabled()
+    verify_table.get_by_role("button", name="恢复默认排序：网站 / 主域名", exact=True).click()
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Build one", "Alpha build"]
+    expect(verify_table.get_by_role("button", name="提高优先级：Build one")).to_be_disabled()
+    page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="按阶段升序排序", exact=True).click()
+    page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="按阶段降序排序", exact=True).click()
+    assert page.locator(".portfolio-stage-heading h2").all_text_contents() == ["暂停", "维护", "增长", "验证", "待评估"]
+    page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="恢复默认排序：阶段", exact=True).click()
+    assert page.locator(".portfolio-stage-heading h2").all_text_contents() == ["待评估", "验证", "增长", "维护", "暂停"]
+    tabs = page.locator(".portfolio-stage-tabs")
+    tabs.locator('[data-filter="all"]').click()
+    build_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
+    with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as platform_response:
+        click_select(build_row, "技术栈：Build one")
+        page.get_by_role("option", name="Next.js", exact=True).click()
+    assert json.loads(platform_response.value.request.post_data) == {"platform": "Next.js", "platform_other": None}
+    click_select(build_row, "服务商 / 资源：Build one")
+    with page.expect_response(lambda response: response.url.endswith("/api/resources/links") and response.request.method == "POST") as resource_response:
+        page.get_by_role("option", name="Cloudflare · Build Site", exact=True).click()
+    assert json.loads(resource_response.value.request.post_data) == {"website_id": 1, "resource_id": 1, "role": "部署平台", "is_primary": False}
+    with page.expect_response(lambda response: response.url.endswith("/api/domains/1") and response.request.method == "PATCH") as computer_response:
+        click_select(build_row, "电脑：Build one")
+        page.get_by_role("option", name="Windows PC", exact=True).click()
+    assert json.loads(computer_response.value.request.post_data) == {"computer_name": "Windows PC"}
+    with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as stage_response:
+        click_select(build_row, "网站阶段：Build one")
+        page.get_by_role("option", name="增长", exact=True).last.click()
+    assert json.loads(stage_response.value.request.post_data) == {"stage": "增长"}
+    build_row = page.locator('.portfolio-stage[aria-label="增长"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
+    build_row.get_by_role("button", name="编辑下一步：Build one").click()
+    next_action = page.get_by_role("textbox", name="下一步行动")
+    next_action.fill("发布专题页并检查点击变化")
+    page.locator(".portfolio-next-editor:visible .el-select__wrapper").click()
+    page.get_by_role("option", name="处理中", exact=True).last.click()
+    page.locator('.portfolio-next-editor:visible .el-date-editor input').fill('2026-12-01')
+    with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as next_action_response:
+        page.get_by_role("button", name="保存下一步").click()
+    assert json.loads(next_action_response.value.request.post_data) == {"next_action": "发布专题页并检查点击变化", "next_action_status": "处理中", "next_action_due_date": "2026-12-01"}
     tabs.locator('[data-filter="待评估"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("潜力说明")
     expect(page.locator(".portfolio-table thead")).not_to_contain_text("本月收入")
+    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table'))
     tabs.locator('[data-filter="验证"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("验证下一步")
     expect(page.locator(".portfolio-table thead")).to_contain_text("任务 / 复查")
+    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="验证"] .portfolio-table'))
     tabs.locator('[data-filter="增长"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("最近每周投入")
+    growth_table = page.locator('.portfolio-stage[aria-label="增长"] .portfolio-table')
+    assert_sortable_columns(growth_table)
+    growth_table.get_by_role('button', name='按服务商 / 资源升序排序', exact=True).click()
+    assert growth_table.locator('tbody .portfolio-site-name').all_text_contents() == ['Grow one', 'Build one']
+    growth_table.get_by_role('button', name='按服务商 / 资源降序排序', exact=True).click()
+    assert growth_table.locator('tbody .portfolio-site-name').all_text_contents() == ['Build one', 'Grow one']
+    growth_table.get_by_role('button', name='按本月收入升序排序', exact=True).click()
+    assert growth_table.locator('tbody .portfolio-site-name').all_text_contents() == ['Grow one', 'Build one']
+    growth_table.get_by_role('button', name='按本月收入降序排序', exact=True).click()
+    assert growth_table.locator('tbody .portfolio-site-name').all_text_contents() == ['Build one', 'Grow one']
     tabs.locator('[data-filter="维护"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("域名状态 / 检测时间")
+    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="维护"] .portfolio-table'))
+    tabs.locator('[data-filter="暂停"]').click()
+    expect(page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-table thead')).to_contain_text('潜力 / 暂停原因')
+    paused_table = page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-table')
+    assert_sortable_columns(paused_table)
     tabs.locator('[data-filter="all"]').click()
     tabs.locator('[data-filter="stopped"]').click()
     expect(page.get_by_text("Stopped project", exact=True)).to_be_visible()
     expect(page.get_by_text("Build one", exact=True)).not_to_be_visible()
+    stopped_table = page.locator('.portfolio-stopped-table')
+    assert_sortable_columns(stopped_table)
+    expect(stopped_table.get_by_role('combobox', name='网站阶段：Stopped project')).to_be_visible()
     tabs.locator('[data-filter="all"]').click()
     page.get_by_role("button", name="查看网站：Build one").click()
     expect(page.get_by_role("heading", name="Build one", exact=True)).to_be_visible()

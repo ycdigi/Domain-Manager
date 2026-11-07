@@ -101,6 +101,53 @@ try:
         expect(page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}')).to_be_visible()
         page.get_by_role('button', name=f'提高优先级：验收网站 B {stamp}').click()
         expect(page.locator('.portfolio-stage[aria-label="验证"] .portfolio-site-name').first).to_have_text(f'验收网站 B {stamp}')
+        site_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}'))
+        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as platform_response:
+            site_row.locator('.el-select:has(input[aria-label="技术栈：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
+            page.get_by_role('option', name='Astro', exact=True).last.click()
+        assert json.loads(platform_response.value.request.post_data) == {'platform': 'Astro', 'platform_other': None}
+        available_resources = [resource for resource in call('/api/resources') if resource['status'] != '停用']
+        selected_resource_id = None
+        if available_resources:
+            resource = available_resources[0]
+            selected_resource_id = resource['id']
+            provider_label = {'github': 'GitHub', 'cloudflare': 'Cloudflare', 'vhost': '虚拟主机', 'vps': 'VPS'}[resource['provider']]
+            with page.expect_response(lambda response: response.url.endswith('/api/resources') and response.request.method == 'GET'):
+                site_row.locator('.el-select:has(input[aria-label="服务商 / 资源：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
+            with page.expect_response(lambda response: response.url.endswith('/api/resources/links') and response.request.method == 'POST') as resource_response:
+                page.get_by_role('option', name=f"{provider_label} · {resource['name']}", exact=True).click()
+            assert json.loads(resource_response.value.request.post_data) == {'website_id': site_id, 'resource_id': resource['id'], 'role': {'github': '代码仓库', 'cloudflare': '部署平台', 'vhost': '虚拟主机', 'vps': 'VPS'}[resource['provider']], 'is_primary': False}
+        local_sites = call('/api/websites')
+        machines = {domain.get('computer_name') for site in local_sites for domain in site['domains'] if domain.get('computer_name')}
+        current_machine = next(domain.get('computer_name') for site in local_sites if site['id'] == site_id for domain in site['domains'] if domain['is_primary'])
+        target_machine = next((name for name in sorted(machines) if name != current_machine), f'验收电脑 {stamp}')
+        computer_combo = site_row.locator('.el-select:has(input[aria-label="电脑：验收网站 A ' + stamp + '"]) .el-select__wrapper')
+        with page.expect_response(lambda response: response.url.endswith('/api/domains/' + str(primary['id'])) and response.request.method == 'PATCH') as computer_response:
+            computer_combo.click()
+            if target_machine in machines:
+                page.get_by_role('option', name=target_machine, exact=True).click()
+            else:
+                input_box = site_row.get_by_role('combobox', name=f'电脑：验收网站 A {stamp}')
+                input_box.fill(target_machine)
+                input_box.press('Enter')
+        assert json.loads(computer_response.value.request.post_data) == {'computer_name': target_machine}
+        site_row.get_by_role('button', name=f'编辑下一步：验收网站 A {stamp}').click()
+        page.get_by_role('textbox', name='下一步行动').fill('本地表格快速更新')
+        call(prefix, {'next_action_status': '已完成'}, 'PATCH')
+        page.locator('.portfolio-next-editor:visible .el-date-editor input').fill('2026-12-01')
+        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as action_response:
+            page.get_by_role('button', name='保存下一步').click()
+        assert json.loads(action_response.value.request.post_data) == {'next_action': '本地表格快速更新', 'next_action_due_date': '2026-12-01'}
+        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as stage_response:
+            site_row.locator('.el-select:has(input[aria-label="网站阶段：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
+            page.get_by_role('option', name='增长', exact=True).last.click()
+        assert json.loads(stage_response.value.request.post_data) == {'stage': '增长'}
+        saved_site = next(site for site in call('/api/websites') if site['id'] == site_id)
+        assert saved_site['platform'] == 'Astro'
+        assert selected_resource_id is None or selected_resource_id in saved_site['resource_ids']
+        assert next(domain for domain in saved_site['domains'] if domain['is_primary'])['computer_name'] == target_machine
+        assert (saved_site['next_action'], saved_site['next_action_status'], saved_site['next_action_due_date']) == ('本地表格快速更新', '已完成', '2026-12-01')
+        assert saved_site['stage'] == '增长'
         page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}').click()
         expect(page.get_by_text('标题与内链已调整', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · USD', exact=True)).to_be_visible()
@@ -111,15 +158,15 @@ try:
             page.get_by_role('button', name='刷新网站', exact=True).evaluate('button => button.click()')
         profile_section.get_by_role('textbox', name='网站名称', exact=True).fill(f'验收网站 A {stamp} 修改')
         profile_section.locator('.el-form-item').nth(1).locator('.el-select__wrapper').click()
-        page.get_by_role('option', name='增长', exact=True).click()
+        page.get_by_role('option', name='维护', exact=True).click()
         with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as profile_response:
             profile_section.get_by_role('button', name='保存', exact=True).click()
         assert profile_response.value.ok, (profile_response.value.request.post_data, profile_response.value.text())
         profile_patch = json.loads(profile_response.value.request.post_data)
-        assert profile_patch == {'name': f'验收网站 A {stamp} 修改', 'stage': '增长'}, profile_patch
+        assert profile_patch == {'name': f'验收网站 A {stamp} 修改', 'stage': '维护'}, profile_patch
         latest_site = next(site for site in call('/api/websites') if site['id'] == site_id)
         assert latest_site['gsc_connected'] == '已开通'
-        assert latest_site['stage'] == '增长'
+        assert latest_site['stage'] == '维护'
         exported_site = next(site for site in call('/api/domains/export', raw=True)['websites'] if site['id'] == site_id)
         assert exported_site['industry'] == '电气/工程'
         page.get_by_role('textbox', name='任务标题', exact=True).fill('浏览器新增任务')
