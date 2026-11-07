@@ -11,10 +11,10 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         const url = new URL(context.request.url)
         const provider = url.searchParams.get('provider')
         const sql = `
-            SELECT r.*, a.name AS account_name, a.login_email AS login_email, COUNT(DISTINCT dr.domain_id) AS linked_domain_count
+            SELECT r.*, a.name AS account_name, a.login_email AS login_email, COUNT(DISTINCT wr.website_id) AS linked_website_count
             FROM provider_resources r
             LEFT JOIN provider_accounts a ON a.id = r.account_id
-            LEFT JOIN domain_resources dr ON dr.resource_id = r.id
+            LEFT JOIN website_resources wr ON wr.resource_id = r.id
             ${provider && providers.includes(provider as ProviderType) ? 'WHERE r.provider = ?' : ''}
             GROUP BY r.id ORDER BY r.provider, r.name COLLATE NOCASE
         `

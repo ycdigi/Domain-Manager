@@ -69,7 +69,7 @@ const infer = (domain, html, responseHeaders) => {
   const normalizedCandidate = cleanText(candidate).toLowerCase().replace(/[^a-z0-9]+/g, '')
   const normalizedDomain = domain.toLowerCase().replace(/[^a-z0-9]+/g, '')
   const siteName = candidate && normalizedCandidate !== normalizedDomain && !/^(home|homepage|welcome|just another wordpress site|404|error|page not found)$/i.test(candidate) ? candidate.slice(0, 200) : null
-  return { site_name: siteName || null, industry, evidence: { title: title || null, og_site_name: ogSite || null, h1: h1 || null, description: description || null, industry_score: top?.[1] || 0 }, stack: detectStack(html.toLowerCase()), response_status: null }
+  return { website_name: siteName || null, industry, evidence: { title: title || null, og_site_name: ogSite || null, h1: h1 || null, description: description || null, industry_score: top?.[1] || 0 }, stack: detectStack(html.toLowerCase()), response_status: null }
 }
 const detectStack = text => text.includes('wp-content') || text.includes('wp-includes') || text.includes('wordpress') ? 'WordPress' : text.includes('__next_data__') || text.includes('/_next/') || text.includes('next.js') ? 'Next.js' : text.includes('/_astro/') || text.includes('astro-island') ? 'Astro' : null
 const crawl = async domain => {
@@ -84,7 +84,7 @@ const crawl = async domain => {
       return { domain, checked: true, final_url: response.url, ...result, response_status: response.status }
     } catch (error) { clearTimeout(timer); lastError = error instanceof Error ? error.message : String(error) }
   }
-  return { domain, checked: false, final_url: null, site_name: null, industry: null, stack: null, evidence: {}, response_status: null, error: lastError }
+  return { domain, checked: false, final_url: null, website_name: null, industry: null, stack: null, evidence: {}, response_status: null, error: lastError }
 }
 const sqlQuote = value => value == null ? 'NULL' : `'${String(value).replaceAll("'", "''")}'`
 const domains = [...new Set(await readDomains(input))]
@@ -93,12 +93,13 @@ const workers = Array.from({ length: concurrency }, async () => { while (cursor 
 await Promise.all(workers)
 await fs.writeFile(output, JSON.stringify({ generated_at: new Date().toISOString(), results }, null, 2))
 if (sqlOutput) {
-  const statements = results.filter(row => row.checked && (row.site_name || row.industry || row.stack)).map(row => {
+  const statements = results.filter(row => row.checked && (row.website_name || row.industry || row.stack)).map(row => {
     const platformUpdate = row.stack ? `platform = CASE WHEN platform IS NULL OR platform = '其他' THEN ${sqlQuote(row.stack)} ELSE platform END` : 'platform = platform'
     const platformOtherUpdate = row.stack ? `platform_other = CASE WHEN platform IS NULL OR platform = '其他' THEN NULL ELSE platform_other END` : 'platform_other = platform_other'
-    return `UPDATE domains SET site_name = COALESCE(NULLIF(site_name, ''), ${sqlQuote(row.site_name)}), industry = COALESCE(NULLIF(industry, ''), ${sqlQuote(row.industry)}), ${platformUpdate}, ${platformOtherUpdate} WHERE lower(rtrim(domain, '.')) = ${sqlQuote(row.domain)};`
+    const nameUpdate = row.website_name ? `name = CASE WHEN name = '' OR lower(trim(name)) = ${sqlQuote(row.domain)} THEN ${sqlQuote(row.website_name)} ELSE name END` : 'name = name'
+    return `UPDATE websites SET ${nameUpdate}, industry = COALESCE(NULLIF(industry, ''), ${sqlQuote(row.industry)}), ${platformUpdate}, ${platformOtherUpdate} WHERE id = (SELECT website_id FROM domains WHERE lower(rtrim(domain, '.')) = ${sqlQuote(row.domain)} AND website_id IS NOT NULL LIMIT 1);`
   })
   await fs.writeFile(sqlOutput, `${statements.join('\n')}\n`)
 }
 const summary = results.reduce((acc, row) => { acc[row.industry || '未识别'] = (acc[row.industry || '未识别'] || 0) + 1; return acc }, {})
-console.error(`\n${JSON.stringify({ total: results.length, reachable: results.filter(row => row.checked).length, named: results.filter(row => row.site_name).length, classified: results.filter(row => row.industry).length, summary, output, sqlOutput: sqlOutput || null }, null, 2)}`)
+console.error(`\n${JSON.stringify({ total: results.length, reachable: results.filter(row => row.checked).length, named: results.filter(row => row.website_name).length, classified: results.filter(row => row.industry).length, summary, output, sqlOutput: sqlOutput || null }, null, 2)}`)

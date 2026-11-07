@@ -1,4 +1,4 @@
-<template><div class="workspace-page"><WorkspaceHeading title="数据管理" subtitle="域名 JSON 导入与备份；Excel 包含当前非敏感运营信息" /><ImportPanel /><section class="page-panel"><h2>导出与备份</h2><p class="page-muted">JSON 是域名导入/备份格式，不是完整数据库恢复文件。导出不包含密码、Token 或密钥。</p><div class="page-actions"><el-button :loading="busy === 'excel'" :disabled="!!busy" @click="download('excel')">导出完整 Excel</el-button><el-button :loading="busy === 'json'" :disabled="!!busy" @click="download('json')">导出域名 JSON</el-button></div></section></div></template>
+<template><div class="workspace-page"><WorkspaceHeading title="数据管理" subtitle="网站组合备份、历史记录与 Excel 导出" /><ImportPanel /><section class="page-panel"><h2>导出与备份</h2><p class="page-muted">JSON 包含网站、域名、任务、收入、投入、资源和提示词记录，可重新导入。JSON 和 Excel 均不包含密码、Token 或密钥；完整数据库备份需另行保存。</p><div class="page-actions"><el-button :loading="busy === 'excel'" :disabled="!!busy" @click="download('excel')">导出完整 Excel</el-button><el-button :loading="busy === 'json'" :disabled="!!busy" @click="download('json')">导出网站组合 JSON</el-button></div></section></div></template>
 <script setup lang="ts">
 import { ref } from 'vue'
 import { ElMessage } from 'element-plus'

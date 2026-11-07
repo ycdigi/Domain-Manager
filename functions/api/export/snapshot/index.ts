@@ -7,65 +7,22 @@ export const onRequestGet: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
         const db = context.env.DB
-        const [domains, operations, adsenseAccounts, income, incomeDomains, providerAccounts, resources, links, notes, todos] = await Promise.all([
-            db.prepare(`SELECT d.id, d.domain, d.registrar, d.registrar_link, d.registrar_date, d.expiry_date,
-                d.service_type, d.status, d.memo, d.computer_name, d.adsense_connected, d.adsense_opened_date,
-                d.site_name, d.industry, d.ownership,
-                d.seo_last_date, d.daily_clicks, d.daily_clicks_range, d.clicks_updated_date, d.platform, d.platform_other,
-                d.wp_calculator_count, d.wp_article_count, d.content_stats_updated_date,
-                (SELECT MAX(o.operation_date) FROM domain_operations o WHERE o.domain_id = d.id) AS latest_operation_date,
-                (SELECT COUNT(*) FROM domain_operations o WHERE o.domain_id = d.id) AS operation_count,
-                a.name AS adsense_account, a.owner AS adsense_owner, a.publisher_id AS adsense_publisher_id,
-                CASE WHEN d.adsense_opened_date IS NOT NULL AND d.registrar_date IS NOT NULL AND d.adsense_opened_date >= d.registrar_date
-                    THEN CAST(julianday(d.adsense_opened_date) - julianday(d.registrar_date) AS INTEGER)
-                    ELSE NULL END AS adsense_open_days
-                FROM domains d LEFT JOIN adsense_accounts a ON a.id = d.adsense_account_id ORDER BY d.domain COLLATE NOCASE`).all(),
-            db.prepare(`SELECT o.id, o.domain_id, d.domain, o.operation_date, o.operation_kind, o.created_at
-                FROM domain_operations o JOIN domains d ON d.id = o.domain_id
-                ORDER BY o.operation_date DESC, o.id DESC`).all(),
-            db.prepare(`SELECT a.id, a.name, a.owner, a.publisher_id, a.opened_date, a.currency, a.status, a.memo,
-                (SELECT COUNT(DISTINCT d.id) FROM domains d WHERE d.adsense_account_id = a.id) AS linked_domains,
-                COALESCE((SELECT SUM(CASE WHEN i.amount_usd = 0 AND i.amount <> 0 THEN i.amount ELSE i.amount_usd END) FROM adsense_income i WHERE i.adsense_account_id = a.id), 0) AS income_usd_total,
-                (SELECT SUM(i.amount_cny) FROM adsense_income i WHERE i.adsense_account_id = a.id) AS income_cny_total
-                FROM adsense_accounts a ORDER BY a.name COLLATE NOCASE`).all(),
-            db.prepare(`SELECT i.id, i.adsense_account_id, a.name AS adsense_account, a.owner, a.currency,
-                i.income_month, CASE WHEN i.amount_usd = 0 AND i.amount <> 0 THEN i.amount ELSE i.amount_usd END AS amount_usd, i.amount_cny, i.transfer_date, i.memo, i.created_at
-                FROM adsense_income i JOIN adsense_accounts a ON a.id = i.adsense_account_id
-                ORDER BY i.income_month DESC, a.name COLLATE NOCASE`).all(),
-            db.prepare(`SELECT x.income_id, x.domain_id, d.domain, d.site_name, x.amount_usd
-                FROM adsense_income_domains x JOIN domains d ON d.id = x.domain_id ORDER BY d.domain COLLATE NOCASE`).all(),
-            db.prepare(`SELECT id, provider, name, login_email, status, memo, created_at, updated_at
-                FROM provider_accounts ORDER BY provider, name COLLATE NOCASE`).all(),
-            db.prepare(`SELECT r.id, r.account_id, r.provider, r.name, r.resource_url, r.identifier,
-                r.ip_address, r.port, r.region, r.status, r.expires_at, r.memo,
-                a.name AS account_name, a.login_email
-                FROM provider_resources r LEFT JOIN provider_accounts a ON a.id = r.account_id
-                ORDER BY r.provider, r.name COLLATE NOCASE`).all(),
-            db.prepare(`SELECT dr.id, dr.domain_id, d.domain, dr.resource_id, r.provider,
-                r.name AS resource_name, a.name AS account_name, a.login_email,
-                dr.role, dr.is_primary, dr.memo
-                FROM domain_resources dr JOIN domains d ON d.id = dr.domain_id
-                JOIN provider_resources r ON r.id = dr.resource_id
-                LEFT JOIN provider_accounts a ON a.id = r.account_id
-                ORDER BY d.domain COLLATE NOCASE, r.provider, r.name COLLATE NOCASE`).all(),
-            db.prepare(`SELECT n.id, n.domain_id, d.domain, n.kind, n.content, n.created_at, n.updated_at
-                FROM domain_ai_notes n JOIN domains d ON d.id = n.domain_id
-                WHERE n.archived_at IS NULL ORDER BY d.domain COLLATE NOCASE, n.kind, n.updated_at DESC`).all(),
-            db.prepare(`SELECT t.id, t.domain_id, d.domain, t.title, t.description, t.created_at
-                FROM domain_todos t JOIN domains d ON d.id = t.domain_id
-                ORDER BY d.domain COLLATE NOCASE, t.created_at DESC, t.id DESC`).all()
+        const [websites, domains, websiteIncome, effort, tasks, snapshots, operations, notes, noteVersions, accounts, income, providerAccounts, resources, websiteResources] = await Promise.all([
+            db.prepare('SELECT * FROM websites ORDER BY id').all(),
+            db.prepare('SELECT * FROM domains ORDER BY website_id, is_primary DESC, domain').all(),
+            db.prepare('SELECT * FROM website_income ORDER BY website_id, income_month, source, currency').all(),
+            db.prepare('SELECT * FROM website_effort ORDER BY website_id, week_start').all(),
+            db.prepare('SELECT * FROM website_tasks ORDER BY website_id, id').all(),
+            db.prepare('SELECT * FROM website_click_snapshots ORDER BY task_id, period_kind').all(),
+            db.prepare('SELECT * FROM website_operations ORDER BY website_id, operation_date, id').all(),
+            db.prepare('SELECT * FROM website_ai_notes ORDER BY website_id, id').all(),
+            db.prepare('SELECT * FROM website_ai_note_versions ORDER BY note_id, version_no').all(),
+            db.prepare('SELECT * FROM adsense_accounts ORDER BY id').all(),
+            db.prepare('SELECT * FROM adsense_income ORDER BY adsense_account_id, income_month').all(),
+            db.prepare('SELECT * FROM provider_accounts ORDER BY id').all(),
+            db.prepare('SELECT * FROM provider_resources ORDER BY id').all(),
+            db.prepare('SELECT * FROM website_resources ORDER BY website_id, id').all()
         ])
-        return json({
-            domains: domains.results || [],
-            operations: operations.results || [],
-            adsense_accounts: adsenseAccounts.results || [],
-            adsense_income: income.results || [],
-            adsense_income_domains: incomeDomains.results || [],
-            provider_accounts: providerAccounts.results || [],
-            provider_resources: resources.results || [],
-            domain_resources: links.results || [],
-            ai_notes: notes.results || [],
-            domain_todos: todos.results || []
-        })
+        return json({ websites: websites.results || [], domains: domains.results || [], website_income: websiteIncome.results || [], website_effort: effort.results || [], website_tasks: tasks.results || [], website_click_snapshots: snapshots.results || [], website_operations: operations.results || [], website_ai_notes: notes.results || [], website_ai_note_versions: noteVersions.results || [], adsense_accounts: accounts.results || [], adsense_income: income.results || [], provider_accounts: providerAccounts.results || [], provider_resources: resources.results || [], website_resources: websiteResources.results || [] })
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取导出快照失败') }
 }

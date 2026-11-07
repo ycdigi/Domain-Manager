@@ -1,0 +1,14 @@
+.domain-asset-list { display:grid; }
+.domain-asset-row { display:grid; grid-template-columns:minmax(180px,1.2fr) minmax(180px,1fr) minmax(120px,.65fr) auto; align-items:center; gap:var(--space-md); min-width:0; padding:var(--space-sm) 0; border-bottom:1px solid var(--color-rule); }
+.domain-asset-identity { display:grid; min-width:0; gap:var(--space-2xs); }
+.domain-asset-identity strong { overflow-wrap:anywhere; }
+.domain-asset-identity span, .domain-asset-state small { color:var(--color-muted); font-size:var(--text-xs); overflow-wrap:anywhere; }
+.domain-asset-state { display:grid; justify-items:start; gap:var(--space-2xs); }
+.domain-asset-actions { display:flex; align-items:center; justify-content:flex-end; gap:var(--space-2xs); }
+@media(max-width:760px) {
+ .domain-asset-row { grid-template-columns:minmax(0,1fr) auto; gap:var(--space-xs) var(--space-sm); }
+ .domain-asset-identity { grid-column:1/-1; }
+ .domain-asset-row > .el-select { grid-column:1; grid-row:2; }
+ .domain-asset-state { grid-column:2; grid-row:2; }
+ .domain-asset-actions { grid-column:1/-1; justify-content:flex-start; }
+}

@@ -21,7 +21,7 @@ export const downloadExcel = async () => {
         const XLSX = await import('xlsx')
         const workbook = XLSX.utils.book_new()
         const sensitiveKey = /pass(word)?|token|ciphertext|secret|credential/i
-        const sheets = [['域名总表', 'domains'], ['操作记录', 'operations'], ['AdSense账号', 'adsense_accounts'], ['AdSense月收入', 'adsense_income'], ['AdSense网站美元明细', 'adsense_income_domains'], ['基础设施账号', 'provider_accounts'], ['基础设施资源', 'provider_resources'], ['网站资源关联', 'domain_resources'], ['AI提示词与想法', 'ai_notes']]
+        const sheets = [['网站组合', 'websites'], ['域名资产', 'domains'], ['网站收入', 'website_income'], ['每周投入', 'website_effort'], ['网站任务', 'website_tasks'], ['SEO点击快照', 'website_click_snapshots'], ['操作记录', 'website_operations'], ['AdSense账号', 'adsense_accounts'], ['AdSense账号月收入', 'adsense_income'], ['基础设施账号', 'provider_accounts'], ['基础设施资源', 'provider_resources'], ['网站资源关联', 'website_resources'], ['网站提示词与想法', 'website_ai_notes'], ['提示词历史', 'website_ai_note_versions']]
         for (const [name, key] of sheets) {
             const rows = (snapshot[key] || []).map(row => Object.fromEntries(Object.entries((row || {}) as Record<string, unknown>).filter(([field]) => !sensitiveKey.test(field))))
             const sheet = XLSX.utils.json_to_sheet(rows)

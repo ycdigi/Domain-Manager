@@ -142,5 +142,21 @@ npm run lint:cleanup
 | 旧规则/入口 | 新规则/新入口 | 使用模板/组件/API | 删除/保留 | 验证方式 |
 | --- | --- | --- | --- | --- |
 | 月收入只有旧 `amount` 和备注 | `amount_usd` 为主金额，增加可空 `amount_cny`、`transfer_date`；旧 `amount` 继续同步兼容 | `Adsense.vue`, `/api/adsense/income`, `adsense_income` | 保留旧列兼容，新增 v1.9.0 字段 | 迁移测试、构建、数据回归 |
-| 收入只能按账号查看 | `adsense_income_domains` 保存可选的网站美元明细 | AdSense 月收入表单、收入 GET/POST、Excel 快照 | 保留账号总额；不自动分摊 | 账号多网站校验和导出检查 |
+| 收入只能按账号查看（截至 v1.14） | `adsense_income_domains` 保存可选的网站美元明细 | AdSense 月收入表单、收入 GET/POST、Excel 快照 | v1.15 将历史逐站金额迁入 `website_income`，保留账号总额并移除重复拆分入口 | 迁移与备份恢复测试 |
 | 账号 `currency` 直接作为收入汇总单位 | 汇总明确显示 USD；`currency` 只作为账号元数据 | `Adsense.vue`, dashboard summary | 删除误导性标签，不删除账号字段 | 页面静态检查、API SQL 检查 |
+
+## 2026-11-07 网站组合与旧入口清理
+
+| 被替代实现 | 当前入口 | 删除依据 |
+| --- | --- | --- |
+| DomainDialog、DomainDetailDrawer、QuickFieldDialog、AdsenseQuickDialog | 网站组合详情和域名资产页 | 已核对 Vue 导入、路由与按钮事件；注册数据、状态检查、操作、提示词及历史都有当前入口 |
+| domain.css、domain-detail.css、旧 Home 表格样式 | home.css、website-detail.css、domain-assets.css | 旧组件移除后无模板使用；保留 shared token、控件与覆盖层样式 |
+| 导航 overview/metrics CSS | 经营阶段导航 | 新导航不再渲染旧概览节点，已删除全部无引用规则 |
+| AdSense 网站分摊表单及 income-site-* CSS | 网站月收入历史 | 已将旧网站美元明细迁入通用收入；账号账目保留，旧分摊表/入口/样式移除 |
+| 域名 Todo、操作及 AI 记录路由 | `/api/websites/:id/tasks`、`operations`、`ai-notes` | 网站/域名拆分后以稳定网站 ID 关联；旧路由和旧 domain_* 表移除 |
+| domains API 中的网站经营字段、旧网站编辑辅助模块及 dataFreshness | 网站 API、网站字段验证与显式数据日期 | 运行代码和新域名 schema 中已无旧网站字段；抓取脚本改为更新 websites |
+| 旧资源/操作批量队列 | 域名状态检查队列 | 仍使用同一浏览器队列保存状态与检查时间，移除被替代的队列写入格式 |
+
+`lint:cleanup` 的 CSS 检查现在从 Vue、脚本和 HTML 根节点取类名来源，不再把 CSS 自身算作来源；同时检查旧表名、旧组件/路由、网站新表、域名表字段边界与队列字段。Element Plus 运行时类和共享设计 token 保留。
+
+网站详情收入输入改为 0.01 步长，投入为 0.1 步长；AdSense 金额输入沿用同一小数规则，已由原生表单有效性和真实本地 API 提交验证。

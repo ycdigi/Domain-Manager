@@ -1,7 +1,5 @@
 /// <reference types="@cloudflare/workers-types" />
 
-import type { SiteOwnership } from '../shared/website-classification'
-
 export interface Env {
     DB: D1Database
     USER: string
@@ -15,6 +13,7 @@ export interface Env {
 
 export interface Domain {
     id?: number
+    website_id?: number | null
     domain: string
     registrar: string
     registrar_link: string
@@ -22,65 +21,32 @@ export interface Domain {
     expiry_date: string
     service_type: string
     status: string
-    memo: string
-    site_name?: string | null
-    industry?: string | null
-    ownership?: SiteOwnership
-    adsense_account_id?: number | null
-    adsense_account_name?: string | null
-    adsense_owner?: string | null
-    adsense_publisher_id?: string | null
-    adsense_connected?: string
-    adsense_opened_date?: string | null
-    adsense_income_usd?: number | null
-    adsense_income_detail_count?: number
-    seo_last_date?: string | null
-    daily_clicks?: number | null
-    daily_clicks_range?: 'under10' | '10to29' | '30to49' | '50to99' | 'over100' | null
-    clicks_updated_date?: string | null
-    platform?: DomainPlatform
-    platform_other?: string | null
-    wp_calculator_count?: number | null
-    wp_article_count?: number | null
-    content_stats_updated_date?: string | null
+    domain_role?: '主域名' | '跳转域名' | '备用域名'
+    is_primary?: number
+    memo?: string | null
     last_status_check_at?: string | null
-    resource_status?: string
     computer_name?: string | null
-    resource_count?: number
-    resource_names?: string | null
-    resource_contacts?: string | null
-    ai_note_count?: number
-    latest_operation_date?: string | null
-    operation_count?: number
-    adsense_open_days?: number | null
+    website_name?: string | null
+    website_stage?: string | null
     created_at?: string
 }
 
-export type DomainPlatform = 'WordPress' | 'Astro' | 'Next.js' | '其他'
-export type DomainOperationKind = 'SEO' | '内容' | '技术' | '其他'
+export type WebsiteOperationKind = 'SEO' | '内容' | '技术' | '其他'
 
-export interface DomainOperation {
+export interface WebsiteOperation {
     id?: number
-    domain_id: number
+    website_id: number
     operation_date: string
-    operation_kind: DomainOperationKind
+    operation_kind: WebsiteOperationKind
     created_at?: string
 }
 
-export interface DomainTodo {
-    id?: number
-    domain_id: number
-    title: string
-    description?: string | null
-    created_at?: string
-}
+export type WebsiteAiNoteKind = 'AI提示词' | '想法说明'
 
-export type DomainAiNoteKind = 'AI提示词' | '想法说明'
-
-export interface DomainAiNote {
+export interface WebsiteAiNote {
     id?: number
-    domain_id: number
-    kind: DomainAiNoteKind
+    website_id: number
+    kind: WebsiteAiNoteKind
     content: string
     created_at?: string
     updated_at?: string
@@ -88,10 +54,10 @@ export interface DomainAiNote {
     version_count?: number
 }
 
-export interface DomainAiNoteVersion {
+export interface WebsiteAiNoteVersion {
     id?: number
     note_id: number
-    kind: DomainAiNoteKind
+    kind: WebsiteAiNoteKind
     content: string
     version_no: number
     created_at?: string
@@ -107,7 +73,7 @@ export interface AdsenseAccount {
     opened_date?: string | null
     memo: string
     created_at?: string
-    linked_domains?: number
+    linked_websites?: number
     current_income?: number
     income_usd_total?: number
     income_cny_total?: number | null
@@ -123,7 +89,6 @@ export interface AdsenseIncome {
     transfer_date?: string | null
     memo: string
     created_at?: string
-    site_amounts?: Array<{ domain_id: number; domain: string; site_name?: string | null; amount_usd: number }>
 }
 
 export type ProviderType = 'github' | 'cloudflare' | 'vhost' | 'vps'
@@ -138,7 +103,7 @@ export interface ProviderAccount {
     created_at?: string
     updated_at?: string
     resource_count?: number
-    linked_domain_count?: number
+    linked_website_count?: number
     active_resource_count?: number
 }
 
@@ -156,14 +121,14 @@ export interface ProviderResource {
     expires_at?: string | null
     memo?: string | null
     account_name?: string | null
-    linked_domain_count?: number
+    linked_website_count?: number
     created_at?: string
     updated_at?: string
 }
 
-export interface DomainResourceLink {
+export interface WebsiteResourceLink {
     id?: number
-    domain_id: number
+    website_id: number
     resource_id: number
     role: string
     is_primary: number

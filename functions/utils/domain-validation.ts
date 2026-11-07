@@ -1,22 +1,4 @@
-import type { Domain, DomainPlatform } from '../types'
-
-import { isSiteOwnership } from '../../shared/website-classification'
-
-const platforms: DomainPlatform[] = ['WordPress', 'Astro', 'Next.js', '其他']
-export const domainTypes = ['计算器', '资讯站', '其他'] as const
-export type DomainType = typeof domainTypes[number]
-export const normalizeDomainType = (value: unknown): DomainType | null => {
-    if (value == null || value === '') return null
-    return domainTypes.includes(value as DomainType) ? value as DomainType : '其他'
-}
 export const dailyClicksRanges = ['under10', '10to29', '30to49', '50to99', 'over100'] as const
-export type DailyClicksRange = typeof dailyClicksRanges[number]
-export const isValidDailyClicksRange = (value: unknown): value is DailyClicksRange => typeof value === 'string' && dailyClicksRanges.includes(value as DailyClicksRange)
-export const dailyClicksRangeFromNumber = (value: unknown): DailyClicksRange | null => {
-    if (!Number.isInteger(value) || Number(value) < 0) return null
-    const count = Number(value)
-    return count < 10 ? 'under10' : count < 30 ? '10to29' : count < 50 ? '30to49' : count < 100 ? '50to99' : 'over100'
-}
 
 export const isValidDate = (value: unknown): value is string => {
     if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
@@ -32,7 +14,17 @@ export const isIpAddress = (value: string) => {
     try { return new URL(`http://[${value}]/`).hostname.length > 0 } catch { return false }
 }
 
-export const validateDomain = (data: Partial<Domain>) => {
+export interface DomainInput {
+    domain?: string
+    registrar?: string
+    registrar_link?: string | null
+    registrar_date?: string
+    expiry_date?: string
+    service_type?: string
+    status?: string
+}
+
+export const validateDomain = (data: DomainInput) => {
     if (typeof data.domain !== 'string' || !/^(?=.{3,255}$)[a-zA-Z0-9][-a-zA-Z0-9]{0,62}(\.[a-zA-Z0-9][-a-zA-Z0-9]{0,62})+$/.test(normalizeDomain(data.domain))) return '域名格式无效'
     for (const field of ['registrar', 'registrar_date', 'expiry_date', 'service_type', 'status'] as const) {
         if (typeof data[field] !== 'string' || !data[field].trim()) return `${field} 是必填字段`
@@ -43,28 +35,6 @@ export const validateDomain = (data: Partial<Domain>) => {
     }
     if (!isValidDate(data.registrar_date) || !isValidDate(data.expiry_date)) return '注册日期和到期日期必须是有效的 YYYY-MM-DD 日期'
     if (data.status !== '在线' && data.status !== '离线') return '网站状态无效'
-    if (data.site_name != null && (typeof data.site_name !== 'string' || data.site_name.length > 200)) return '网站名称不能超过 200 个字符'
-    if (data.ownership !== undefined && !isSiteOwnership(data.ownership)) return '网站归属关系无效'
-    if (data.industry != null && !domainTypes.includes(data.industry as DomainType)) return '网站类型只能是计算器、资讯站或其他'
-    if (data.adsense_connected !== undefined && !['未知', '已开通', '未开通'].includes(data.adsense_connected)) return 'AdSense 网站状态无效'
-    if ((data.adsense_connected || '未知') === '已开通' && !isValidDate(data.adsense_opened_date)) return '已开通时必须填写有效开通日期'
-    if (data.adsense_opened_date && data.registrar_date && data.adsense_opened_date < data.registrar_date) return 'AdSense 开通日期不能早于域名注册日期'
-    if (data.adsense_opened_date != null && data.adsense_opened_date !== '' && !isValidDate(data.adsense_opened_date)) return 'AdSense 开通日期无效'
-    if (data.seo_last_date != null && data.seo_last_date !== '' && !isValidDate(data.seo_last_date)) return 'SEO 日期无效'
-    if (data.daily_clicks != null && (!Number.isInteger(data.daily_clicks) || data.daily_clicks < 0)) return '日点击次数必须是非负整数'
-    if (data.daily_clicks_range != null && !isValidDailyClicksRange(data.daily_clicks_range)) return '日点击区间无效'
-    if (data.clicks_updated_date != null && data.clicks_updated_date !== '' && !isValidDate(data.clicks_updated_date)) return '点击数据日期无效'
-    if (data.adsense_account_id != null && (!Number.isInteger(data.adsense_account_id) || data.adsense_account_id <= 0)) return 'AdSense 账号编号无效'
-    if (data.adsense_connected === '已开通' && (data.adsense_account_id == null || data.adsense_account_id <= 0)) return '已开通时必须选择 AdSense 账号'
-    if (data.platform !== undefined && !platforms.includes(data.platform as DomainPlatform)) return '网站技术栈无效'
-    if ((data.platform || '其他') === '其他' && data.platform_other != null && data.platform_other.length > 100) return '其他技术栈名称不能超过 100 个字符'
-    for (const field of ['wp_calculator_count', 'wp_article_count'] as const) {
-        const value = data[field]
-        if (value != null && (!Number.isInteger(value) || value < 0)) return 'WordPress 内容数量必须是非负整数'
-        if ((data.platform || '其他') !== 'WordPress' && value != null) return '只有 WordPress 网站可以填写内容数量'
-    }
-    if (data.content_stats_updated_date != null && data.content_stats_updated_date !== '' && !isValidDate(data.content_stats_updated_date)) return '内容统计日期无效'
-    if ((data.wp_calculator_count != null || data.wp_article_count != null) && !isValidDate(data.content_stats_updated_date)) return '填写 WordPress 内容数量时必须填写统计日期'
     return null
 }
 

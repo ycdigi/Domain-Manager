@@ -10,11 +10,11 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         const result = await context.env.DB.prepare(`
             SELECT a.*,
                    COUNT(DISTINCT CASE WHEN r.identifier IS NULL OR r.identifier NOT LIKE 'account:%' THEN r.id END) AS resource_count,
-                   COUNT(DISTINCT dr.domain_id) AS linked_domain_count,
+                   COUNT(DISTINCT dr.website_id) AS linked_website_count,
                    COUNT(DISTINCT CASE WHEN r.status = '正常' AND (r.identifier IS NULL OR r.identifier NOT LIKE 'account:%') THEN r.id END) AS active_resource_count
             FROM provider_accounts a
             LEFT JOIN provider_resources r ON r.account_id = a.id
-            LEFT JOIN domain_resources dr ON dr.resource_id = r.id
+            LEFT JOIN website_resources dr ON dr.resource_id = r.id
             GROUP BY a.id
             ORDER BY a.provider, a.name COLLATE NOCASE
         `).all<ProviderAccount>()

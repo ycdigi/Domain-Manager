@@ -4,16 +4,9 @@ import { invalidateData } from './workspaceCache'
 import { api, ApiError } from './request'
 
 type OperationData = {
-    type: 'domain_patch' | 'domain_operation_add' | 'resource_link_add' | 'resource_link_remove'
-    id?: number
-    domain_id?: number
-    resource_id?: number
-    role?: string
-    is_primary?: number
-    memo?: string
+    type: 'domain_patch'
+    id: number
     fields?: Record<string, unknown>
-    operation_date?: string
-    operation_kind?: 'SEO' | '内容' | '技术' | '其他'
 }
 type QueueItem = { queueId: string; operation: OperationData; blocked?: boolean; error?: string }
 
@@ -39,21 +32,17 @@ const initialize = () => {
             ? entry
             : { queueId: crypto.randomUUID(), operation: entry })
             .map(item => {
-                if (item.operation.type !== 'domain_patch') return item
-                const allowed = Object.fromEntries(Object.entries(item.operation.fields || {}).filter(([key]) => ['status', 'last_status_check_at', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'seo_last_date'].includes(key)))
+                const allowed = Object.fromEntries(Object.entries(item.operation.fields || {}).filter(([key]) => ['status', 'last_status_check_at'].includes(key)))
                 return { ...item, operation: { ...item.operation, fields: allowed } }
             })
-            .filter(item => item.operation.type !== 'domain_patch' || Object.keys(item.operation.fields || {}).length > 0)
+            .filter(item => item.operation.type === 'domain_patch' && Number.isInteger(item.operation.id) && Object.keys(item.operation.fields || {}).length > 0)
         persist()
     } catch { pending.value = [] }
 }
 
 const persist = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(pending.value))
 const keyOf = (operation: OperationData) => {
-    if (operation.type === 'domain_patch') return `domain:${operation.id}`
-    if (operation.type === 'domain_operation_add') return `operation:${operation.domain_id}:${operation.operation_date}:${operation.operation_kind}`
-    if (operation.type === 'resource_link_remove') return `link:remove:${operation.id}`
-    return `link:add:${operation.domain_id}:${operation.resource_id}:${operation.role}`
+    return `domain:${operation.id}`
 }
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms))
 
@@ -66,8 +55,6 @@ const enqueue = (operation: OperationData) => {
         current.operation = { ...current.operation, fields: { ...current.operation.fields, ...operation.fields } }
         current.blocked = false
         delete current.error
-    } else if (index >= 0) {
-        pending.value[index] = { ...pending.value[index], operation, blocked: false, error: undefined }
     } else {
         if (pending.value.length >= MAX_ITEMS) throw new Error('待同步任务已达到上限，请先完成同步')
         pending.value.push({ queueId: crypto.randomUUID(), operation })
@@ -76,13 +63,6 @@ const enqueue = (operation: OperationData) => {
     schedule()
 }
 
-const enqueueMany = (operations: OperationData[]) => {
-    initialize()
-    // Validate capacity before mutating so SEO date/history remain a single user action.
-    const newKeys = new Set(operations.map(keyOf).filter(key => !pending.value.some(item => keyOf(item.operation) === key && !inFlight.has(item.queueId))))
-    if (pending.value.length + newKeys.size > MAX_ITEMS) throw new Error('待同步任务已达到上限，请先完成同步')
-    operations.forEach(enqueue)
-}
 export const applyPendingDomains = <T extends { id?: number }>(rows: T[]): T[] => {
     initialize()
     return rows.map(row => {
@@ -90,7 +70,6 @@ export const applyPendingDomains = <T extends { id?: number }>(rows: T[]): T[] =
         for (const item of pending.value) {
             const op = item.operation
             if (op.type === 'domain_patch' && op.id === row.id) Object.assign(copy, op.fields)
-            if (op.type === 'domain_operation_add' && op.domain_id === row.id && op.operation_date && (!copy.latest_operation_date || String(copy.latest_operation_date) < op.operation_date)) Object.assign(copy, { latest_operation_date: op.operation_date })
         }
         return copy
     })
@@ -113,7 +92,7 @@ const runFlush = async () => {
                     const ids = new Set(chunk.map(item => item.queueId))
                     pending.value = pending.value.filter(item => !ids.has(item.queueId))
                     persist()
-                    invalidateData('/api/domains', '/api/dashboard/summary', '/api/resources/links', '/api/resources/accounts', '/api/resources')
+                    invalidateData('/api/domains', '/api/websites')
                     completed = true
                 } catch (error) {
                     const retryable = error instanceof ApiError ? error.status >= 500 || error.status === 0 : true
@@ -163,5 +142,5 @@ export const getWriteQueue = () => {
         window.addEventListener('online', () => { void flush().catch(() => {}) })
         window.addEventListener('focus', () => { void flush().catch(() => {}) })
     }
-    return { pending, syncing, failedCount, enqueue, enqueueMany, flush, retryFailed, applyPendingDomains }
+    return { pending, syncing, failedCount, enqueue, flush, retryFailed, applyPendingDomains }
 }

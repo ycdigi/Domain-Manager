@@ -123,6 +123,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 收拢网站资源绑定规则时，先检查是否存在重复主资源或重复账号归属资源，再执行一次 `schema-migration-v1.12.0.sql`；停用对象的历史关联会保留，不要重复迁移
    - 移除 Telegram 通知功能时，先备份已有数据库，再执行一次 `schema-migration-v1.13.0.sql`；该迁移会删除通知配置和网站通知字段，不要重复迁移
    - 网站详情 Todo 使用独立表保存标题和可选描述；已有数据库执行一次 `schema-migration-v1.14.0.sql`
+   - 网站与域名拆分、收入/投入历史、网站任务及 SEO 复查闭环；先备份并在本地验证旧库，再执行一次 `schema-migration-v1.15.0.sql`
 
 ### D1 命令行管理
 
@@ -151,7 +152,7 @@ npm run db:verify:remote
 # 仅当缺少 AdSense/SEO 字段时执行
 npm run db:migrate:v1.1.0
 
-# 当前出现 “no such table: domain_resources” 时，通常需要执行这一批
+# 旧数据库升级到资源与网站关联模型时，按顺序执行相应迁移
 npm run db:migrate:v1.2.0
 
 # v1.3.0 会创建规范化域名唯一索引；执行前先确认没有重复域名
@@ -168,6 +169,7 @@ npm run db:migrate:v1.11.0
 npm run db:migrate:v1.12.0
 npm run db:migrate:v1.13.0
 npm run db:migrate:v1.14.0
+npm run db:migrate:v1.15.0
 npm run db:verify:remote
 ```
 
@@ -190,6 +192,10 @@ npm run db:migrate:v1.8.0
 npm run db:migrate:v1.9.0
 npm run db:migrate:v1.10.0
 npm run db:migrate:v1.11.0
+npm run db:migrate:v1.12.0
+npm run db:migrate:v1.13.0
+npm run db:migrate:v1.14.0
+npm run db:migrate:v1.15.0
 npm run db:verify:remote
 ```
 
@@ -197,19 +203,19 @@ npm run db:verify:remote
 
 > `DB` 必须是 D1 database binding，不是 Variables and secrets 里的 Text 变量。绑定名称必须精确为 `DB`，修改绑定或表结构后需要重新部署 Pages 项目。
 
-`CREDENTIAL_ENCRYPTION_KEY` 是 GitHub Token 的加密密钥。请另行备份；丢失或更换后，已有密文无法解密，需要重新录入 Token。
+`CREDENTIAL_ENCRYPTION_KEY` 是 Provider Token 的加密密钥。请另行备份；丢失或更换后，已有密文无法解密，需要重新录入 Token。
 
-资源账号、资源和网站关联通过 `/api/resources/*` 管理；完整 Token 只在明确点击显示时返回，不包含在域名导出文件或 Excel 快照中。网站详情可以维护技术栈、WordPress 计算器页数、文章数、统计日期和操作日期历史。
+网站是经营记录的主体，域名是独立资产，一个网站可以关联多个域名，未分配域名也可以单独保存。网站详情维护经营阶段、AdSense/GSC 状态、日点击、收入、每周投入、任务、SEO 复查、操作记录和 AI 提示词；域名资产页维护注册商、日期、状态和网站归属。资源账号、资源和网站关联通过 `/api/resources/*` 管理；完整 Token 只在明确点击显示时返回，不包含在 JSON 或 Excel 备份中。
 
 网站台账支持直接选择已有 GitHub、Cloudflare、虚拟主机或 VPS 账号进行“账号归属”绑定；系统会按账号自动生成内部归属资源，不要求先手动创建占位资源。若需要区分 Cloudflare Pages、Zone、D1、Workers 或具体服务器，再在资源管理中新增实际资源并继续关联。
 
-状态写入会按日期去重；SEO 和点击修改使用浏览器本地队列，最多保留 200 项，每批最多 25 项。重复字段变更会合并，断网或 D1 临时失败会保留待同步任务。资源状态由 D1 关联触发器维护。AdSense 月收入按账号和月份保存：美元金额是主金额，人民币金额和转账日期均可为空；一个账号关联多个网站时，可以额外填写每个网站的美元明细，不填写时不会自动分摊总额。首页“导出”会生成包含域名、操作、AdSense、收入、资源关联和 AI 记录的多工作表 Excel，不包含密码、API Token、Provider Token、凭据密文或加密密钥。
+域名状态检查结果会使用浏览器本地队列，最多保留 200 项，每批最多 25 项；断网或 D1 临时失败时会保留待同步状态。AdSense 月收入仍按账号和月份记录，逐站经营收入独立按月份、来源和币种保存；历史逐站 AdSense 美元明细已迁入网站收入，不再从账号总额自动拆分。首页“导出”会生成包含网站、域名、任务、点击快照、收入、投入、AdSense、资源关联和 AI 记录的多工作表 Excel，不包含密码、API Token、Provider Token、凭据密文或加密密钥。
 
-AdSense 月收入字段口径：账号和月份用于唯一定位一条月度记录；`amount_usd` 是必须填写的账号总额；`amount_cny` 和 `transfer_date` 允许为空，适用于只拿到美元总额或自有账号不发生转账的情况；`adsense_income_domains.amount_usd` 只在能确认网站分摊时填写。当前不增加汇率、网站人民币金额、付款 ID 或税费字段，避免重复记录和保存不必要的隐私。后续若需要区分“待确认、已到账、自有账户、不适用”，优先新增月度 `settlement_status`，不改变现有金额字段。
+AdSense 月收入字段口径：账号和月份用于唯一定位一条月度记录；`amount_usd` 是必须填写的账号总额；`amount_cny` 和 `transfer_date` 允许为空。网站收入单独按网站、月份、来源和币种保存，不与账号收入合并、不跨币种换算，也不计算利润。
 
 AdSense 账号列表按归属人汇总全部历史月份：显示累计 USD、累计人民币、去重站点数量和账号最早开通日期；页面顶部的月份选择只用于选中账号的月收入编辑和历史记录，不限制累计统计范围。账号开通日期为可选字段，网站级 AdSense 开通日期仍用于记录单站接入时间。
 
-网站台账中的 AdSense 收入是站点明细累计值，不是账号总额分摊值。没有站点明细时显示“未细化”；金额输入接受非负数字并限制为最多两位小数。
+网站组合当前月份按币种分别显示收入，周投入读取最近一条记录；网站间不跨币种合计。收入和投入按月份/周保留历史。
 
 前端清理审计使用 `npm run lint:cleanup`，检查旧接口引用、CSS 类来源、模板内联样式、共享 token 重复定义，以及写入队列与批量 API 的字段一致性。
 
@@ -236,48 +242,24 @@ npm run domains:enrich -- \
      npm run build
      npx wrangler pages deploy dist --project-name domain-manager --branch main
      ```
-   - `functions/api/ai/sync/index.ts` 会随 Pages Functions 一起发布。发布后使用 POST 验证，不要在浏览器地址栏用 GET 打开接口：
+   - `functions/api/ai/sync/index.ts` 会随 Pages Functions 一起发布。可用只读 GET 验证：
 
      ```bash
-     curl -i -X POST "https://domain-manager-4j0.pages.dev/api/ai/sync" \
-       -H "Authorization: Bearer ${API_TOKEN}" \
-       -H "Content-Type: application/json" \
-       --data '{"domain":"example.com","fields":{}}'
+     curl -i "https://domain-manager-4j0.pages.dev/api/ai/sync?domain=example.com" \
+       -H "Authorization: Bearer ${API_TOKEN}"
      ```
 
-     `401` 表示路由已发布但 Token 不匹配；`404` 表示路径、项目或部署方式错误；`405` 表示使用了 GET，接口必须使用 POST；“域名不存在”表示接口正常但 D1 中没有该域名。
+     `401` 表示路由已发布但 Token 不匹配；`404` 表示该域名未关联到网站，或路径/项目错误。
 
 部署完成后，您可以通过 Cloudflare Pages 提供的域名访问系统。
 
 ## API 文档
 
-### 1. 域名检查 API
+### 域名检查
 
-**端点**: `/api/check`
-**方法**: GET 或 POST
-**认证**: 需要 `Authorization: Bearer your_api_token` Header。不要把 Token 放在 URL 中，URL 可能被记录在代理、分析和请求日志中。
+`POST /api/domains/check` 接收 `{ "domain": "example.com" }` 并返回在线状态。网页会把结果写入域名资产记录；检查请求不代表台帐自动轮询域名。
 
-外部定时检查使用 Bearer Token Header。旧的 `?token=` 方式已停用，定时任务需要发送 `Authorization` 请求头。
-
-响应：
-```json
-{
-    "status": 200,
-    "message": "检查完成",
-    "data": {
-        "total_domains": 10,
-        "notified_domains": [
-            {
-                "domain": "example.com",
-                "remainingDays": 15,
-                "expiry_date": "2024-03-01"
-            }
-        ]
-    }
-}
-```
-
-操作日期使用 `/api/domains/:id/operations` 管理，类型固定为 `SEO`、`内容`、`技术`、`其他`，同一网站同一天同一类型只保留一条。`/api/export/snapshot` 返回不含凭据的完整导出数据，首页会据此生成多工作表 Excel。
+操作日期使用 `/api/websites/:id/operations` 管理，类型固定为 `SEO`、`内容`、`技术`、`其他`，同一网站同一天同一类型只保留一条。`/api/export/snapshot` 返回不含凭据的完整导出数据，数据管理页据此生成多工作表 Excel。
 
 域名的轻量行内编辑使用：
 
@@ -285,11 +267,18 @@ npm run domains:enrich -- \
 PATCH /api/domains/:id
 ```
 
-只允许更新 `site_name`、`industry`、`status`、`platform`、`platform_other`；复杂字段仍通过完整域名编辑或详情抽屉维护。SEO 快捷操作会同时更新最近 SEO 日期和当天的 SEO 操作记录，重复日期会自动去重。
+只允许更新域名资产字段，包括 `website_id`、注册信息、在线状态和域名用途；最后一个域名不能从网站解绑或删除。网站经营字段通过 `/api/websites/:id` 更新。
 
-### 3. AI 同步 API
+### AI 同步 API
 
-给外部 AI 或自动化脚本使用的接口是：
+由用户手动提交提示词时使用此接口。先用 GET 读取单个网站和待处理任务：
+
+```text
+GET /api/ai/sync?website_id={id}
+GET /api/ai/sync?domain={domain}
+```
+
+回写使用已有网站和任务的稳定 ID：
 
 ```text
 POST /api/ai/sync
@@ -297,38 +286,25 @@ Authorization: Bearer ${API_TOKEN}
 Content-Type: application/json
 ```
 
-它只更新已经存在的域名，不会因为域名拼写错误自动创建网站。支持同步网站名称、行业、状态、SEO 日期、日点击、技术栈、WordPress 数量、AdSense 网站状态、操作日期和 AI 提示词/想法。
+API 不会创建网站或任务，不直连 GA4、GSC 或 AdSense，也不会由台帐自动调用 AI。未提供的字段不会覆盖已有值。
 
 示例：
 
 ```json
 {
-  "domain": "example.com",
+  "website_id": 123,
   "fields": {
-    "site_name": "电气计算器站",
-    "industry": "计算器",
+    "gsc_connected": "已开通",
     "daily_clicks": 24,
-    "clicks_updated_date": "2026-10-31",
-    "seo_last_date": "2026-10-31",
-    "platform": "WordPress",
-    "wp_calculator_count": 12,
-    "wp_article_count": 48,
-    "content_stats_updated_date": "2026-10-31"
+    "clicks_updated_date": "2026-10-31"
   },
-  "operation": {
-    "operation_kind": "SEO",
-    "operation_date": "2026-10-31"
-  },
-  "ai_notes": [
-    {
-      "kind": "AI提示词",
-      "content": "检查首页入口结构和内链，找出影响收录的主要问题。"
-    }
+  "task_updates": [
+    { "task_id": 456, "status": "已完成", "completion_summary": "已修复标题层级", "result_url": "https://example.com/page" }
   ]
 }
 ```
 
-重复发送相同操作日期、同类型或相同 AI 记录不会产生重复数据。`API_TOKEN` 只能放在 Authorization Header，不要放进 URL、提示词、JSON 导出或日志。
+完成 SEO 任务会自动建立默认 28 天后的复查任务。复查需要提交到期日对应的等长点击窗口和 AI 判断；未到期的结论会被拒绝，缺少复查数据时任务保留待跟进。`API_TOKEN` 只能放在 Authorization Header，不要放进 URL、提示词、JSON 导出或日志。完整流程见 `AI-SYNC-PROMPT.md`。
 
 ## 配置说明
 

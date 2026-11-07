@@ -1,6 +1,6 @@
 <template>
     <section class="page-panel">
-        <div class="panel-heading"><h2>导入域名 JSON</h2></div>
+        <div class="panel-heading"><h2>导入网站组合备份</h2></div>
         <div class="import-container" :aria-busy="loading">
             <el-upload class="upload-area" drag action="#" :auto-upload="false" :show-file-list="true" :limit="1"
                 :disabled="loading" accept=".json" :on-change="handleFileChange" :on-exceed="handleExceed" :on-remove="clearFile" :file-list="fileList">
@@ -10,7 +10,7 @@
                 </div>
                 <template #tip>
                     <div class="el-upload__tip">
-                        请上传 JSON 格式文件，数据应为域名对象数组
+                        支持网站组合 JSON 备份，也可导入旧版域名对象数组。
                     </div>
                 </template>
             </el-upload>
@@ -150,12 +150,12 @@ const handleImport = async () => {
             return
         }
         const preview = importResult.value!
-        await confirmAction(`将新增 ${preview.created || 0} 个域名、更新 ${preview.updated || 0} 个域名。确认导入？`, '导入预览', { confirmButtonText: '确认导入' })
+        await confirmAction(`本次备份涉及 ${preview.total} 个域名及相关网站记录。确认导入？`, '导入预览', { confirmButtonText: '确认导入' })
         const result = await sendImport(false)
         imported.value = true
         previewReady.value = false
         if (result.success > 0) {
-            invalidateData('/api/domains', '/api/resources', '/api/adsense/accounts', '/api/dashboard/summary')
+            invalidateData('/api/websites', '/api/domains', '/api/resources', '/api/adsense/accounts', '/api/adsense/income', '/api/dashboard/summary')
             emit('success')
         }
     } catch (error: unknown) {

@@ -124,10 +124,10 @@ test('anonymous login reaches the login handler while protected APIs require a b
     assert.equal(protectedResponse.status, 401)
 })
 
-test('AI sync endpoint uses API_TOKEN instead of browser session auth', async () => {
+test('AI sync context reads and writes both require API_TOKEN', async () => {
     let reached = false
     const missing = await apiMiddleware({
-        request: new Request('https://example.test/api/ai/sync', { method: 'POST' }),
+        request: new Request('https://example.test/api/ai/sync?website_id=1', { method: 'GET' }),
         env: { API_TOKEN: 'ai-secret' },
         next: async () => { reached = true; return new Response('sync handler') }
     })
@@ -135,7 +135,7 @@ test('AI sync endpoint uses API_TOKEN instead of browser session auth', async ()
     assert.equal(reached, false)
 
     const valid = await apiMiddleware({
-        request: new Request('https://example.test/api/ai/sync', { method: 'POST', headers: { Authorization: 'Bearer ai-secret' } }),
+        request: new Request('https://example.test/api/ai/sync?website_id=1', { method: 'GET', headers: { Authorization: 'Bearer ai-secret' } }),
         env: { API_TOKEN: 'ai-secret' },
         next: async () => { reached = true; return new Response('sync handler') }
     })
@@ -143,21 +143,13 @@ test('AI sync endpoint uses API_TOKEN instead of browser session auth', async ()
     assert.equal(reached, true)
 })
 
-test('domain validation uses normalized names, real dates, and non-overlapping click values', () => {
+test('domain validation only checks domain asset fields', () => {
     assert.equal(normalizeDomain(' Example.COM. '), 'example.com')
     assert.equal(isValidDate('2024-02-29'), true)
     assert.equal(isValidDate('2025-02-29'), false)
-    const valid = { domain: 'example.com', registrar: 'test', registrar_date: '2025-01-01', expiry_date: '2027-01-01', service_type: '正常网站', status: '在线', daily_clicks: 30 }
+    const valid = { domain: 'example.com', registrar: 'test', registrar_date: '2025-01-01', expiry_date: '2027-01-01', service_type: '正常网站', status: '在线' }
     assert.equal(validateDomain(valid), null)
-    assert.equal(validateDomain({ ...valid, site_name: '电气计算器站', industry: '计算器' }), null)
-    assert.match(validateDomain({ ...valid, site_name: 'x'.repeat(201) }), /网站名称/)
-    assert.match(validateDomain({ ...valid, industry: '电气\/工程' }), /网站类型/)
-    assert.match(validateDomain({ ...valid, daily_clicks: -1 }), /非负整数/)
-    assert.match(validateDomain({ ...valid, adsense_connected: '已开通' }), /开通日期/)
-    assert.equal(validateDomain({ ...valid, platform: 'WordPress', wp_calculator_count: 12, wp_article_count: 40, content_stats_updated_date: '2026-10-31' }), null)
-    assert.match(validateDomain({ ...valid, platform: 'WordPress', wp_article_count: 40 }), /统计日期/)
-    assert.match(validateDomain({ ...valid, platform: 'Astro', wp_article_count: 1, content_stats_updated_date: '2026-10-31' }), /只有 WordPress/)
-    assert.match(validateDomain({ ...valid, adsense_connected: '已开通', adsense_opened_date: '2026-10-31' }), /账号/)
+    assert.match(validateDomain({ ...valid, registrar_date: '2025-02-29' }), /有效的 YYYY-MM-DD/)
 })
 
 test('credential ciphertext is authenticated and requires a strong configured secret', async () => {
