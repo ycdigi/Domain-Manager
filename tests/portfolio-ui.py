@@ -7,7 +7,7 @@ sites = [
     dict(id=1, name="Build one", stage="验证", lifecycle="active", ownership="自营网站", platform="Astro",
          industry="资讯站", potential="先验证搜索需求", priority_order=0, next_action="发布首篇内容",
          next_action_due_date="2026-11-14", next_action_status="待做", adsense_connected="未知", gsc_connected="已开通",
-         current_income=[dict(source="AdSense", currency="USD", amount=120)],
+         current_income=[dict(source="AdSense", currency="USD", amount=120)], income_totals=[dict(currency="USD", amount=120)],
          daily_clicks=12, domains=[dict(id=1, website_id=1, domain="build-one.test", domain_role="主域名", is_primary=1, expiry_date="2027-01-01", computer_name="Mac Mini Luokun")],
          resource_ids=[], resource_names=None,
          open_task_count=1, review_count=0),
@@ -16,12 +16,12 @@ sites = [
          open_task_count=0, review_count=0),
     dict(id=3, name="Assess one", stage="待评估", lifecycle="active", ownership="未分类", platform="其他",
          industry="其他", potential="验证需求", priority_order=0, adsense_connected="未知", gsc_connected="未知",
-         current_income=[], latest_income=dict(month="2026-10", items=[dict(source="AdSense", currency="USD", amount=574, origin="website"), dict(source="AdSense", currency="CNY", amount=3440, origin="adsense_account")]),
+         current_income=[], latest_income=dict(month="2026-10", items=[dict(source="AdSense", currency="USD", amount=574, origin="website"), dict(source="AdSense", currency="CNY", amount=3440, origin="adsense_account")]), income_totals=[dict(currency="USD", amount=574)],
          domains=[dict(id=3, website_id=3, domain="assess.test", domain_role="主域名", is_primary=1, expiry_date="2027-02-01")],
          open_task_count=0, review_count=0),
     dict(id=4, name="Grow one", stage="增长", lifecycle="active", ownership="自营网站", platform="WordPress",
          industry="计算器", potential="拓展内容", priority_order=0, adsense_connected="已开通", gsc_connected="已开通",
-         daily_clicks=80, current_income=[], latest_income=dict(month="2026-10", items=[dict(source="AdSense", currency="USD", amount=20, origin="website")]),
+         daily_clicks=80, current_income=[], latest_income=dict(month="2026-10", items=[dict(source="AdSense", currency="USD", amount=20, origin="website")]), income_totals=[dict(currency="USD", amount=20)],
          latest_effort=dict(week_start="2026-11-02", hours=4.5), domains=[dict(id=4, website_id=4, domain="grow.test", domain_role="主域名", is_primary=1, expiry_date="2027-03-01")],
          open_task_count=2, review_count=1),
     dict(id=5, name="Maintain one", stage="维护", lifecycle="active", ownership="自营网站", platform="Astro",
@@ -153,10 +153,8 @@ with sync_playwright() as p:
     expect(page.locator(".portfolio-table thead").first).to_contain_text("网站归属")
     expect(page.locator(".portfolio-table thead").first).to_contain_text("服务商 / 资源")
     assess_row = page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Assess one"))
-    expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('本月未记录')
     expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('USD 574.00')
-    expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('CNY 3440.00')
-    expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('最近记录：2026-10')
+    expect(assess_row.locator('.portfolio-money-cell')).not_to_contain_text('CNY 3440.00')
     paused_row = page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Pause one"))
     expect(paused_row.locator('.el-select:has(input[aria-label="技术栈：Pause one"])')).to_contain_text('Custom CMS')
     page.screenshot(path="/tmp/domain-manager-portfolio-table.png")
@@ -182,10 +180,8 @@ with sync_playwright() as p:
     assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Alpha build", "Build one"]
     verify_table.get_by_role("button", name="按网站 / 主域名降序排序", exact=True).click()
     assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Build one", "Alpha build"]
-    expect(verify_table.get_by_role("button", name="提高优先级：Build one")).to_be_disabled()
     verify_table.get_by_role("button", name="恢复默认排序：网站 / 主域名", exact=True).click()
     assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Build one", "Alpha build"]
-    expect(verify_table.get_by_role("button", name="提高优先级：Build one")).to_be_disabled()
     page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="按阶段升序排序", exact=True).click()
     page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="按阶段降序排序", exact=True).click()
     assert page.locator(".portfolio-stage-heading h2").all_text_contents() == ["暂停", "维护", "增长", "验证", "待评估"]
@@ -202,6 +198,13 @@ with sync_playwright() as p:
     assert resource_deletions == [], "old resources must remain until new associations succeed"
     expect(alpha_row.locator('.el-select:has(input[aria-label="服务商 / 资源：Alpha build"])')).to_contain_text("GitHub")
     build_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
+    build_row.get_by_role("button", name="编辑日点击：Build one").click()
+    click_editor = page.locator('.portfolio-click-editor:visible')
+    click_editor.get_by_role("spinbutton", name="精确日点击").fill("24")
+    click_editor.locator('input[aria-label="点击统计日期"]').fill("2026-11-08")
+    with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as clicks_response:
+        click_editor.get_by_role("button", name="保存", exact=True).click()
+    assert json.loads(clicks_response.value.request.post_data) == {"daily_clicks": 24, "daily_clicks_range": None, "clicks_updated_date": "2026-11-08"}
     with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as platform_response:
         click_select(build_row, "技术栈：Build one")
         page.get_by_role("option", name="Next.js", exact=True).click()
@@ -258,9 +261,7 @@ with sync_playwright() as p:
     growth_table = page.locator('.portfolio-stage[aria-label="增长"] .portfolio-table')
     assert_sortable_columns(growth_table)
     grow_row = growth_table.locator('.portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Grow one"))
-    expect(grow_row.locator('.portfolio-money-cell')).to_contain_text('本月未记录')
     expect(grow_row.locator('.portfolio-money-cell')).to_contain_text('USD 20.00')
-    expect(grow_row.locator('.portfolio-money-cell')).to_contain_text('最近记录：2026-10')
     growth_table.get_by_role('button', name='按服务商 / 资源升序排序', exact=True).click()
     assert growth_table.locator('tbody .portfolio-site-name').all_text_contents() == ['Grow one', 'Build one']
     growth_table.get_by_role('button', name='按服务商 / 资源降序排序', exact=True).click()

@@ -54,6 +54,7 @@ export interface Website {
   provider_account_ids?: number[]
   current_income?: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }>
   latest_income?: { month: string; items: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }> } | null
+  income_totals?: Array<{ currency: string; amount: number }>
   latest_effort?: { week_start: string; hours: number } | null
 }
 

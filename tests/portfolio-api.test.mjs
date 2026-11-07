@@ -18,6 +18,7 @@ const notes = await server.ssrLoadModule('/functions/api/websites/[id]/ai-notes/
 const note = await server.ssrLoadModule('/functions/api/websites/[id]/ai-notes/[note_id]/index.ts')
 const operations = await server.ssrLoadModule('/functions/api/websites/[id]/operations/index.ts')
 const sync = await server.ssrLoadModule('/functions/api/ai/sync/index.ts')
+const monitor = await server.ssrLoadModule('/functions/api/monitor/status.ts')
 const importData = await server.ssrLoadModule('/functions/api/domains/import.ts')
 const snapshotApi = await server.ssrLoadModule('/functions/api/export/snapshot/index.ts')
 const context = (url, body, method = 'GET', apiToken = false, id = '1') => ({
@@ -102,6 +103,14 @@ test('the offline status queue only writes validated domain status fields', asyn
   await call(domainBatch.onRequestPost, context('/api/domains/batch', { operations: [{ type: 'domain_patch', id: 1, fields: { registrar: 'changed' } }] }, 'POST'), 400)
 })
 
+test('scheduled monitor reads primary domains and writes only status checks', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Monitor', domain: { domain: 'monitor.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  const targets = await call(monitor.onRequestGet, context('/api/monitor/status', undefined, 'GET', true))
+  assert.deepEqual(targets.map(({ id, domain }) => ({ id, domain })), [{ id: 1, domain: 'monitor.test' }])
+  await call(monitor.onRequestPost, context('/api/monitor/status', { checks: [{ id: 1, domain: 'monitor.test', status: '在线' }] }, 'POST', true))
+  assert.deepEqual(store.sql('SELECT status, last_status_check_at FROM domains WHERE id=1;'), [{ status: '在线', last_status_check_at: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()) }])
+})
+
 test('domain assets include unassigned domains and keep domain-only fields separate', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Domains', domain: { domain: 'assigned.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   await call(domains.onRequestPost, context('/api/domains', { domain: 'unassigned.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' }, 'POST'), 201)
@@ -168,6 +177,7 @@ test('website income and weekly effort preserve independent history', async () =
   for (const item of [{ source: 'AdSense', currency: 'USD', amount: 7 }, { source: 'Affiliate', currency: 'EUR', amount: 9 }]) await call(income.onRequestPost, context('/api/websites/1/income', { income_month: currentMonth, ...item }, 'POST'), 201)
   const portfolio = await call(sites.onRequestGet, context('/api/websites'))
   assert.deepEqual(portfolio[0].current_income.sort((a, b) => a.currency.localeCompare(b.currency)), [{ id: 3, source: 'Affiliate', currency: 'EUR', amount: 9, origin: 'website' }, { id: 2, source: 'AdSense', currency: 'USD', amount: 7, origin: 'website' }])
+  assert.deepEqual(portfolio[0].income_totals, [{ currency: 'EUR', amount: 21.5 }, { currency: 'USD', amount: 7 }])
   assert.equal((await call(income.onRequestGet, context('/api/websites/1/income'))).length, 3)
   await call(effort.onRequestPost, context('/api/websites/1/effort', { week_start: '2026-10-26', hours: 4.5 }, 'POST'), 201)
   await call(effort.onRequestPost, context('/api/websites/1/effort', { week_start: '2026-11-02', hours: 2 }, 'POST'), 201)
@@ -187,6 +197,7 @@ test('portfolio income combines a uniquely linked AdSense account with explicit 
     { id: 2, source: 'Affiliate', currency: 'EUR', amount: 8, origin: 'website' },
     { id: 1, source: 'AdSense', currency: 'USD', amount: 80, origin: 'website' }
   ])
+  assert.deepEqual(site.income_totals, [{ currency: 'EUR', amount: 8 }, { currency: 'USD', amount: 80 }])
   assert.equal(site.current_income.find(row => row.origin === 'adsense_account').id, null)
   const history = await call(income.onRequestGet, context('/api/websites/1/income'))
   assert.equal(history.length, 3)
@@ -204,6 +215,7 @@ test('portfolio does not allocate one AdSense account total to multiple linked w
 
   const portfolio = await call(sites.onRequestGet, context('/api/websites'))
   assert.deepEqual(portfolio.map(site => site.current_income), [[{ id: 1, source: 'AdSense', currency: 'USD', amount: 45, origin: 'website' }], []])
+  assert.deepEqual(portfolio.map(site => site.income_totals), [[{ currency: 'USD', amount: 45 }], []])
   assert.equal(portfolio[0].latest_income.month, currentMonth)
   assert.equal(portfolio[1].latest_income, null)
 })
@@ -220,6 +232,7 @@ test('legacy AdSense allocations match account rows without relying on capitaliz
     { id: null, source: 'AdSense', currency: 'CNY', amount: 600, origin: 'adsense_account' },
     { id: 1, source: 'adsense', currency: 'usd', amount: 75, origin: 'website' }
   ])
+  assert.deepEqual(site.income_totals, [{ currency: 'USD', amount: 75 }])
 })
 
 test('portfolio separates current-month emptiness from the latest recorded month', async () => {
@@ -236,6 +249,7 @@ test('portfolio separates current-month emptiness from the latest recorded month
       { id: 1, source: 'AdSense', currency: 'USD', amount: 574, origin: 'website' }
     ]
   })
+  assert.deepEqual(site.income_totals, [{ currency: 'USD', amount: 574 }])
   const history = await call(income.onRequestGet, context('/api/websites/1/income'))
   assert.equal(history.length, 2)
 })

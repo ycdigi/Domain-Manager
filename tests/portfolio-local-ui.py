@@ -99,8 +99,7 @@ try:
         expect(page.locator('.portfolio-table thead')).to_contain_text('最近每周投入')
         page.locator('.portfolio-stage-tabs [data-filter="all"]').click()
         expect(page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}')).to_be_visible()
-        page.get_by_role('button', name=f'提高优先级：验收网站 B {stamp}').click()
-        expect(page.locator('.portfolio-stage[aria-label="验证"] .portfolio-site-name').first).to_have_text(f'验收网站 B {stamp}')
+        expect(page.get_by_role('button', name=f'查看详情：验收网站 B {stamp}')).to_be_visible()
         site_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}'))
         with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as platform_response:
             site_row.locator('.el-select:has(input[aria-label="技术栈：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()

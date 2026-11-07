@@ -23,7 +23,7 @@
             <table class="portfolio-table" :class="`portfolio-table-${scenarioFor(stage)}`">
               <thead><tr><th v-for="column in columnsFor(stage)" :key="column.key" :class="column.class" :style="{ width: `${column.width}px` }" :aria-sort="sortAria(column.key)"><button v-if="column.sortable !== false" type="button" class="portfolio-sort-trigger" :aria-label="sortActionLabel(column)" :title="sortActionLabel(column)" @click="toggleSort(column.key)"><span>{{ column.label }}</span><el-icon aria-hidden="true"><ArrowUp v-if="sortKey === column.key && sortDirection === 'asc'" /><ArrowDown v-else-if="sortKey === column.key" /><Sort v-else /></el-icon></button><span v-else>{{ column.label }}</span></th></tr></thead>
               <tbody>
-                <tr v-for="(site, index) in grouped[stage]" :key="site.id" class="portfolio-row">
+                <tr v-for="site in grouped[stage]" :key="site.id" class="portfolio-row">
                   <td v-for="column in columnsFor(stage)" :key="column.key" :class="column.class">
                     <div v-if="column.key === 'identity'" class="portfolio-identity">
                       <span class="portfolio-site-status" :class="primaryDomain(site)?.status === '在线' ? 'is-online' : primaryDomain(site)?.status === '离线' ? 'is-offline' : 'is-unknown'" :title="primaryDomain(site)?.status || '未检查'" aria-hidden="true"></span>
@@ -34,10 +34,18 @@
                     <el-select v-else-if="column.key === 'platform'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.platform" :aria-label="`技术栈：${site.name}`" @change="value => savePlatform(site, value)"><el-option v-for="item in platforms" :key="item" :value="item" :label="item === '其他' && site.platform === '其他' ? platformLabel(site) : item" /></el-select>
                     <el-select v-else-if="column.key === 'ownership'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.ownership" :aria-label="`网站归属：${site.name}`" @change="value => saveSite(site, { ownership: value })"><el-option v-for="item in ownershipOptions" :key="item" :value="item" :label="item" /></el-select>
                     <el-select v-else-if="column.key === 'industry'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.industry || '其他'" :aria-label="`网站类型：${site.name}`" @change="value => saveSite(site, { industry: value })"><el-option v-for="item in industryOptions" :key="item" :value="item" :label="item" /></el-select>
-                    <div v-else-if="column.key === 'clicks'" class="portfolio-number-cell"><strong>{{ clickLabel(site) || '未填写' }}</strong><small>{{ site.clicks_updated_date || '日期未记录' }}</small></div>
+                    <el-popover v-else-if="column.key === 'clicks'" :visible="clickEditorOpen[site.id] || false" trigger="click" placement="bottom-start" :width="260" @update:visible="value => clickEditorOpen[site.id] = value">
+                      <div class="portfolio-click-editor">
+                        <el-input-number v-model="clickDrafts[site.id].exact" :min="0" :precision="0" :controls="false" clearable placeholder="精确日点击" aria-label="精确日点击" @change="clickDrafts[site.id].range = ''" />
+                        <el-select v-model="clickDrafts[site.id].range" clearable placeholder="或选择点击区间" aria-label="日点击区间" @change="value => value && (clickDrafts[site.id].exact = undefined)"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select>
+                        <el-date-picker v-model="clickDrafts[site.id].date" type="date" value-format="YYYY-MM-DD" clearable placeholder="统计日期" aria-label="点击统计日期" />
+                        <div class="portfolio-click-editor-actions"><el-button size="small" @click="clickEditorOpen[site.id] = false">取消</el-button><el-button size="small" type="primary" :loading="savingSiteIds.has(site.id)" @click="saveClicks(site)">保存</el-button></div>
+                      </div>
+                      <template #reference><button type="button" class="portfolio-click-trigger" :disabled="savingSiteIds.has(site.id)" :aria-label="`编辑日点击：${site.name}`" title="编辑日点击" @click="prepareClicks(site)"><span class="portfolio-number-cell"><strong>{{ clickLabel(site) || '未填写' }}</strong><small>{{ site.clicks_updated_date || '日期未记录' }}</small></span><el-icon aria-hidden="true"><EditPen /></el-icon></button></template>
+                    </el-popover>
                     <el-select v-else-if="column.key === 'adsense'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.adsense_connected" :aria-label="`AdSense 状态：${site.name}`" @change="value => saveSite(site, { adsense_connected: value })"><el-option v-for="item in serviceStates" :key="item" :value="item" :label="item" /></el-select>
                     <el-select v-else-if="column.key === 'gsc'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.gsc_connected" :aria-label="`GSC 状态：${site.name}`" @change="value => saveSite(site, { gsc_connected: value })"><el-option v-for="item in serviceStates" :key="item" :value="item" :label="item" /></el-select>
-                    <div v-else-if="column.key === 'income'" class="portfolio-money-cell"><template v-if="site.current_income?.length"><span v-for="income in site.current_income" :key="`${income.source}-${income.currency}`" :title="income.origin === 'adsense_account' ? '来自 AdSense 账号月收入' : income.source">{{ income.currency }} {{ Number(income.amount).toFixed(2) }}</span></template><template v-else-if="site.latest_income"><small>本月未记录</small><span v-for="income in site.latest_income.items" :key="`${income.source}-${income.currency}`" :title="income.origin === 'adsense_account' ? '来自 AdSense 账号月收入' : income.source">{{ income.currency }} {{ Number(income.amount).toFixed(2) }}</span><small>最近记录：{{ site.latest_income.month }}</small></template><small v-else>本月未记录</small></div>
+                    <div v-else-if="column.key === 'income'" class="portfolio-money-cell"><span v-for="income in site.income_totals || []" :key="income.currency">{{ income.currency }} {{ Number(income.amount).toFixed(2) }}</span><small v-if="!(site.income_totals || []).length">未记录</small></div>
                     <div v-else-if="column.key === 'effort'" class="portfolio-number-cell"><strong>{{ site.latest_effort ? `${Number(site.latest_effort.hours).toFixed(1)} 小时` : '未记录' }}</strong><small v-if="site.latest_effort">{{ site.latest_effort.week_start }} 起</small></div>
                     <el-select v-else-if="column.key === 'resources'" size="small" multiple collapse-tags clearable :max-collapse-tags="1" filterable :loading="resourceOptionsLoading" :disabled="savingSiteIds.has(site.id)" :model-value="site.resource_ids || []" :aria-label="`服务商 / 资源：${site.name}`" placeholder="未关联" @visible-change="visible => visible && loadResourceOptions()" @change="value => saveResources(site, value)"><el-option v-for="resource in resourceOptions" :key="resource.id" :value="resource.id!" :label="resourceOptionLabel(resource)" :disabled="resource.status === '停用'" /></el-select>
                     <div v-else-if="column.key === 'expiry'" class="portfolio-expiry-cell"><strong>{{ primaryDomain(site)?.expiry_date || '未填写' }}</strong><small v-if="primaryDomain(site)">{{ primaryDomain(site)!.status }}</small></div>
@@ -55,7 +63,7 @@
                     <div v-else-if="column.key === 'potential'" class="portfolio-potential-cell">{{ site.potential || '未记录' }}</div>
                     <div v-else-if="column.key === 'domain_status'" class="portfolio-domain-status-cell"><strong>{{ primaryDomain(site)?.status || '未检查' }}</strong><small>{{ primaryDomain(site)?.last_status_check_at || '无检测时间' }}</small></div>
                     <div v-else-if="column.key === 'stage'" class="portfolio-stage-cell"><el-select size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.stage" :aria-label="`网站阶段：${site.name}`" @change="value => saveSite(site, { stage: value })"><el-option v-for="item in stages" :key="item" :value="item" :label="item" /></el-select></div>
-                    <div v-else-if="column.key === 'actions'" class="portfolio-actions-cell"><el-select v-if="scenarioFor(stage) !== 'all'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.stage" :aria-label="`网站阶段：${site.name}`" @change="value => saveSite(site, { stage: value })"><el-option v-for="item in stages" :key="item" :value="item" :label="item" /></el-select><el-button text :icon="View" :disabled="savingSiteIds.has(site.id)" title="查看详情" :aria-label="`查看详情：${site.name}`" @click="openSite(site)" /><el-button text :icon="ArrowUp" :disabled="Boolean(sortKey) || index === 0" :title="sortKey ? '恢复默认排序后可调整优先级' : '提高优先级'" :aria-label="`提高优先级：${site.name}`" @click="move(site, -1)" /><el-button text :icon="ArrowDown" :disabled="Boolean(sortKey) || index === grouped[stage].length - 1" :title="sortKey ? '恢复默认排序后可调整优先级' : '降低优先级'" :aria-label="`降低优先级：${site.name}`" @click="move(site, 1)" /></div>
+                    <div v-else-if="column.key === 'actions'" class="portfolio-actions-cell"><el-select v-if="scenarioFor(stage) !== 'all'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.stage" :aria-label="`网站阶段：${site.name}`" @change="value => saveSite(site, { stage: value })"><el-option v-for="item in stages" :key="item" :value="item" :label="item" /></el-select><el-button text :icon="View" :disabled="savingSiteIds.has(site.id)" title="查看详情" :aria-label="`查看详情：${site.name}`" @click="openSite(site)" /></div>
                   </td>
                 </tr>
               </tbody>
@@ -107,7 +115,7 @@
 import { computed, onActivated, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { ArrowDown, ArrowUp, EditPen, Plus, Refresh, Search, Sort, View } from '@element-plus/icons-vue'
+import { EditPen, Plus, Refresh, Search, Sort, View } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
@@ -128,6 +136,7 @@ type PortfolioColumnKey = 'identity' | 'platform' | 'ownership' | 'industry' | '
 type PortfolioColumn = { key: PortfolioColumnKey; label: string; width: number; class?: string; sortable?: boolean }
 type ResourceLinkRow = { id: number; website_id: number; resource_id: number; role: string }
 type NextActionDraft = { text: string; status: Website['next_action_status']; dueDate: string }
+type ClickDraft = { exact?: number; range: string; date: string }
 const route = useRoute(); const router = useRouter()
 const websites = ref<Website[]>([])
 const resourceOptions = ref<ProviderResource[]>([])
@@ -143,6 +152,8 @@ const sortDirection = ref<'asc' | 'desc'>('asc')
 const nextActionOpen = reactive<Record<number, boolean>>({})
 const nextActionDrafts = reactive<Record<number, NextActionDraft>>({})
 const nextActionOriginals = reactive<Record<number, NextActionDraft>>({})
+const clickEditorOpen = reactive<Record<number, boolean>>({})
+const clickDrafts = reactive<Record<number, ClickDraft>>({})
 const view = computed<'active' | 'stopped'>(() => route.query.view === 'stopped' ? 'stopped' : 'active')
 const activePortfolio = computed(() => view.value === 'stopped' ? 'stopped' : typeof route.query.stage === 'string' ? route.query.stage : 'all')
 const createVisible = ref(false)
@@ -180,7 +191,7 @@ const portfolioColumns: Record<string, PortfolioColumn[]> = {
     { key: 'computer', label: '电脑', width: 112 },
     { key: 'next_action', label: '下一步', width: 158 },
     { key: 'stage', label: '阶段', width: 88 },
-    { key: 'actions', label: '操作', width: 128, sortable: false }
+    { key: 'actions', label: '操作', width: 70, sortable: false }
   ],
   '待评估': [
     { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
@@ -188,7 +199,7 @@ const portfolioColumns: Record<string, PortfolioColumn[]> = {
     { key: 'industry', label: '网站类型', width: 94 }, { key: 'adsense', label: 'AdSense', width: 88 },
     { key: 'gsc', label: 'GSC', width: 82 }, { key: 'potential', label: '潜力说明', width: 170 },
     { key: 'expiry', label: '域名到期', width: 108 }, { key: 'next_action', label: '经营下一步', width: 170 },
-    { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
+    { key: 'actions', label: '阶段 / 操作', width: 120, sortable: false }
   ],
   '验证': [
     { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
@@ -196,27 +207,27 @@ const portfolioColumns: Record<string, PortfolioColumn[]> = {
     { key: 'gsc', label: 'GSC', width: 82 }, { key: 'adsense', label: 'AdSense', width: 88 },
     { key: 'income', label: '本月收入', width: 120 }, { key: 'tasks', label: '任务 / 复查', width: 105 },
     { key: 'next_action', label: '验证下一步', width: 175 }, { key: 'expiry', label: '域名到期', width: 108 },
-    { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
+    { key: 'actions', label: '阶段 / 操作', width: 120, sortable: false }
   ],
   '增长': [
     { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
     { key: 'clicks', label: '日点击 / 更新时间', width: 118 }, { key: 'income', label: '本月收入', width: 125 },
     { key: 'effort', label: '最近每周投入', width: 108 }, { key: 'adsense', label: 'AdSense', width: 88 },
     { key: 'tasks', label: '任务 / 复查', width: 105 }, { key: 'resources', label: '服务商 / 资源', width: 145 },
-    { key: 'next_action', label: '增长下一步', width: 175 }, { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
+    { key: 'next_action', label: '增长下一步', width: 175 }, { key: 'actions', label: '阶段 / 操作', width: 120, sortable: false }
   ],
   '维护': [
     { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
     { key: 'next_action', label: '维护事项 / 截止', width: 175 }, { key: 'tasks', label: '待办 / 到期复查', width: 110 },
     { key: 'domain_status', label: '域名状态 / 检测时间', width: 135 }, { key: 'expiry', label: '域名到期', width: 108 },
     { key: 'computer', label: '电脑', width: 110 }, { key: 'clicks', label: '点击 / 更新时间', width: 118 },
-    { key: 'resources', label: '服务商 / 资源', width: 145 }, { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
+    { key: 'resources', label: '服务商 / 资源', width: 145 }, { key: 'actions', label: '阶段 / 操作', width: 120, sortable: false }
   ],
   '暂停': [
     { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
     { key: 'ownership', label: '网站归属', width: 108 }, { key: 'expiry', label: '域名到期', width: 108 },
     { key: 'domain_status', label: '域名状态 / 检测时间', width: 135 }, { key: 'resources', label: '服务商 / 资源', width: 145 },
-    { key: 'potential', label: '潜力 / 暂停原因', width: 175 }, { key: 'actions', label: '阶段 / 操作', width: 190, sortable: false }
+    { key: 'potential', label: '潜力 / 暂停原因', width: 175 }, { key: 'actions', label: '阶段 / 操作', width: 120, sortable: false }
   ]
 }
 const stoppedColumns: PortfolioColumn[] = [
@@ -249,15 +260,15 @@ const sortValue = (site: Website, key: PortfolioColumnKey): string | number => {
     case 'actions': return ''
   }
 }
-const incomeEntries = (site: Website) => [...(site.current_income?.length ? site.current_income : site.latest_income?.items || [])].sort((a, b) =>
-  a.currency.localeCompare(b.currency) || a.source.localeCompare(b.source) || Number(a.amount) - Number(b.amount)
+const incomeEntries = (site: Website) => [...(site.income_totals || [])].sort((a, b) =>
+  a.currency.localeCompare(b.currency) || Number(a.amount) - Number(b.amount)
 )
 const compareIncome = (left: Website, right: Website) => {
   const entries = (site: Website) => incomeEntries(site)
   const leftEntries = entries(left); const rightEntries = entries(right)
   for (let index = 0; index < Math.min(leftEntries.length, rightEntries.length); index++) {
     const a = leftEntries[index]; const b = rightEntries[index]
-    const textComparison = a.currency.localeCompare(b.currency) || a.source.localeCompare(b.source)
+    const textComparison = a.currency.localeCompare(b.currency)
     if (textComparison) return textComparison
     const amountComparison = Number(a.amount) - Number(b.amount)
     if (amountComparison) return amountComparison
@@ -317,6 +328,7 @@ const load = async (force = false) => {
       nextActionDrafts[site.id] = { text: site.next_action || '', status: site.next_action_status, dueDate: site.next_action_due_date || '' }
       nextActionOriginals[site.id] = { ...nextActionDrafts[site.id] }
     }
+    for (const site of websites.value) if (!clickDrafts[site.id]) clickDrafts[site.id] = { exact: site.daily_clicks ?? undefined, range: site.daily_clicks_range || '', date: site.clicks_updated_date || '' }
   }
   catch (e) { error.value = e instanceof Error ? e.message : '网站加载失败' }
   finally { loading.value = false }
@@ -398,19 +410,15 @@ const saveNextAction = async (site: Website) => {
 }
 const openSite = (site: Website) => { selected.value = site; void router.push({ query: { ...route.query, site: String(site.id) } }) }
 const syncSelectedSite = () => { const id = Number(route.query.site); selected.value = websites.value.find(site => site.id === id) }
-const move = async (site: Website, direction: -1 | 1) => {
-  sortKey.value = ''
-  sortDirection.value = 'asc'
-  const list = grouped.value[site.stage]
-  const index = list.findIndex(item => item.id === site.id)
-  const other = list[index + direction]
-  if (!other) return
-  const order = [...list]
-  ;[order[index], order[index + direction]] = [order[index + direction], order[index]]
-  try {
-    for (const [position, item] of order.entries()) await updateWebsite(item.id, { priority_order: position })
-    await load(true)
-  } catch (e) { ElMessage.error(e instanceof Error ? e.message : '优先级保存失败') }
+const prepareClicks = (site: Website) => {
+  clickDrafts[site.id] = { exact: site.daily_clicks ?? undefined, range: site.daily_clicks_range || '', date: site.clicks_updated_date || '' }
+}
+const saveClicks = async (site: Website) => {
+  const draft = clickDrafts[site.id]
+  if (!draft) return
+  const patch = { daily_clicks: draft.exact ?? null, daily_clicks_range: draft.exact != null ? null : draft.range || null, clicks_updated_date: draft.date || null }
+  const saved = await saveSite(site, patch)
+  if (saved) clickEditorOpen[site.id] = false
 }
 const createSite = async () => {
   if (saving.value) return

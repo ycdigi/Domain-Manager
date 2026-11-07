@@ -21,7 +21,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         const values: string[] = []
         if (params.has('stage')) { where.push('w.stage = ?'); values.push(params.get('stage') || '') }
         if (params.has('lifecycle')) { where.push('w.lifecycle = ?'); values.push(params.get('lifecycle') || '') }
-        const [rows, incomeRows] = await Promise.all([context.env.DB.prepare(`
+        const [rows, incomeRows, incomeTotals] = await Promise.all([context.env.DB.prepare(`
             SELECT w.*,
                 (SELECT json_group_array(json_object('id', d.id, 'domain', d.domain, 'domain_role', d.domain_role, 'is_primary', d.is_primary, 'registrar', d.registrar, 'registrar_link', d.registrar_link, 'registrar_date', d.registrar_date, 'expiry_date', d.expiry_date, 'service_type', d.service_type, 'status', d.status, 'memo', d.memo, 'last_status_check_at', d.last_status_check_at, 'computer_name', d.computer_name))
                  FROM domains d WHERE d.website_id = w.id ORDER BY d.is_primary DESC, d.domain) AS domains_json,
@@ -46,13 +46,22 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             JOIN latest_months latest ON latest.website_id=income.website_id
             WHERE income.income_month=? OR income.income_month=latest.income_month
             ORDER BY income.website_id, income.income_month DESC, income.currency COLLATE NOCASE, income.source COLLATE NOCASE
-        `).bind(currentMonth, currentMonth).all<{ id: number | null; website_id: number; income_month: string; source: string; currency: string; amount: number; origin: string }>()])
+        `).bind(currentMonth, currentMonth).all<{ id: number | null; website_id: number; income_month: string; source: string; currency: string; amount: number; origin: string }>(), context.env.DB.prepare(`
+            ${websiteIncomeRowsCte}
+            SELECT website_id, upper(trim(currency)) AS currency, SUM(amount) AS amount
+            FROM website_income_rows
+            WHERE NOT (lower(trim(source)) = 'adsense' AND upper(trim(currency)) = 'CNY')
+            GROUP BY website_id, upper(trim(currency))
+            ORDER BY website_id, currency
+        `).all<{ website_id: number; currency: string; amount: number }>()])
         const incomeByWebsite = new Map<number, Array<{ id: number | null; website_id: number; income_month: string; source: string; currency: string; amount: number; origin: string }>>()
+        const incomeTotalsByWebsite = new Map<number, Array<{ currency: string; amount: number }>>()
         for (const item of incomeRows.results || []) {
             const entries = incomeByWebsite.get(item.website_id) || []
             entries.push(item)
             incomeByWebsite.set(item.website_id, entries)
         }
+        for (const item of incomeTotals.results || []) incomeTotalsByWebsite.set(item.website_id, [...(incomeTotalsByWebsite.get(item.website_id) || []), { currency: item.currency, amount: Number(item.amount) }])
         return json((rows.results || []).map(row => {
             const { domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, ...site } = row
             const siteIncomes = incomeByWebsite.get(Number(site.id)) || []
@@ -66,6 +75,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 domains: JSON.parse(String(domainsJson || '[]')),
                 current_income: currentIncome.map(presentIncome),
                 latest_income: latestMonth && latestIncome ? { month: latestMonth, items: latestIncome.map(presentIncome) } : null,
+                income_totals: incomeTotalsByWebsite.get(Number(site.id)) || [],
                 latest_effort: effortJson ? JSON.parse(String(effortJson)) : null,
                 resource_ids: JSON.parse(String(resourceIds || '[]')),
                 provider_account_ids: JSON.parse(String(accountIds || '[]'))
