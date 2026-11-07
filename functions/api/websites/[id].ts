@@ -1,6 +1,6 @@
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { validateWebsiteFields } from '../../domain/website-validation'
+import { isUnchangedLegacyIndustry, validateWebsiteFields } from '../../domain/website-validation'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const allowed = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status'])
@@ -17,8 +17,10 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         if (validation) return json(null, 400, validation)
         const accountId = body.adsense_account_id ?? current.adsense_account_id
         if (accountId != null && !await context.env.DB.prepare('SELECT id FROM adsense_accounts WHERE id=?').bind(accountId).first()) return json(null, 400, 'AdSense 账号不存在')
-        const assignments = entries.map(([key]) => `${key}=?`).join(', ')
-        const result = await context.env.DB.prepare(`UPDATE websites SET ${assignments} WHERE id=? RETURNING *`).bind(...entries.map(([, value]) => value === '' ? null : value), id).first()
+        const changedEntries = entries.filter(([key, value]) => !(key === 'industry' && isUnchangedLegacyIndustry(value, current.industry)))
+        if (!changedEntries.length) return json(current, 200, '网站资料没有变化')
+        const assignments = changedEntries.map(([key]) => `${key}=?`).join(', ')
+        const result = await context.env.DB.prepare(`UPDATE websites SET ${assignments} WHERE id=? RETURNING *`).bind(...changedEntries.map(([, value]) => value === '' ? null : value), id).first()
         return json(result, 200, '网站已更新')
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '网站更新失败') }
 }

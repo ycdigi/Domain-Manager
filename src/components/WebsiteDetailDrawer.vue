@@ -3,7 +3,7 @@
     <template v-if="website">
       <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="loadAll">重试</el-button></div>
       <section class="portfolio-detail-section">
-        <div class="portfolio-detail-heading"><h2>经营信息</h2><el-button type="primary" :loading="saving" @click="saveProfile">保存</el-button></div>
+        <div class="portfolio-detail-heading"><h2>经营信息</h2><el-button type="primary" :disabled="!profileDirty" :loading="saving" @click="saveProfile">保存</el-button></div>
         <div class="portfolio-detail-grid">
           <el-form-item label="网站名称"><el-input v-model="profile.name" maxlength="200" /></el-form-item>
           <el-form-item label="阶段"><el-select v-model="profile.stage"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select></el-form-item>
@@ -140,6 +140,7 @@ import { getWriteQueue } from '../utils/writeQueue'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import type { Website, WebsiteDomain, WebsiteTask, WebsiteTaskType } from '../api/websites'
+import { normalizeWebsiteIndustry } from '../../shared/website-classification'
 
 interface IncomeRow { id: number; income_month: string; source: string; currency: string; amount: number }
 interface EffortRow { id: number; week_start: string; hours: number }
@@ -183,6 +184,7 @@ const effortForm = reactive({ week_start: '', hours: 0 })
 const operationForm = reactive({ operation_date: '', operation_kind: 'SEO' })
 const noteForm = reactive<{ kind: 'AI提示词' | '想法说明'; content: string }>({ kind: 'AI提示词', content: '' })
 const profileBaseline = ref('')
+let profileOriginal: typeof profile | undefined
 let profileWebsiteId: number | undefined
 let loadVersion = 0
 const profileDirty = computed(() => Boolean(props.visible && profileBaseline.value && JSON.stringify(profile) !== profileBaseline.value))
@@ -193,8 +195,9 @@ const loadAll = async () => {
   const version = ++loadVersion
   error.value = ''
   if (profileWebsiteId !== props.website.id) {
-  Object.assign(profile, { name: props.website.name, stage: props.website.stage, lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: props.website.industry || '', adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
+  Object.assign(profile, { name: props.website.name, stage: props.website.stage, lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
     profileWebsiteId = props.website.id
+    profileOriginal = { ...profile }
     profileBaseline.value = JSON.stringify(profile)
     tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []
   }
@@ -209,13 +212,50 @@ const saveProfile = async () => {
   if (!props.website || saving.value) return
   saving.value = true
   try {
-    const { adsense_connected, adsense_account_id, adsense_opened_date, daily_clicks, daily_clicks_range, clicks_updated_date, wp_calculator_count, wp_article_count, content_stats_updated_date, ...common } = profile
-    const patch: Record<string, unknown> = { ...common, industry: profile.industry || null, platform_other: profile.platform === '其他' ? profile.platform_other || null : null, potential: profile.potential || null, next_action: profile.next_action || null, next_action_due_date: profile.next_action_due_date || null }
-    if (props.website.adsense_connected !== adsense_connected || props.website.adsense_account_id !== (adsense_account_id || null) || props.website.adsense_opened_date !== (adsense_opened_date || null)) Object.assign(patch, { adsense_connected, adsense_account_id: adsense_account_id || null, adsense_opened_date: adsense_opened_date || null })
-    if ((props.website.daily_clicks ?? undefined) !== daily_clicks || (props.website.daily_clicks_range || '') !== daily_clicks_range || (props.website.clicks_updated_date || '') !== clicks_updated_date) Object.assign(patch, { daily_clicks: daily_clicks_range ? null : daily_clicks ?? null, daily_clicks_range: daily_clicks_range || null, clicks_updated_date: daily_clicks != null || daily_clicks_range ? clicks_updated_date || null : null })
-    const wpChanged = props.website.platform !== profile.platform || (props.website.wp_calculator_count ?? undefined) !== wp_calculator_count || (props.website.wp_article_count ?? undefined) !== wp_article_count || (props.website.content_stats_updated_date || '') !== content_stats_updated_date
-    if (wpChanged) Object.assign(patch, profile.platform === 'WordPress' ? { wp_calculator_count: wp_calculator_count ?? null, wp_article_count: wp_article_count ?? null, content_stats_updated_date: content_stats_updated_date || null } : { wp_calculator_count: null, wp_article_count: null, content_stats_updated_date: null })
-    await api.patch(`/api/websites/${props.website.id}`, patch); profileBaseline.value = JSON.stringify(profile); notifyChanged(); ElMessage.success('经营信息已保存')
+    const patch: Record<string, unknown> = {}
+    const addIfChanged = (key: string, value: unknown, current: unknown) => { if (!Object.is(value, current)) patch[key] = value }
+    const original = profileOriginal
+    if (!original) return
+    addIfChanged('name', profile.name, original.name)
+    addIfChanged('stage', profile.stage, original.stage)
+    addIfChanged('lifecycle', profile.lifecycle, original.lifecycle)
+    addIfChanged('ownership', profile.ownership, original.ownership)
+    addIfChanged('industry', profile.industry || null, original.industry || null)
+    addIfChanged('gsc_connected', profile.gsc_connected, original.gsc_connected)
+    addIfChanged('potential', profile.potential || null, original.potential || null)
+    addIfChanged('next_action', profile.next_action || null, original.next_action || null)
+    addIfChanged('next_action_due_date', profile.next_action_due_date || null, original.next_action_due_date || null)
+    addIfChanged('next_action_status', profile.next_action_status, original.next_action_status)
+
+    const nextPlatformOther = profile.platform === '其他' ? profile.platform_other || null : null
+    const originalPlatformOther = original.platform === '其他' ? original.platform_other || null : null
+    if (profile.platform !== original.platform || nextPlatformOther !== originalPlatformOther) {
+      patch.platform = profile.platform
+      patch.platform_other = nextPlatformOther
+    }
+
+    const nextAdSenseAccountId = profile.adsense_account_id ?? null
+    const nextAdSenseOpenedDate = profile.adsense_opened_date || null
+    if (profile.adsense_connected !== original.adsense_connected || nextAdSenseAccountId !== (original.adsense_account_id ?? null) || nextAdSenseOpenedDate !== (original.adsense_opened_date || null)) {
+      Object.assign(patch, { adsense_connected: profile.adsense_connected, adsense_account_id: nextAdSenseAccountId, adsense_opened_date: nextAdSenseOpenedDate })
+    }
+
+    const nextClicks = profile.daily_clicks_range ? null : profile.daily_clicks ?? null
+    const nextClicksRange = profile.daily_clicks_range || null
+    const nextClicksDate = profile.daily_clicks != null || profile.daily_clicks_range ? profile.clicks_updated_date || null : null
+    if (nextClicks !== (original.daily_clicks ?? null) || nextClicksRange !== (original.daily_clicks_range || null) || nextClicksDate !== (original.clicks_updated_date || null)) {
+      Object.assign(patch, { daily_clicks: nextClicks, daily_clicks_range: nextClicksRange, clicks_updated_date: nextClicksDate })
+    }
+
+    const nextWpStats = profile.platform === 'WordPress' ? {
+      wp_calculator_count: profile.wp_calculator_count ?? null,
+      wp_article_count: profile.wp_article_count ?? null,
+      content_stats_updated_date: profile.content_stats_updated_date || null
+    } : { wp_calculator_count: null, wp_article_count: null, content_stats_updated_date: null }
+    const wpChanged = profile.platform !== original.platform || nextWpStats.wp_calculator_count !== (original.wp_calculator_count ?? null) || nextWpStats.wp_article_count !== (original.wp_article_count ?? null) || nextWpStats.content_stats_updated_date !== (original.content_stats_updated_date || null)
+    if (wpChanged) Object.assign(patch, nextWpStats)
+    if (!Object.keys(patch).length) return
+    await api.patch(`/api/websites/${props.website.id}`, patch); profileOriginal = { ...profile }; profileBaseline.value = JSON.stringify(profile); notifyChanged(); ElMessage.success('经营信息已保存')
   }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '经营信息保存失败') }
   finally { saving.value = false }

@@ -64,6 +64,35 @@ test('website profile accepts known service status while protecting click date r
   assert.deepEqual(store.sql('SELECT name, daily_clicks FROM websites;'), [{ name: 'Profile', daily_clicks: 12 }])
 })
 
+test('legacy website types display as other without changing stored values', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy type', industry: '其他', domain: { domain: 'legacy-type.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql("UPDATE websites SET industry='电气/工程' WHERE id=1;")
+  const portfolio = await call(sites.onRequestGet, context('/api/websites'))
+  const aiContext = await call(sync.onRequestGet, context('/api/ai/sync?website_id=1', undefined, 'GET', true))
+  assert.equal(portfolio[0].industry, '其他')
+  assert.equal(aiContext.website.industry, '其他')
+  assert.equal(store.sql('SELECT industry FROM websites WHERE id=1;')[0].industry, '电气/工程')
+})
+
+test('editing a legacy website without changing its type succeeds and preserves the original value', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy edit', industry: '其他', domain: { domain: 'legacy-edit.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql("UPDATE websites SET industry='电气/工程' WHERE id=1;")
+  await call(siteEdit.onRequestPatch, context('/api/websites/1', { name: 'Renamed legacy site', industry: '其他' }, 'PATCH'))
+  assert.deepEqual(store.sql('SELECT name, industry FROM websites WHERE id=1;'), [{ name: 'Renamed legacy site', industry: '电气/工程' }])
+  await call(siteEdit.onRequestPatch, context('/api/websites/1', { industry: '新无效分类' }, 'PATCH'), 400)
+  await call(sync.onRequestPost, context('/api/ai/sync', { website_id: 1, fields: { industry: '其他', gsc_connected: '已开通' } }, 'POST', true))
+  assert.deepEqual(store.sql('SELECT industry, gsc_connected FROM websites WHERE id=1;'), [{ industry: '电气/工程', gsc_connected: '已开通' }])
+})
+
+test('portfolio backup round-trip accepts and preserves legacy website types', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy backup', industry: '其他', domain: { domain: 'legacy-backup.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql("UPDATE websites SET industry='电气/工程' WHERE id=1;")
+  const backup = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
+  assert.equal(backup.websites[0].industry, '电气/工程')
+  await call(importData.onRequestPost, context('/api/domains/import', backup, 'POST'))
+  assert.equal(store.sql('SELECT industry FROM websites WHERE id=1;')[0].industry, '电气/工程')
+})
+
 test('the offline status queue only writes validated domain status fields', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Status', domain: { domain: 'status.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   await call(domainBatch.onRequestPost, context('/api/domains/batch', { operations: [{ type: 'domain_patch', id: 1, fields: { status: '在线', last_status_check_at: '2026-11-01' } }] }, 'POST'))
@@ -80,10 +109,10 @@ test('domain assets include unassigned domains and keep domain-only fields separ
 })
 
 test('legacy import attaches an existing unassigned domain and retains asset fields', async () => {
-  const asset = { domain: 'legacy.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站', computer_name: 'Workstation' }
+  const asset = { domain: 'legacy.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站', computer_name: 'Workstation', industry: '电气/工程' }
   await call(domains.onRequestPost, context('/api/domains', asset, 'POST'), 201)
   await call(importData.onRequestPost, context('/api/domains/import', [{ ...asset, site_name: 'Legacy website' }], 'POST'))
-  assert.deepEqual(store.sql('SELECT name, stage FROM websites;'), [{ name: 'Legacy website', stage: '待评估' }])
+  assert.deepEqual(store.sql('SELECT name, stage, industry FROM websites;'), [{ name: 'Legacy website', stage: '待评估', industry: '电气/工程' }])
   assert.deepEqual(store.sql('SELECT website_id, computer_name FROM domains;'), [{ website_id: 1, computer_name: 'Workstation' }])
   await call(importData.onRequestPost, context('/api/domains/import', [{ ...asset, site_name: 'Legacy website' }], 'POST'))
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM websites;')[0].count, 1)

@@ -70,8 +70,10 @@ try:
     assert len(call(prefix + '/ai-notes/' + str(note['id']))) == 2
     backup = call('/api/domains/export', raw=True)
     assert any(item['id'] == site_id for item in backup['websites'])
+    next(site for site in backup['websites'] if site['id'] == site_id)['industry'] = '电气/工程'
     call('/api/domains/import?dry_run=1', backup, 'POST')
     call('/api/domains/import', backup, 'POST')
+    assert next(site for site in call('/api/websites') if site['id'] == site_id)['industry'] == '其他'
     summary = call('/api/dashboard/summary')
     assert summary['totals']['total_websites'] >= 2
 
@@ -103,6 +105,23 @@ try:
         expect(page.get_by_text('标题与内链已调整', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · USD', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · EUR', exact=True)).to_be_visible()
+        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='经营信息', exact=True))
+        call(prefix, {'gsc_connected': '已开通'}, 'PATCH')
+        with page.expect_response(lambda response: response.url.endswith('/api/websites') and response.request.method == 'GET'):
+            page.get_by_role('button', name='刷新网站', exact=True).evaluate('button => button.click()')
+        profile_section.get_by_role('textbox', name='网站名称', exact=True).fill(f'验收网站 A {stamp} 修改')
+        profile_section.locator('.el-form-item').nth(1).locator('.el-select__wrapper').click()
+        page.get_by_role('option', name='增长', exact=True).click()
+        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as profile_response:
+            profile_section.get_by_role('button', name='保存', exact=True).click()
+        assert profile_response.value.ok, (profile_response.value.request.post_data, profile_response.value.text())
+        profile_patch = json.loads(profile_response.value.request.post_data)
+        assert profile_patch == {'name': f'验收网站 A {stamp} 修改', 'stage': '增长'}, profile_patch
+        latest_site = next(site for site in call('/api/websites') if site['id'] == site_id)
+        assert latest_site['gsc_connected'] == '已开通'
+        assert latest_site['stage'] == '增长'
+        exported_site = next(site for site in call('/api/domains/export', raw=True)['websites'] if site['id'] == site_id)
+        assert exported_site['industry'] == '电气/工程'
         page.get_by_role('textbox', name='任务标题', exact=True).fill('浏览器新增任务')
         page.get_by_role('button', name='添加任务', exact=True).click()
         expect(page.get_by_text('浏览器新增任务', exact=True)).to_be_visible()

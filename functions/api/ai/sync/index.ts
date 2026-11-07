@@ -2,7 +2,8 @@ import type { Env } from '../../../types'
 import { checkApiToken } from '../../../utils/auth'
 import { isValidDate, normalizeDomain, todayShanghaiDate } from '../../../utils/domain-validation'
 import { addDays, ensureSeoReview, insertSnapshot, validateWindow } from '../../../domain/website-tasks'
-import { validateWebsiteFields } from '../../../domain/website-validation'
+import { isUnchangedLegacyIndustry, validateWebsiteFields } from '../../../domain/website-validation'
+import { normalizeWebsiteIndustry } from '../../../../shared/website-classification'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const siteFields = new Set(['name', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential'])
@@ -34,7 +35,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             FROM website_tasks t LEFT JOIN website_tasks parent ON parent.id=t.review_of_task_id
             WHERE t.website_id=? AND t.status <> '已完成' ORDER BY COALESCE(t.due_at, t.created_at), t.id`).bind(site.id).all<Record<string, unknown>>()
         const { domains_json: domainsJson, ...websiteData } = website
-        const parsedWebsite = { ...websiteData, domains: JSON.parse(String(domainsJson || '[]')) }
+        const parsedWebsite = { ...websiteData, industry: normalizeWebsiteIndustry(websiteData.industry), domains: JSON.parse(String(domainsJson || '[]')) }
         return json({ website: parsedWebsite, tasks: (tasks.results || []).map(task => ({ ...task, review_due: task.task_type === 'SEO复查' && reviewIsDue(task.due_at), snapshots: JSON.parse(String(task.snapshots_json || '[]')) })) })
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取 AI 同步上下文失败') }
 }
@@ -97,9 +98,9 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 if (review.after === undefined && review.conclusion !== undefined && review.conclusion !== '数据不足') return json(null, 400, '缺少复查数据时不能判断提升、持平或下降')
             }
         }
-        if (!Object.keys(fields).length && !updates.length) return json(null, 400, '没有可同步的变化')
+        const fieldEntries = Object.entries(fields).filter(([key, value]) => !(key === 'industry' && isUnchangedLegacyIndustry(value, website.industry)))
+        if (!fieldEntries.length && !updates.length) return json(null, 400, '没有可同步的变化')
         const statements: D1PreparedStatement[] = []
-        const fieldEntries = Object.entries(fields)
         if (fieldEntries.length) statements.push(db.prepare(`UPDATE websites SET ${fieldEntries.map(([key]) => `${key}=?`).join(', ')} WHERE id=?`).bind(...fieldEntries.map(([, value]) => value === '' ? null : value), websiteId))
         const appliedTasks: number[] = []
         for (const item of updates) {
