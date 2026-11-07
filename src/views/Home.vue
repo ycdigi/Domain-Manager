@@ -8,10 +8,9 @@
     <div v-if="error" class="page-error" role="alert"><span>{{ error }}</span><el-button @click="load(true)">重试</el-button></div>
     <div class="portfolio-toolbar">
       <el-input v-model="search" :prefix-icon="Search" clearable placeholder="搜索网站、域名、下一步行动" aria-label="搜索网站" />
-      <el-button-group aria-label="网站状态筛选">
-        <el-button :type="view === 'active' ? 'primary' : 'default'" @click="view = 'active'">全部网站</el-button>
-        <el-button :type="view === 'stopped' ? 'primary' : 'default'" aria-label="停止经营" @click="view = 'stopped'">停止经营</el-button>
-      </el-button-group>
+      <nav class="portfolio-stage-tabs" aria-label="经营阶段筛选">
+        <button v-for="tab in portfolioTabs" :key="tab.value" type="button" class="portfolio-stage-tab" :class="{ 'is-active': activePortfolio === tab.value }" :data-filter="tab.value" :aria-pressed="activePortfolio === tab.value" @click="selectPortfolio(tab.value)"><span>{{ tab.label }}</span><small>{{ tab.count }}</small></button>
+      </nav>
     </div>
 
     <div v-if="loading && !websites.length" class="portfolio-empty">正在加载网站…</div>
@@ -110,7 +109,8 @@ const loading = ref(false)
 const saving = ref(false)
 const error = ref('')
 const search = ref('')
-const view = computed<'active' | 'stopped'>({ get: () => route.query.view === 'stopped' ? 'stopped' : 'active', set: value => { const query = { ...route.query }; if (value === 'stopped') query.view = 'stopped'; else delete query.view; void router.replace({ query }) } })
+const view = computed<'active' | 'stopped'>(() => route.query.view === 'stopped' ? 'stopped' : 'active')
+const activePortfolio = computed(() => view.value === 'stopped' ? 'stopped' : typeof route.query.stage === 'string' ? route.query.stage : 'all')
 const createVisible = ref(false)
 const detailVisible = computed({ get: () => Boolean(route.query.site && selected.value), set: value => { if (!value && route.query.site) { const query = { ...route.query }; delete query.site; void router.replace({ query }) } } })
 const selected = ref<Website>()
@@ -119,6 +119,8 @@ const matchesSearch = (site: Website) => {
   if (route.query.adsense_account && String(site.adsense_account_id) !== String(route.query.adsense_account)) return false
   if (route.query.resource && !(site.resource_ids || []).includes(Number(route.query.resource))) return false
   if (route.query.provider_account && !(site.provider_account_ids || []).includes(Number(route.query.provider_account))) return false
+  if (route.query.ownership && site.ownership !== route.query.ownership) return false
+  if (route.query.platform && site.platform !== route.query.platform) return false
   const query = search.value.trim().toLowerCase()
   return !query || `${site.name} ${site.next_action || ''} ${site.domains.map(domain => domain.domain).join(' ')}`.toLowerCase().includes(query)
 }
@@ -186,6 +188,18 @@ const columnsFor = (stage: WebsiteStage) => portfolioColumns[scenarioFor(stage)]
 const stoppedSites = computed(() => websites.value.filter(site => site.lifecycle === 'stopped' && matchesSearch(site)))
 const visibleStages = computed(() => stages.filter(stage => !route.query.stage || route.query.stage === stage))
 const grouped = computed(() => Object.fromEntries(stages.map(stage => [stage, websites.value.filter(site => site.lifecycle === 'active' && site.stage === stage && matchesSearch(site)).sort((a, b) => a.priority_order - b.priority_order || a.id - b.id)])) as Record<WebsiteStage, Website[]>)
+const portfolioTabs = computed(() => [
+  { label: '全部网站', value: 'all', count: stages.reduce((total, stage) => total + grouped.value[stage].length, 0) },
+  ...stages.map(stage => ({ label: stage, value: stage, count: grouped.value[stage].length })),
+  { label: '停止经营', value: 'stopped', count: stoppedSites.value.length }
+])
+const selectPortfolio = (value: string) => {
+  const query = { ...route.query }
+  delete query.site; delete query.stage; delete query.view
+  if (value === 'stopped') query.view = 'stopped'
+  else if (value !== 'all') query.stage = value
+  void router.push({ query })
+}
 const load = async (force = false) => {
   loading.value = true; error.value = ''
   try { websites.value = await getWebsites(force) }

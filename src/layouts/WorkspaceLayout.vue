@@ -1,8 +1,8 @@
 <template>
   <div class="workspace-shell" :class="{ 'navigation-collapsed': navigationCollapsed }">
-    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :portfolio-tabs="portfolioTabs" :counts="portfolioCounts" :active-portfolio="activePortfolio" :active-manager="activeManager" :collapsed="navigationCollapsed" @select-portfolio="selectPortfolio" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
+    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :ownership-filters="ownershipFilters" :platform-filters="platformFilters" :counts="sidebarCounts" :active-ownership="activeOwnership" :active-platform="activePlatform" :active-manager="activeManager" :collapsed="navigationCollapsed" @select-filter="selectFilter" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
     <el-drawer v-model="navigationMobileOpen" class="workspace-navigation-drawer" title="网站导航" direction="ltr" size="256px" :with-header="false" @closed="runPendingNavigationAction">
-      <WorkspaceNavigation :portfolio-tabs="portfolioTabs" :counts="portfolioCounts" :active-portfolio="activePortfolio" :active-manager="activeManager" mobile @select-portfolio="selectPortfolio" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
+      <WorkspaceNavigation :ownership-filters="ownershipFilters" :platform-filters="platformFilters" :counts="sidebarCounts" :active-ownership="activeOwnership" :active-platform="activePlatform" :active-manager="activeManager" mobile @select-filter="selectFilter" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
     </el-drawer>
     <main class="workspace-content">
       <section v-if="queue.pending.value.length || queue.syncing.value" class="sync-status" aria-label="同步状态" aria-live="polite">
@@ -35,20 +35,33 @@ const navigationStorageKey = 'domain-manager.navigation-collapsed'
 try { navigationCollapsed.value = localStorage.getItem(navigationStorageKey) === 'true' } catch { /* use expanded navigation */ }
 const toggleNavigation = () => { navigationCollapsed.value = !navigationCollapsed.value; try { localStorage.setItem(navigationStorageKey, String(navigationCollapsed.value)) } catch { /* current view remains usable */ } }
 const websites = cachedValue<Website[]>('/api/websites')
-const stageKeys = ['待评估', '验证', '增长', '维护', '暂停']
-const portfolioTabs = [{ label: '全部网站', value: 'all' }, ...stageKeys.map(stage => ({ label: stage, value: stage })), { label: '停止经营', value: 'stopped' }]
-const activePortfolio = computed(() => { const query = queryText(route.query.view || route.query.stage); return portfolioTabs.some(tab => tab.value === query) ? query : 'all' })
-const portfolioCounts = computed(() => Object.fromEntries(portfolioTabs.map(tab => [tab.value, (websites.value || []).filter(site => tab.value === 'all' || (tab.value === 'stopped' ? site.lifecycle === 'stopped' : site.lifecycle === 'active' && site.stage === tab.value)).length])))
+const ownershipFilters = [{ label: '全部归属', value: 'all' }, { label: '自营网站', value: '自营网站' }, { label: '企业客户网站', value: '企业客户网站' }, { label: '未分类', value: '未分类' }]
+const platformFilters = [{ label: '全部技术栈', value: 'all' }, { label: 'Astro', value: 'Astro' }, { label: 'Next.js', value: 'Next.js' }, { label: 'WordPress', value: 'WordPress' }, { label: '其他', value: '其他' }]
 const activeManager = computed(() => ({ Domains: 'domains', Resources: 'resources', Adsense: 'adsense', Data: 'data' }[String(route.name)] || ''))
 let pendingNavigationAction: (() => void) | undefined
 const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.() }
 const runNavigationAction = (action: () => void) => { if (navigationMobileOpen.value) { pendingNavigationAction = action; navigationMobileOpen.value = false } else action() }
 const workspaceQueries: Record<string, typeof route.query> = { [String(route.name)]: { ...route.query } }
 watch(() => route.fullPath, () => { workspaceQueries[String(route.name)] = { ...route.query } })
-const selectPortfolio = (value: string) => runNavigationAction(() => {
-  const query = route.name === 'Home' ? { ...route.query } : { ...workspaceQueries.Home }
-  delete query.stage; delete query.view; delete query.site
-  if (value === 'stopped') query.view = 'stopped'; else if (value !== 'all') query.stage = value
+const homeQuery = computed(() => route.name === 'Home' ? route.query : workspaceQueries.Home || {})
+const activeOwnership = computed(() => queryText(homeQuery.value.ownership) || 'all')
+const activePlatform = computed(() => queryText(homeQuery.value.platform) || 'all')
+const portfolioScope = computed(() => (websites.value || []).filter(site => {
+  const stopped = homeQuery.value.view === 'stopped'
+  return site.lifecycle === (stopped ? 'stopped' : 'active') && (stopped || !homeQuery.value.stage || site.stage === homeQuery.value.stage)
+}))
+const sidebarCounts = computed(() => {
+  const ownershipScope = portfolioScope.value.filter(site => activePlatform.value === 'all' || site.platform === activePlatform.value)
+  const platformScope = portfolioScope.value.filter(site => activeOwnership.value === 'all' || site.ownership === activeOwnership.value)
+  return {
+    ownership: Object.fromEntries(ownershipFilters.map(filter => [filter.value, filter.value === 'all' ? ownershipScope.length : ownershipScope.filter(site => site.ownership === filter.value).length])),
+    platform: Object.fromEntries(platformFilters.map(filter => [filter.value, filter.value === 'all' ? platformScope.length : platformScope.filter(site => site.platform === filter.value).length]))
+  }
+})
+const selectFilter = (kind: 'ownership' | 'platform', value: string) => runNavigationAction(() => {
+  const query = { ...(route.name === 'Home' ? route.query : workspaceQueries.Home || {}) }
+  delete query.site
+  if (value === 'all') delete query[kind]; else query[kind] = value
   void router.push({ name: 'Home', query })
 })
 const navigateManager = (view: string) => runNavigationAction(() => { const name = { domains: 'Domains', resources: 'Resources', adsense: 'Adsense', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
