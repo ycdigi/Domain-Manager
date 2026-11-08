@@ -107,12 +107,27 @@ with sync_playwright() as p:
     page.get_by_role('option', name='Example directory · 已批准', exact=True).click()
     target = page.get_by_role('textbox', name='外链目标 URL')
     target.fill('example.com/tools?x=1&y=two words')
+    page.get_by_role('textbox', name='外链目标标题').fill('Original directory title')
+    page.get_by_role('textbox', name='外链锚文本').fill('Original tool')
+    page.get_by_role('textbox', name='外链候选说明').fill('Original description')
     preview = page.locator('.portfolio-link-preview a')
     expect(preview).to_contain_text('https://directory.example/submit?url=')
     page.get_by_role('button', name='添加候选', exact=True).click()
     expect(page.get_by_text('已生成提交地址', exact=True).first).to_be_visible()
     assert opportunities[0]['submission_url'].startswith('https://directory.example/submit?url=')
     assert 'example.com%2Ftools' in opportunities[0]['submission_url']
+    expect(page.get_by_text('Original directory title', exact=True)).to_be_visible()
+    expect(page.get_by_text('Original description', exact=True)).to_be_visible()
+    page.get_by_role('button', name='编辑候选', exact=True).click()
+    edit = page.get_by_role('dialog', name='编辑外链候选', exact=True)
+    edit.get_by_role('textbox', name='标题').fill('Updated directory title')
+    edit.get_by_role('textbox', name='描述').fill('Updated description from reviewed product facts')
+    edit.get_by_role('textbox', name='锚文本').fill('Updated tool')
+    edit.get_by_role('button', name='保存', exact=True).click()
+    expect(page.get_by_text('Updated directory title', exact=True)).to_be_visible()
+    assert opportunities[0]['title'] == 'Updated directory title'
+    assert opportunities[0]['description'] == 'Updated description from reviewed product facts'
+    assert opportunities[0]['anchor_text'] == 'Updated tool'
     page.get_by_role('button', name='记录人工尝试', exact=True).click()
     attempt = page.get_by_role('dialog', name='记录外链尝试 · Example directory', exact=True)
     attempt.get_by_role('textbox', name='证据 URL').fill('https://directory.example/public/example')

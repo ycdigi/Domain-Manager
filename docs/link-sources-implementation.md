@@ -18,8 +18,11 @@
 - `GET/POST /api/websites/:id/link-opportunities`
 - `PATCH /api/websites/:id/link-opportunities/:opportunity_id`
 - `GET/POST /api/websites/:id/link-opportunities/:opportunity_id/attempts`
+- `GET /api/ai/sync?website_id={id}` 返回该网站的外链候选上下文
 
-所有接口使用登录会话。第一批没有外链尝试执行接口，也没有 Cron Worker。
+来源、候选和尝试接口使用登录会话；AI 同步使用 API Token。没有外链尝试执行接口，也没有 Cron Worker。
+
+AI 同步接口读取当前网站的候选、来源审核状态、处理模式、提交地址、人工尝试和证据；只允许更新已有候选的标题、描述、锚文本和备注，不会创建或删除来源、候选和尝试，不会改变外链工作流，也不会访问第三方站点。外链文案变化通过 `link_updates` 提交，并由 `applied.link_opportunities` 返回已保存的候选 ID。
 
 第二批增加来源审核页和网站详情中的候选、提交地址预览、人工尝试与证据记录。提交地址只由已审核模板在浏览器中生成，所有参数会编码；页面不会加载、执行或代理第三方响应。
 

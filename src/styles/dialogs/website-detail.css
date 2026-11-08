@@ -31,6 +31,7 @@
 .website-detail-drawer .portfolio-link-row { display:grid; grid-template-columns:minmax(0,1fr) 190px; align-items:start; gap:var(--space-md); padding:var(--space-sm) 0; border-bottom:1px solid var(--color-rule); }
 .website-detail-drawer .portfolio-link-main { display:grid; min-width:0; gap:var(--space-2xs); }
 .website-detail-drawer .portfolio-link-main a { color:var(--color-link); overflow-wrap:anywhere; }
+.website-detail-drawer .portfolio-link-main p { margin:0; color:var(--color-ink-2); white-space:pre-wrap; overflow-wrap:anywhere; }
 .website-detail-drawer .portfolio-link-main small { color:var(--color-muted); font-size:var(--text-xs); overflow-wrap:anywhere; }
 .website-detail-drawer .portfolio-link-error { color:var(--color-error) !important; }
 .website-detail-drawer .portfolio-link-preview { margin:var(--space-xs) 0 0; color:var(--color-muted); font-size:var(--text-xs); overflow-wrap:anywhere; }

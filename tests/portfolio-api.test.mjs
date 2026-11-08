@@ -321,6 +321,71 @@ test('AI sync addresses a stable website and rejects review conclusions before d
   assert.equal((await payload(byDomain)).data.website.id, 1)
 })
 
+test('AI read-only sync includes only this website external-link context', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Link context', domain: { domain: 'link-context.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql(`
+    INSERT INTO websites (name) VALUES ('Other website');
+    INSERT INTO link_sources (name, source_url, source_type, url_template, submission_mode, approval_status, enabled)
+    VALUES ('Approved directory', 'https://directory.example', '工具目录', 'https://directory.example/submit?url={{target_url}}', '人工提交', '已批准', 1);
+    INSERT INTO link_sources (name, source_url) VALUES ('Other directory', 'https://other-directory.example');
+    INSERT INTO website_link_opportunities (website_id, source_id, target_url, status, submission_url, evidence_url)
+    VALUES (1, 1, 'https://link-context.test', '需要人工处理', 'https://directory.example/submit?url=https%3A%2F%2Flink-context.test', 'https://directory.example/page');
+    INSERT INTO website_link_opportunities (website_id, source_id, target_url, status)
+    VALUES (2, 2, 'https://other-website.test', '待审核');
+    INSERT INTO link_attempts (opportunity_id, method, request_status, confirmed_public_link, response_summary, evidence_url)
+    VALUES (1, '人工', '需要人工', 0, '需要人工确认', 'https://directory.example/page');
+  `)
+
+  const aiContext = await call(sync.onRequestGet, context('/api/ai/sync?website_id=1', undefined, 'GET', true))
+  assert.equal(aiContext.link_opportunities.length, 1)
+  assert.equal(aiContext.link_opportunities[0].source.name, 'Approved directory')
+  assert.equal(aiContext.link_opportunities[0].source.approval_status, '已批准')
+  assert.equal(aiContext.link_opportunities[0].status, '需要人工处理')
+  assert.equal(aiContext.link_opportunities[0].submission_url, 'https://directory.example/submit?url=https%3A%2F%2Flink-context.test')
+  assert.equal(aiContext.link_opportunities[0].attempts[0].response_summary, '需要人工确认')
+  assert.deepEqual(aiContext.link_summary, { total: 1, pending: 0, needs_human: 1, confirmed: 0, failed: 0 })
+})
+
+test('AI sync rejects unsupported external-link writes without applying other fields', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Read only', domain: { domain: 'read-only.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  const response = await sync.onRequestPost(context('/api/ai/sync', {
+    website_id: 1,
+    fields: { gsc_connected: '已开通' },
+    external_link_updates: [{ opportunity_id: 1, memo: 'AI 写入内容' }]
+  }, 'POST', true))
+  const body = await response.json()
+  assert.equal(response.status, 400)
+  assert.match(body.message, /不支持/)
+  assert.equal(store.sql('SELECT gsc_connected FROM websites WHERE id=1;')[0].gsc_connected, '未知')
+})
+
+test('AI sync can update existing link-candidate copy without changing its workflow state', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'AI link copy', domain: { domain: 'ai-link-copy.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql("INSERT INTO link_sources (name, source_url) VALUES ('Source', 'https://source.example'); INSERT INTO website_link_opportunities (website_id, source_id, target_url, status, title) VALUES (1, 1, 'https://ai-link-copy.test', '待审核', '旧标题');")
+  const result = await call(sync.onRequestPost, context('/api/ai/sync', {
+    website_id: 1,
+    link_updates: [{ opportunity_id: 1, title: 'AI 改写标题', description: '根据用户提供的产品资料整理', anchor_text: 'AI Link Copy', memo: '已由用户确认' }]
+  }, 'POST', true))
+  assert.deepEqual(result.applied.link_opportunities, [1])
+  assert.deepEqual(store.sql('SELECT status, title, description, anchor_text, memo FROM website_link_opportunities WHERE id=1;'), [{ status: '待审核', title: 'AI 改写标题', description: '根据用户提供的产品资料整理', anchor_text: 'AI Link Copy', memo: '已由用户确认' }])
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_attempts;')[0].count, 0)
+})
+
+test('AI sync rejects invalid, cross-website, or workflow fields in link updates', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'AI link scope', domain: { domain: 'ai-link-scope.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Other site', domain: { domain: 'other-link-scope.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST', false, '2'), 201)
+  store.sql("INSERT INTO link_sources (name, source_url) VALUES ('Source', 'https://source.example'); INSERT INTO website_link_opportunities (website_id, source_id, target_url) VALUES (2, 1, 'https://other-link-scope.test'), (1, 1, 'https://ai-link-scope.test');")
+  for (const linkUpdate of [
+    { opportunity_id: 1, title: 'cross-site' },
+    { opportunity_id: 999, title: 'missing' },
+    { opportunity_id: 2, status: '已确认公开链接' },
+    { opportunity_id: 2, description: 'x'.repeat(5001) }
+  ]) {
+    await call(sync.onRequestPost, context('/api/ai/sync', { website_id: 1, link_updates: [linkUpdate] }, 'POST', true), linkUpdate.opportunity_id === 2 ? 400 : 404)
+  }
+  assert.equal(store.sql("SELECT title FROM website_link_opportunities WHERE id=2;")[0].title, null)
+})
+
 test('a review without comparison data remains pending when there is no baseline', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'No baseline', domain: { domain: 'no-baseline.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   const review = store.sql("INSERT INTO website_tasks (website_id, task_type, title, status, due_at, baseline_missing) VALUES (1, 'SEO复查', '复查：旧任务', '待跟进', '2000-01-28', 1) RETURNING id;")[0]
