@@ -93,7 +93,7 @@ const saveState = async (file, state) => {
 }
 const numberEnv = (name, fallback) => Number.isFinite(Number(process.env[name])) ? Number(process.env[name]) : fallback
 
-export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, intervalMinutes = DEFAULT_MINUTES, stayMinMs = DEFAULT_STAY_MIN_MS, stayMaxMs = DEFAULT_STAY_MAX_MS, executablePath, wsEndpoint } = {}) => {
+export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, intervalMinutes = DEFAULT_MINUTES, stayMinMs = DEFAULT_STAY_MIN_MS, stayMaxMs = DEFAULT_STAY_MAX_MS, executablePath, wsEndpoint, shouldStop = () => false } = {}) => {
   if (!baseUrl || !token) throw new Error('需要 DOMAIN_MANAGER_URL 和 DOMAIN_MANAGER_API_TOKEN')
   const [websites, sources] = await Promise.all([
     apiRequest(baseUrl, token, '/api/websites?lifecycle=active'),
@@ -114,8 +114,10 @@ export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, inte
   const context = wsEndpoint ? await browser.newContext() : (browser.contexts()[0] || await browser.newContext())
   const page = context.pages()[0] || await context.newPage()
   let failed = 0
+  let stopped = false
   try {
     for (const item of queue) {
+      if (shouldStop()) { stopped = true; break }
       const source = sources.find(row => Number(row.id) === item.source_id)
       const result = { source_id: item.source_id, checked_url: item.source_url, checked_at: new Date().toISOString() }
       try {
@@ -135,8 +137,8 @@ export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, inte
     if (wsEndpoint) await context.close()
     else await browser.close()
   }
-  await apiRequest(baseUrl, token, '/api/link-sources/review', { method: 'POST', body: JSON.stringify({ run: { planned_count: total, completed_count: total - failed, failed_count: failed, status: failed ? '部分完成' : '已完成', started_at: startedAt, completed_at: new Date().toISOString() }, results: Object.values(state.sourceResults) }) })
-  return { planned: total, completed: total - failed, skipped: 0, failed }
+  await apiRequest(baseUrl, token, '/api/link-sources/review', { method: 'POST', body: JSON.stringify({ run: { planned_count: total, completed_count: Object.keys(state.completed).length, failed_count: failed, status: stopped || failed ? '部分完成' : '已完成', started_at: startedAt, completed_at: new Date().toISOString() }, results: Object.values(state.sourceResults) }) })
+  return { planned: total, completed: Object.keys(state.completed).length, skipped: 0, failed, stopped }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

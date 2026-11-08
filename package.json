@@ -13,6 +13,7 @@
     "lint:cleanup": "node scripts/lint-cleanup.mjs",
     "links:audit": "node scripts/audit-link-sources.mjs",
     "links:review": "node scripts/link-source-review-worker.mjs",
+    "links:agent": "node scripts/link-source-review-agent.mjs",
     "domains:enrich": "node scripts/enrich-domains.mjs",
     "deploy:pages": "npm run build && wrangler pages deploy dist --project-name domain-manager --branch main",
     "preview": "vite preview",

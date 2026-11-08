@@ -2,6 +2,7 @@
   <div class="workspace-page link-sources-page">
     <WorkspaceHeading title="外链来源" subtitle="审核来源、维护模板，再为具体网站建立候选">
       <el-button :icon="Refresh" :loading="loading" aria-label="刷新来源" title="刷新来源" @click="load(true)" />
+      <el-button :type="reviewRunning ? 'danger' : 'primary'" :icon="reviewRunning ? VideoPause : VideoPlay" :loading="reviewStarting" @click="toggleReview">{{ reviewRunning ? '停止轮询' : '开始轮询' }}</el-button>
       <el-button type="primary" :icon="Plus" @click="openCreate">新增来源</el-button>
       <el-button :icon="Upload" :loading="importing" @click="sourceFileInput?.click()">导入来源清单</el-button>
       <el-button :icon="Finished" :loading="reviewImporting" @click="reviewFileInput?.click()">导入轮询结果</el-button>
@@ -61,22 +62,40 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, EditPen, Finished, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { Delete, EditPen, Finished, Plus, Refresh, Search, Upload, VideoPause, VideoPlay } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { getLinkSources, createLinkSource, updateLinkSource, deleteLinkSource, importLinkSources, getLinkSourceReview, importLinkSourceReview, linkSourceApprovalStatuses, linkSourceTypes, linkSubmissionModes, type LinkSource, type LinkSourceApprovalStatus, type LinkSourceFunnelStage, type LinkSourceReviewRun, type LinkSourceType, type LinkSubmissionMode } from '../api/link-sources'
 
 type SourceForm = { name: string; source_url: string; source_type: LinkSourceType; country: string; language: string; topic_tags: string; url_template: string; submission_mode: LinkSubmissionMode; approval_status: LinkSourceApprovalStatus; memo: string }
 const sources = ref<LinkSource[]>([]); const reviewRun = ref<LinkSourceReviewRun | null>(null)
-const loading = ref(false); const importing = ref(false); const reviewImporting = ref(false); const saving = ref(false); const error = ref('')
+const loading = ref(false); const importing = ref(false); const reviewImporting = ref(false); const reviewStarting = ref(false); const reviewRunning = ref(false); const saving = ref(false); const error = ref('')
 const search = ref(''); const typeFilter = ref<LinkSourceType>(); const modeFilter = ref<LinkSubmissionMode>(); const approvalFilter = ref<LinkSourceApprovalStatus>(); const funnelFilter = ref<'all' | LinkSourceFunnelStage>('all')
 const dialogVisible = ref(false); const editingId = ref<number>(); const sourceFileInput = ref<HTMLInputElement>(); const reviewFileInput = ref<HTMLInputElement>()
 const savingIds = reactive(new Set<number>())
 const form = reactive<SourceForm>({ name: '', source_url: '', source_type: '无法判断', country: '', language: '', topic_tags: '', url_template: '', submission_mode: '仅观察', approval_status: '待审核', memo: '' })
 
 const load = async (force = false) => { loading.value = true; error.value = ''; try { const [sourceRows, review] = await Promise.all([getLinkSources(force), getLinkSourceReview()]); sources.value = sourceRows; reviewRun.value = review.run } catch (e) { error.value = e instanceof Error ? e.message : '来源加载失败' } finally { loading.value = false } }
+const agentUrl = 'http://127.0.0.1:4317'
+const readAgentStatus = async () => { try { const response = await fetch(`${agentUrl}/status`); if (!response.ok) return false; const result = await response.json() as { running?: boolean }; reviewRunning.value = Boolean(result.running); return true } catch { reviewRunning.value = false; return false } }
+const toggleReview = async () => {
+  if (reviewStarting.value) return
+  reviewStarting.value = true
+  try {
+    if (reviewRunning.value) {
+      const response = await fetch(`${agentUrl}/stop`, { method: 'POST' }); if (!response.ok) throw new Error('停止指令发送失败'); ElMessage.success('已发送停止指令'); return
+    }
+    const encrypted = localStorage.getItem('auth_token'); const token = encrypted ? (JSON.parse(atob(encrypted)) as { token?: string }).token : ''
+    if (!token) throw new Error('登录状态已失效，请重新登录')
+    const response = await fetch(`${agentUrl}/start`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ base_url: window.location.origin, token }) })
+    const result = await response.json() as { message?: string }
+    if (!response.ok) throw new Error(result.message || '本机轮询启动失败')
+    reviewRunning.value = true; ElMessage.success('轮询已启动，关闭此页面也会继续运行')
+  } catch (e) { ElMessage.error(e instanceof Error ? e.message : '本机执行器未连接，请先启动本机服务') }
+  finally { reviewStarting.value = false }
+}
 const filteredSources = computed(() => sources.value.filter(source => {
   if (funnelFilter.value !== 'all' && (source.funnel_stage || '未检查') !== funnelFilter.value) return false
   if (approvalFilter.value && source.approval_status !== approvalFilter.value) return false
@@ -137,6 +156,9 @@ const handleReviewImportFile = async (event: Event) => {
   finally { reviewImporting.value = false }
 }
 watch(dialogVisible, value => { if (!value) editingId.value = undefined })
+let reviewStatusTimer: number | undefined
+onMounted(() => { void readAgentStatus(); reviewStatusTimer = window.setInterval(() => { void readAgentStatus() }, 5000) })
+onUnmounted(() => { if (reviewStatusTimer) window.clearInterval(reviewStatusTimer) })
 void load()
 </script>
 

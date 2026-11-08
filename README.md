@@ -267,17 +267,14 @@ npm run domains:enrich -- \
 
 ### 外链来源轮询
 
-Mac Mini 本地执行器会按活动网站 × 来源生成组合队列。当前 101 个网站和 142 个来源为 14,342 个组合，每项打开来源页面并停留 10–15 秒。执行器在本地保存断点，D1 只保存最新运行汇总和每个来源的最终漏斗结果。
+Mac Mini 本地执行器会按活动网站 × 来源生成组合队列。当前 101 个网站和 142 个来源为 14,342 个组合，每项打开来源页面并停留 10–15 秒。执行器在本地保存断点，D1 只保存最新运行汇总和每个来源的最终漏斗结果。日常不需要命令行：打开台账的“外链来源”页面，点击“开始轮询”即可；页面关闭后仍会继续运行。
 
 ```bash
-export DOMAIN_MANAGER_URL="https://你的台账域名"
-export DOMAIN_MANAGER_API_TOKEN="你的登录 API Token"
-export BROWSER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-export LINK_REVIEW_STATE_FILE="$HOME/.domain-manager/link-source-review-state.json"
-npm run links:review
+cp scripts/com.ycdigi.domain-manager-link-review.plist "$HOME/Library/LaunchAgents/"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.ycdigi.domain-manager-link-review.plist"
 ```
 
-“建议保留”只表示页面可访问或发生重定向；“待删除”表示 404、受阻、超时或错误。系统不会提交表单、登录来源、检查 Google，也不会把访问记录标记为已获得外链。来源页可导入轮询结果并手动删除不需要的来源。
+首次安装后台服务才需要上面的两行。按钮点击时会自动使用当前台账登录会话。“建议保留”只表示页面可访问或发生重定向；“待删除”表示 404、受阻、超时或错误。系统不会提交表单、登录来源、检查 Google，也不会把访问记录标记为已获得外链。来源页可手动删除不需要的来源。
 
 域名的轻量行内编辑使用：
 

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.ycdigi.domain-manager-link-review</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/yc/.nvm/versions/node/v20.20.0/bin/node</string>
+    <string>/Users/yc/Documents/Domain Manager/scripts/link-source-review-agent.mjs</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>/Users/yc/Documents/Domain Manager</string>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>StandardOutPath</key>
+  <string>/tmp/domain-manager-link-review-agent.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/domain-manager-link-review-agent-error.log</string>
+</dict>
+</plist>

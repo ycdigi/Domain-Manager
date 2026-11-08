@@ -62,17 +62,13 @@ npm run links:audit -- --input ./links.txt --output ./link-sources-audit.json --
 
 ## Mac Mini 轮询
 
-先构建并准备本地浏览器，再设置环境变量：
+Mac Mini 已配置本地后台执行器并随登录自动启动。日常操作只需要打开台账的“外链来源”页面，点击“开始轮询”；页面关闭后任务仍会继续。按钮会显示“停止轮询”，页面会定期显示执行状态。
+
+本地执行器由 `scripts/link-source-review-agent.mjs` 提供，浏览器访问由 `scripts/link-source-review-worker.mjs` 完成。首次在其他 Mac Mini 安装时，使用下面的 LaunchAgent 文件安装后台服务：
 
 ```bash
-export DOMAIN_MANAGER_URL="https://你的台账域名"
-export DOMAIN_MANAGER_API_TOKEN="你的登录 API Token"
-export BROWSER_EXECUTABLE_PATH="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
-export LINK_REVIEW_STATE_FILE="$HOME/.domain-manager/link-source-review-state.json"
-export LINK_REVIEW_INTERVAL_MINUTES=1
-export LINK_REVIEW_STAY_MIN_MS=10000
-export LINK_REVIEW_STAY_MAX_MS=15000
-npm run links:review
+cp scripts/com.ycdigi.domain-manager-link-review.plist "$HOME/Library/LaunchAgents/"
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.ycdigi.domain-manager-link-review.plist"
 ```
 
-也可以设置 `BROWSER_WS_ENDPOINT` 连接一个专用的 Chrome 调试实例。不要把 API Token 写入仓库。运行结束后，来源页的漏斗会显示“建议保留”和“待删除”；你可以继续用页面的删除按钮清理来源。
+按钮点击时会把当前台账登录会话安全地交给本机执行器使用，不需要手动填写 URL、Token 或 Node 命令。运行结束后，来源页的漏斗会显示“建议保留”和“待删除”；你可以继续用页面的删除按钮清理来源。
