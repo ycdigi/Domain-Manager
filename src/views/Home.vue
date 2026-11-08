@@ -58,7 +58,7 @@
                     <el-select v-else-if="column.key === 'gsc'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.gsc_connected" :aria-label="`GSC 状态：${site.name}`" @change="value => saveSite(site, { gsc_connected: value })"><el-option v-for="item in serviceStates" :key="item" :value="item" :label="item" /></el-select>
                     <div v-else-if="column.key === 'income'" class="portfolio-money-cell"><span v-for="income in site.income_totals || []" :key="income.currency">{{ income.currency }} {{ Number(income.amount).toFixed(2) }}</span><small v-if="!(site.income_totals || []).length">未记录</small></div>
                     <div v-else-if="column.key === 'effort'" class="portfolio-number-cell"><strong>{{ site.latest_effort ? `${Number(site.latest_effort.hours).toFixed(1)} 小时` : '未记录' }}</strong><small v-if="site.latest_effort">{{ site.latest_effort.week_start }} 起</small></div>
-                    <el-select v-else-if="column.key === 'resources'" size="small" multiple collapse-tags clearable :max-collapse-tags="1" filterable :loading="resourceOptionsLoading" :disabled="savingSiteIds.has(site.id)" :model-value="site.resource_ids || []" :aria-label="`服务商 / 资源：${site.name}`" placeholder="未关联" @visible-change="visible => visible && loadResourceOptions()" @change="value => saveResources(site, value)"><el-option v-for="resource in resourceOptions" :key="resource.id" :value="resource.id!" :label="resourceOptionLabel(resource)" :disabled="resource.status === '停用'" /></el-select>
+                    <el-select v-else-if="column.key === 'resources'" class="portfolio-resource-select" size="small" clearable filterable :loading="resourceOptionsLoading" :disabled="savingSiteIds.has(site.id)" :model-value="primaryResourceId(site)" :aria-label="`服务商 / 资源：${site.name}`" :title="primaryResourceLabel(site)" placeholder="未关联" @visible-change="visible => visible && loadResourceOptions()" @change="value => saveResource(site, value)"><template #prefix><el-icon v-if="primaryResource(site)" aria-hidden="true"><component :is="resourceIcon(primaryResource(site)!.provider)" /></el-icon></template><el-option v-for="resource in resourceOptions" :key="resource.id" :value="resource.id!" :label="resource.name" :disabled="resource.status === '停用'"><template #default><span class="portfolio-resource-option"><el-icon aria-hidden="true"><component :is="resourceIcon(resource.provider)" /></el-icon><span>{{ resource.name }}</span></span></template></el-option></el-select>
                     <div v-else-if="column.key === 'expiry'" class="portfolio-expiry-cell"><strong>{{ primaryDomain(site)?.expiry_date || '未填写' }}</strong><small v-if="primaryDomain(site)">{{ primaryDomain(site)!.status }}</small></div>
                     <el-select v-else-if="column.key === 'computer'" size="small" filterable allow-create clearable default-first-option :disabled="savingSiteIds.has(site.id) || !primaryDomain(site)" :model-value="primaryDomain(site)?.computer_name || ''" :aria-label="`电脑：${site.name}`" placeholder="未选择" @change="value => saveComputer(site, value)"><el-option v-for="name in computerNames" :key="name" :value="name" :label="name" /></el-select>
                     <el-popover v-else-if="column.key === 'next_action'" :visible="nextActionOpen[site.id] || false" trigger="click" placement="bottom-start" :width="340" @update:visible="value => nextActionOpen[site.id] = value">
@@ -126,7 +126,7 @@
 import { computed, onActivated, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { useRoute, useRouter } from 'vue-router'
-import { EditPen, Plus, Refresh, Search, Sort, View } from '@element-plus/icons-vue'
+import { Cloudy, Connection, EditPen, Monitor, Platform, Plus, Refresh, Search, Sort, View } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
@@ -135,6 +135,7 @@ import type { ProviderResource, ProviderType } from '../../functions/types'
 import { api } from '../utils/request'
 import { invalidateData, localDate } from '../utils/workspaceCache'
 import { isWebsiteNew } from '../../shared/website-newness'
+import { sortComputerNames } from '../utils/computer-options'
 import '../styles/home/home.css'
 
 const stages: WebsiteStage[] = ['待评估', '验证', '增长', '维护', '暂停']
@@ -143,7 +144,6 @@ const industryOptions = ['计算器', '资讯站', '其他'] as const
 const platforms = ['WordPress', 'Astro', 'Next.js', '其他'] as const
 const serviceStates = ['未知', '已开通', '未开通'] as const
 const nextActionStatuses: Website['next_action_status'][] = ['待做', '处理中', '已完成']
-const providerLabels: Record<ProviderType, string> = { github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }
 type PortfolioColumnKey = 'identity' | 'platform' | 'ownership' | 'industry' | 'clicks' | 'adsense' | 'gsc' | 'income' | 'effort' | 'resources' | 'expiry' | 'computer' | 'next_action' | 'tasks' | 'potential' | 'domain_status' | 'stage' | 'actions'
 type PortfolioColumn = { key: PortfolioColumnKey; label: string; width: number; class?: string; sortable?: boolean }
 type ResourceLinkRow = { id: number; website_id: number; resource_id: number; role: string }
@@ -175,7 +175,7 @@ const createVisible = ref(false)
 const detailVisible = computed({ get: () => Boolean(route.query.site && selected.value), set: value => { if (!value && route.query.site) { const query = { ...route.query }; delete query.site; void router.replace({ query }) } } })
 const selected = ref<Website>()
 const newSite = reactive({ name: '', domain: '', registrar: '', service_type: '网站', registrar_date: '', expiry_date: '' })
-const computerNames = computed(() => [...new Set(websites.value.flatMap(site => site.domains.map(domain => domain.computer_name).filter((name): name is string => Boolean(name))))].sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' })))
+const computerNames = computed(() => sortComputerNames(websites.value.flatMap(site => site.domains.map(domain => domain.computer_name))))
 const matchesSearch = (site: Website) => {
   if (route.query.adsense_account && String(site.adsense_account_id) !== String(route.query.adsense_account)) return false
   if (route.query.resource && !(site.resource_ids || []).includes(Number(route.query.resource))) return false
@@ -274,7 +274,7 @@ const sortValue = (site: Website, key: PortfolioColumnKey): string | number => {
     case 'adsense': return site.adsense_connected
     case 'gsc': return site.gsc_connected
     case 'effort': return site.latest_effort?.hours ?? -1
-    case 'resources': return site.resource_names || ''
+    case 'resources': return primaryResourceLabel(site)
     case 'expiry': return domain?.expiry_date || ''
     case 'computer': return domain?.computer_name || ''
     case 'next_action': return `${site.next_action || ''}\u0000${site.next_action_due_date || ''}\u0000${site.next_action_status}`
@@ -361,6 +361,7 @@ const load = async (force = false) => {
       nextActionOriginals[site.id] = { ...nextActionDrafts[site.id] }
     }
     for (const site of websites.value) if (!clickDrafts[site.id]) clickDrafts[site.id] = { exact: site.daily_clicks ?? undefined, range: site.daily_clicks_range || '', date: site.clicks_updated_date || '' }
+    if (websites.value.some(site => (site.resource_ids || []).length)) void loadResourceOptions()
   }
   catch (e) { error.value = e instanceof Error ? e.message : '网站加载失败' }
   finally { loading.value = false }
@@ -393,25 +394,37 @@ const loadResourceOptions = async () => {
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '资源选项加载失败') }
   finally { resourceOptionsLoading.value = false }
 }
-const resourceOptionLabel = (resource: ProviderResource) => `${providerLabels[resource.provider]} · ${resource.name}`
+const resourceIcons = { github: Connection, cloudflare: Cloudy, vhost: Monitor, vps: Platform }
+const resourceIcon = (provider: ProviderType) => resourceIcons[provider]
+const primaryResourceId = (site: Website) => site.primary_resource_id ?? site.resource_ids?.[0]
+const primaryResource = (site: Website): ProviderResource | undefined => {
+  const id = primaryResourceId(site)
+  if (id == null) return undefined
+  return resourceOptions.value.find(resource => resource.id === id) || (site.primary_resource_provider && site.primary_resource_name ? {
+    id,
+    provider: site.primary_resource_provider,
+    name: site.primary_resource_name,
+    status: site.primary_resource_status || '正常'
+  } : undefined)
+}
+const primaryResourceLabel = (site: Website) => primaryResource(site)?.name || '未关联'
 const resourceRole = (provider: ProviderType) => ({ github: '代码仓库', cloudflare: '部署平台', vhost: '虚拟主机', vps: 'VPS' })[provider]
-const saveResources = async (site: Website, value: number[]) => {
+const saveResource = async (site: Website, value: number | string | null | undefined) => {
   if (savingSiteIds.has(site.id)) return
   savingSiteIds.add(site.id)
   try {
     await loadResourceOptions()
-    const selectedIds = new Set(value.map(Number))
     const links = await api.get<ResourceLinkRow[]>(`/api/resources/links?website_id=${site.id}`)
-    const existingIds = new Set(links.map(link => link.resource_id))
-    const removals = links.filter(link => !selectedIds.has(link.resource_id))
-    const additions = [...selectedIds].filter(id => !existingIds.has(id))
-    if (!removals.length && !additions.length) return
-    for (const id of additions) {
-      const resource = resourceOptions.value.find(item => item.id === id)
-      if (!resource) throw new Error('所选资源不存在或已停用')
-      await api.post('/api/resources/links', { website_id: site.id, resource_id: id, role: resourceRole(resource.provider), is_primary: false })
+    const selectedId = value == null || value === '' ? null : Number(value)
+    if (selectedId == null) {
+      const currentLink = links.find(link => link.resource_id === primaryResourceId(site))
+      if (currentLink) await api.delete(`/api/resources/links?id=${currentLink.id}`)
+    } else {
+      const resource = resourceOptions.value.find(item => item.id === selectedId)
+      if (!resource || resource.status === '停用') throw new Error('所选资源不存在或已停用')
+      const existingLink = links.find(link => link.resource_id === selectedId)
+      await api.post('/api/resources/links', { website_id: site.id, resource_id: selectedId, role: existingLink?.role || resourceRole(resource.provider), is_primary: true })
     }
-    for (const link of removals) await api.delete(`/api/resources/links?id=${link.id}`)
     invalidateData('/api/websites', '/api/resources/links')
     await load(true)
   } catch (e) {

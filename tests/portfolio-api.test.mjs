@@ -52,6 +52,23 @@ test('website creation requires and stores its first domain', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'No domain' }, 'POST'), 400)
 })
 
+test('website portfolio exposes the primary resource while preserving legacy links', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Resource site', domain: { domain: 'resource.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql(`
+    INSERT INTO provider_accounts (provider, name) VALUES ('github', 'main');
+    INSERT INTO provider_resources (account_id, provider, name, status) VALUES (1, 'github', 'legacy-repo', '正常');
+    INSERT INTO provider_resources (account_id, provider, name, status) VALUES (1, 'github', 'primary-repo', '正常');
+    INSERT INTO website_resources (website_id, resource_id, role, is_primary) VALUES (1, 1, '历史关联', 0);
+    INSERT INTO website_resources (website_id, resource_id, role, is_primary) VALUES (1, 2, '代码仓库', 1);
+  `)
+  const [site] = await call(sites.onRequestGet, context('/api/websites'))
+  assert.deepEqual(site.resource_ids, [1, 2])
+  assert.equal(site.primary_resource_id, 2)
+  assert.equal(site.primary_resource_provider, 'github')
+  assert.equal(site.primary_resource_name, 'primary-repo')
+  assert.equal(site.primary_resource_count, 2)
+})
+
 test('website newness uses the primary domain registration date and supports manual override', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Recent site', domain: { domain: 'recent.test', registrar: 'r', registrar_date: '2026-10-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   await call(sites.onRequestPost, context('/api/websites', { name: 'Old site', domain: { domain: 'old.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)

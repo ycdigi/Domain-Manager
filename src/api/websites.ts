@@ -53,6 +53,11 @@ export interface Website {
   review_count?: number
   resource_names?: string | null
   resource_ids?: number[]
+  primary_resource_id?: number | null
+  primary_resource_provider?: 'github' | 'cloudflare' | 'vhost' | 'vps' | null
+  primary_resource_name?: string | null
+  primary_resource_status?: string | null
+  primary_resource_count?: number
   provider_account_ids?: number[]
   current_income?: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }>
   latest_income?: { month: string; items: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }> } | null

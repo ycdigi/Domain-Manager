@@ -1,0 +1,168 @@
+import assert from 'node:assert/strict'
+import { execFileSync } from 'node:child_process'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+import { after, beforeEach, test } from 'node:test'
+import { createServer } from 'vite'
+import { database } from './helpers/database.mjs'
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+const migration = fs.readFileSync(path.join(root, 'schema-migration-v1.17.0.sql'), 'utf8')
+const migration118 = fs.readFileSync(path.join(root, 'schema-migration-v1.18.0.sql'), 'utf8')
+const server = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true, include: [] }, server: { middlewareMode: true }, appType: 'custom' })
+const sources = await server.ssrLoadModule('/functions/api/link-sources/index.ts')
+const sourceEdit = await server.ssrLoadModule('/functions/api/link-sources/[id]/index.ts')
+const sourceImport = await server.ssrLoadModule('/functions/api/link-sources/import/index.ts')
+const opportunities = await server.ssrLoadModule('/functions/api/websites/[id]/link-opportunities/index.ts')
+const opportunityEdit = await server.ssrLoadModule('/functions/api/websites/[id]/link-opportunities/[opportunity_id]/index.ts')
+const opportunityAttempts = await server.ssrLoadModule('/functions/api/websites/[id]/link-opportunities/[opportunity_id]/attempts/index.ts')
+const snapshotApi = await server.ssrLoadModule('/functions/api/export/snapshot/index.ts')
+const importData = await server.ssrLoadModule('/functions/api/domains/import.ts')
+const auth = await server.ssrLoadModule('/functions/utils/auth.ts')
+const shared = await server.ssrLoadModule('/shared/link-sources.ts')
+const store = database()
+let session
+const context = (url, body, method = 'GET', id = '1', opportunityId = '1', authorization = session) => ({
+  env: { DB: store.db, USER: 'test', PASS: 'secret' },
+  params: { id, opportunity_id: opportunityId },
+  request: new Request(`https://example.test${url}`, { method, headers: { ...(authorization ? { Authorization: `Bearer ${authorization}` } : {}), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
+})
+const call = async (handler, ctx, status = 200) => { const response = await handler(ctx); const body = await response.json(); assert.equal(response.status, status, JSON.stringify(body)); return body.data }
+beforeEach(async () => { store.init(); store.script(`PRAGMA foreign_keys=ON;\n${migration}\n${migration118}`); session = await auth.issueSessionToken('test', 'secret') })
+after(async () => { store.close(); await server.close() })
+
+test('v1.17 migration is repeatable and creates the link tables', () => {
+  store.script(migration)
+  store.script(migration118)
+  store.script(migration118)
+  const tables = store.sql("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('link_sources','website_link_opportunities','link_attempts') ORDER BY name;")
+  assert.deepEqual(tables.map(row => row.name), ['link_attempts', 'link_sources', 'website_link_opportunities'])
+  assert.equal(store.sql("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='uq_link_sources_source_template';")[0].count, 1)
+})
+
+test('sources default to pending observation and approved sources become enabled', async () => {
+  const pending = await call(sources.onRequestPost, context('/api/link-sources', { name: 'Example directory', source_url: 'example.com', url_template: 'https://example.com/submit?url=***' }, 'POST'), 201)
+  assert.equal(pending.source_url, 'https://example.com')
+  assert.equal(pending.url_template, 'https://example.com/submit?url={{target_url}}')
+  assert.equal(pending.approval_status, '待审核')
+  assert.equal(pending.submission_mode, '仅观察')
+  assert.equal(pending.enabled, 0)
+  const approved = await call(sourceEdit.onRequestPatch, context('/api/link-sources/1', { approval_status: '已批准' }, 'PATCH'), 200)
+  assert.equal(approved.enabled, 1)
+  const disabled = await call(sourceEdit.onRequestPatch, context('/api/link-sources/1', { enabled: 0 }, 'PATCH'), 200)
+  assert.equal(disabled.enabled, 0)
+  const edited = await call(sourceEdit.onRequestPatch, context('/api/link-sources/1', { memo: '保留停用状态' }, 'PATCH'), 200)
+  assert.equal(edited.enabled, 0)
+})
+
+test('source validation rejects unsafe templates and keeps duplicate sources unique', async () => {
+  await call(sources.onRequestPost, context('/api/link-sources', { name: 'Unsafe', source_url: 'https://example.com', url_template: 'https://{{target_url}}.example.com/' }, 'POST'), 400)
+  await call(sources.onRequestPost, context('/api/link-sources', { name: 'Safe', source_url: 'https://example.com', url_template: 'https://example.com/?q={{target_url}}' }, 'POST'), 201)
+  await call(sources.onRequestPost, context('/api/link-sources', { name: 'Duplicate', source_url: 'https://example.com/', url_template: 'https://example.com/?q={{target_url}}' }, 'POST'), 409)
+  await call(sources.onRequestPost, context('/api/link-sources', { name: 'No template', source_url: 'https://no-template.example' }, 'POST'), 201)
+  await call(sources.onRequestPost, context('/api/link-sources', { name: 'Duplicate without template', source_url: 'https://no-template.example/' }, 'POST'), 409)
+})
+
+test('submission address generation encodes target URLs and never permits non-HTTP schemes', () => {
+  const generated = shared.generateSubmissionUrl('https://directory.example/search?url={{target_url}}', 'site.example/path?a=1&b=two words')
+  assert.equal(new URL(generated).searchParams.get('url'), 'https://site.example/path?a=1&b=two%20words')
+  assert.equal(shared.generateSubmissionUrl('javascript:alert({{target_url}})', 'site.example'), null)
+  assert.equal(shared.generateSubmissionUrl('https://{{target_url}}.example/', 'site.example'), null)
+})
+
+test('pausing or disabling an approved source removes its queued candidates from processing', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site');")
+  await call(sources.onRequestPost, context('/api/link-sources', { name: 'Ready', source_url: 'https://ready.example', approval_status: '已批准' }, 'POST'), 201)
+  await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'site.example' }, 'POST'), 201)
+  await call(sourceEdit.onRequestPatch, context('/api/link-sources/1', { approval_status: '已暂停' }, 'PATCH'))
+  assert.equal(store.sql('SELECT status FROM website_link_opportunities WHERE id=1;')[0].status, '已暂停')
+  await call(sourceEdit.onRequestPatch, context('/api/link-sources/1', { approval_status: '已批准' }, 'PATCH'))
+  await call(opportunityEdit.onRequestPatch, context('/api/websites/1/link-opportunities/1', { status: '待处理' }, 'PATCH'))
+  await call(sourceEdit.onRequestPatch, context('/api/link-sources/1', { enabled: 0 }, 'PATCH'))
+  assert.equal(store.sql('SELECT status FROM website_link_opportunities WHERE id=1;')[0].status, '已暂停')
+})
+
+test('opportunities require an approved enabled source before entering the queue and deduplicate targets', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site');")
+  await call(sources.onRequestPost, context('/api/link-sources', { name: 'Pending', source_url: 'https://directory.example', url_template: 'https://directory.example/?url={{target_url}}' }, 'POST'), 201)
+  const pending = await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'example.com' }, 'POST'), 201)
+  assert.equal(pending.target_url, 'https://example.com')
+  assert.equal(pending.status, '待审核')
+  await call(opportunityEdit.onRequestPatch, context('/api/websites/1/link-opportunities/1', { status: '待处理' }, 'PATCH'), 400)
+  await call(sourceEdit.onRequestPatch, context('/api/link-sources/1', { approval_status: '已批准' }, 'PATCH'), 200)
+  const queued = await call(opportunityEdit.onRequestPatch, context('/api/websites/1/link-opportunities/1', { status: '待处理' }, 'PATCH'), 200)
+  assert.equal(queued.status, '待处理')
+  await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'https://example.com/' }, 'POST'), 409)
+})
+
+test('source import stays offline and imports audited rows as pending observation', async () => {
+  const result = await call(sourceImport.onRequestPost, context('/api/link-sources/import', { rows: [
+    { source_url: 'https://one.example', url_template: 'https://one.example/?url={{target_url}}', source_type: '工具目录', audit_flags: ['海外候选'] },
+    { source_url: 'https://bad.example', url_template: 'https://{{target_url}}.example', source_type: '工具目录' }
+  ] }, 'POST'))
+  assert.equal(result.created, 1)
+  assert.equal(result.skipped.length, 1)
+  assert.deepEqual(store.sql('SELECT approval_status, submission_mode, enabled FROM link_sources;'), [{ approval_status: '待审核', submission_mode: '仅观察', enabled: 0 }])
+})
+
+test('website deletion cascades opportunities and attempts', () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'site.example','r','2026-01-01','2027-01-01','网站'); INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'); INSERT INTO website_link_opportunities(website_id,source_id,target_url) VALUES (1,1,'https://site.example'); INSERT INTO link_attempts(opportunity_id,method,request_status) VALUES (1,'人工','需要人工');")
+  store.sql('DELETE FROM websites WHERE id=1;')
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_link_opportunities;')[0].count, 0)
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_attempts;')[0].count, 0)
+})
+
+test('link source data is included in snapshot export and can be restored', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'site.example','r','2026-01-01','2027-01-01','网站'); INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'); INSERT INTO website_link_opportunities(website_id,source_id,target_url) VALUES (1,1,'https://site.example'); INSERT INTO link_attempts(opportunity_id,method,request_status) VALUES (1,'人工','需要人工');")
+  const snapshot = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
+  assert.equal(snapshot.link_sources.length, 1)
+  assert.equal(snapshot.website_link_opportunities.length, 1)
+  assert.equal(snapshot.link_attempts.length, 1)
+  store.sql('DELETE FROM websites; DELETE FROM link_sources;')
+  await call(importData.onRequestPost, context('/api/domains/import', snapshot, 'POST'))
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_sources;')[0].count, 1)
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_link_opportunities;')[0].count, 1)
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_attempts;')[0].count, 1)
+})
+
+test('audit script classifies, cleans and reports duplicate templates without network access', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'link-audit-')); const input = path.join(dir, 'links.txt'); const output = path.join(dir, 'audit.json')
+  try {
+    fs.writeFileSync(input, 'https://directory.example/submit?url=***,\nhttps://directory.example/submit?url=***\nhttps://{{target_url}}.example/\n')
+    execFileSync('node', ['scripts/audit-link-sources.mjs', '--input', input, '--output', output], { cwd: root, encoding: 'utf8' })
+    const result = JSON.parse(fs.readFileSync(output, 'utf8'))
+    assert.equal(result.total, 3)
+    assert.equal(result.valid, 2)
+    assert.equal(result.duplicates, 1)
+    assert.equal(result.rows[0].url_template, 'https://directory.example/submit?url={{target_url}}')
+    assert.ok(result.rows[0].audit_flags.includes('包含尾部标点'))
+    assert.ok(result.rows[2].audit_flags.includes('占位符位于主机名'))
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('link APIs require the normal session token', async () => {
+  await call(sources.onRequestGet, context('/api/link-sources', undefined, 'GET', '1', '1', ''), 401)
+})
+
+test('manual attempts persist evidence and update the candidate status without requesting a third party', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url,approval_status,enabled) VALUES ('Source','https://source.example','已批准',1); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','待处理');")
+  await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '人工', request_status: '失败', confirmed_public_link: 1
+  }, 'POST'), 400)
+  await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '人工', request_status: '已完成', confirmed_public_link: 1
+  }, 'POST'), 400)
+  const attempt = await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '人工', request_status: '已完成', http_status: 200, confirmed_public_link: 1,
+    response_summary: '人工确认页面包含目标链接', evidence_url: 'https://source.example/page'
+  }, 'POST'), 201)
+  assert.equal(attempt.confirmed_public_link, 1)
+  assert.equal(store.sql('SELECT status, evidence_url, last_attempt_at FROM website_link_opportunities WHERE id=1;')[0].status, '已确认公开链接')
+  assert.equal((await call(opportunityAttempts.onRequestGet, context('/api/websites/1/link-opportunities/1/attempts'))).length, 1)
+  await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '人工', request_status: '失败', confirmed_public_link: 0, error_message: '页面拒绝提交'
+  }, 'POST'), 201)
+  assert.equal(store.sql('SELECT status FROM website_link_opportunities WHERE id=1;')[0].status, '请求失败')
+})

@@ -37,17 +37,20 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (validation) errors.push({ domain: key || '未知', error: validation })
         }
         if (!legacy) {
-            for (const table of ['website_income', 'website_effort', 'website_tasks', 'website_operations', 'website_ai_notes', 'website_resources']) {
+            for (const table of ['website_income', 'website_effort', 'website_tasks', 'website_operations', 'website_ai_notes', 'website_resources', 'website_link_opportunities']) {
                 if (input[table] === undefined) continue
                 if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
                 for (const row of input[table]) if (!row || !websites.some(site => site.id === row.website_id)) errors.push({ domain: table, error: '记录必须关联备份中的网站' })
             }
-            for (const [table, field, parent] of [['website_click_snapshots', 'task_id', 'website_tasks'], ['website_ai_note_versions', 'note_id', 'website_ai_notes'], ['adsense_income', 'adsense_account_id', 'adsense_accounts'], ['website_resources', 'resource_id', 'provider_resources']] as const) {
+            for (const table of ['link_sources', 'link_attempts']) {
+                if (input[table] !== undefined && !Array.isArray(input[table])) errors.push({ domain: table, error: '记录必须为数组' })
+            }
+            for (const [table, field, parent] of [['website_click_snapshots', 'task_id', 'website_tasks'], ['website_ai_note_versions', 'note_id', 'website_ai_notes'], ['adsense_income', 'adsense_account_id', 'adsense_accounts'], ['website_resources', 'resource_id', 'provider_resources'], ['website_link_opportunities', 'source_id', 'link_sources'], ['link_attempts', 'opportunity_id', 'website_link_opportunities']] as const) {
                 if (input[table] === undefined) continue
                 if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
                 for (const row of input[table]) if (!row || !Array.isArray(input[parent]) || !input[parent].some((item: Row) => item.id === row[field])) errors.push({ domain: table, error: `关联的 ${parent} 记录不在备份中` })
             }
-            for (const table of ['websites', 'website_tasks', 'website_ai_notes', 'adsense_accounts', 'provider_accounts', 'provider_resources']) {
+            for (const table of ['websites', 'website_tasks', 'website_ai_notes', 'adsense_accounts', 'provider_accounts', 'provider_resources', 'link_sources', 'website_link_opportunities', 'link_attempts']) {
                 if (input[table] === undefined) continue
                 if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
                 const ids = new Set<number>()
@@ -107,6 +110,8 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const taskMap = new Map<number, number>()
         const accountMap = new Map<number, number>()
         const resourceMap = new Map<number, number>()
+        const linkSourceMap = new Map<number, number>()
+        const opportunityMap = new Map<number, number>()
 
         if (legacy) {
             for (const old of domains) {
@@ -262,10 +267,38 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 if (!existing) write(db.prepare('INSERT INTO provider_resources (id,account_id,provider,name,resource_url,identifier,ip_address,port,region,status,expires_at,memo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)').bind(id,accountId,oldResource.provider,oldResource.name,oldResource.resource_url || null,identifier,oldResource.ip_address || null,oldResource.port || null,oldResource.region || null,oldResource.status || '正常',oldResource.expires_at || null,oldResource.memo || null))
                 resourceMap.set(Number(oldResource.id), id)
             }
+            for (const oldSource of input.link_sources || []) {
+                const existing = await db.prepare('SELECT id FROM link_sources WHERE source_url=? AND url_template IS ?').bind(oldSource.source_url, oldSource.url_template || null).first<{ id: number }>()
+                const id = existing?.id || await allocateId('link_sources')
+                const values = [oldSource.name, oldSource.source_url, oldSource.source_type || '无法判断', oldSource.country || null, oldSource.language || null, oldSource.topic_tags || null, oldSource.url_template || null, oldSource.submission_mode || '仅观察', oldSource.approval_status || '待审核', oldSource.approval_status === '已批准' ? (oldSource.enabled ?? 1) : 0, oldSource.audit_flags || null, oldSource.last_checked_at || null, oldSource.memo || null]
+                write(existing
+                    ? db.prepare('UPDATE link_sources SET name=?,source_url=?,source_type=?,country=?,language=?,topic_tags=?,url_template=?,submission_mode=?,approval_status=?,enabled=?,audit_flags=?,last_checked_at=?,memo=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(...values, id)
+                    : db.prepare('INSERT INTO link_sources (id,name,source_url,source_type,country,language,topic_tags,url_template,submission_mode,approval_status,enabled,audit_flags,last_checked_at,memo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
+                linkSourceMap.set(Number(oldSource.id), id)
+            }
             for (const link of input.website_resources || []) {
                 const websiteId = siteMap.get(Number(link.website_id)); const resourceId = resourceMap.get(Number(link.resource_id)); if (!websiteId || !resourceId) continue
                 if (link.is_primary) write(db.prepare('UPDATE website_resources SET is_primary=0 WHERE website_id=?').bind(websiteId))
                 write(db.prepare('INSERT INTO website_resources (website_id, resource_id, role, is_primary, memo) VALUES (?, ?, ?, ?, ?) ON CONFLICT(website_id, resource_id, role) DO UPDATE SET is_primary=excluded.is_primary, memo=excluded.memo').bind(websiteId, resourceId, link.role, link.is_primary || 0, link.memo || null))
+            }
+            for (const oldOpportunity of input.website_link_opportunities || []) {
+                const websiteId = siteMap.get(Number(oldOpportunity.website_id)); const sourceId = linkSourceMap.get(Number(oldOpportunity.source_id)); if (!websiteId || !sourceId) continue
+                const existing = await db.prepare('SELECT id FROM website_link_opportunities WHERE website_id=? AND source_id=? AND target_url=?').bind(websiteId, sourceId, oldOpportunity.target_url).first<{ id: number }>()
+                const id = existing?.id || await allocateId('website_link_opportunities')
+                const values = [websiteId, sourceId, oldOpportunity.target_url, oldOpportunity.status || '待审核', oldOpportunity.submission_url || null, oldOpportunity.title || null, oldOpportunity.description || null, oldOpportunity.anchor_text || null, oldOpportunity.next_run_at || null, oldOpportunity.last_attempt_at || null, oldOpportunity.evidence_url || null, oldOpportunity.last_error || null, oldOpportunity.memo || null]
+                write(existing
+                    ? db.prepare('UPDATE website_link_opportunities SET website_id=?,source_id=?,target_url=?,status=?,submission_url=?,title=?,description=?,anchor_text=?,next_run_at=?,last_attempt_at=?,evidence_url=?,last_error=?,memo=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(...values, id)
+                    : db.prepare('INSERT INTO website_link_opportunities (id,website_id,source_id,target_url,status,submission_url,title,description,anchor_text,next_run_at,last_attempt_at,evidence_url,last_error,memo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
+                opportunityMap.set(Number(oldOpportunity.id), id)
+            }
+            for (const oldAttempt of input.link_attempts || []) {
+                const opportunityId = opportunityMap.get(Number(oldAttempt.opportunity_id)); if (!opportunityId) continue
+                const existing = await db.prepare('SELECT id FROM link_attempts WHERE id=?').bind(oldAttempt.id).first<{ id: number }>()
+                const id = existing?.id || await allocateId('link_attempts')
+                const values = [opportunityId, oldAttempt.attempted_at || null, oldAttempt.method || '人工', oldAttempt.request_status || '需要人工', oldAttempt.http_status ?? null, oldAttempt.confirmed_public_link || 0, oldAttempt.error_message || null, oldAttempt.response_summary || null, oldAttempt.evidence_url || null]
+                write(existing
+                    ? db.prepare('UPDATE link_attempts SET opportunity_id=?,attempted_at=?,method=?,request_status=?,http_status=?,confirmed_public_link=?,error_message=?,response_summary=?,evidence_url=? WHERE id=?').bind(...values, id)
+                    : db.prepare('INSERT INTO link_attempts (id,opportunity_id,attempted_at,method,request_status,http_status,confirmed_public_link,error_message,response_summary,evidence_url) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
             }
             if (statements.length) await db.batch(statements)
         }

@@ -32,7 +32,11 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 (SELECT json_object('week_start', e.week_start, 'hours', e.hours) FROM website_effort e WHERE e.website_id=w.id ORDER BY e.week_start DESC LIMIT 1) AS latest_effort_json,
                 (SELECT json_group_array(DISTINCT wr.resource_id) FROM website_resources wr WHERE wr.website_id=w.id) AS resource_ids_json,
                 (SELECT json_group_array(DISTINCT r.account_id) FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND r.account_id IS NOT NULL) AS provider_account_ids_json,
-                (SELECT GROUP_CONCAT(DISTINCT r.provider || ': ' || r.name) FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id WHERE wr.website_id = w.id) AS resource_names
+                (SELECT GROUP_CONCAT(DISTINCT r.provider || ': ' || r.name) FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id WHERE wr.website_id = w.id) AS resource_names,
+                (SELECT json_object('id', r.id, 'provider', r.provider, 'name', r.name, 'status', r.status)
+                 FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id
+                 WHERE wr.website_id = w.id ORDER BY wr.is_primary DESC, wr.id LIMIT 1) AS primary_resource_json,
+                (SELECT COUNT(*) FROM website_resources wr WHERE wr.website_id = w.id) AS primary_resource_count
             FROM websites w ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
             ORDER BY CASE w.stage WHEN '验证' THEN 1 WHEN '增长' THEN 2 WHEN '维护' THEN 3 WHEN '暂停' THEN 4 ELSE 0 END, w.lifecycle, w.priority_order, w.id
         `).bind(...values).all<Record<string, unknown>>(), context.env.DB.prepare(`
@@ -65,8 +69,9 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         }
         for (const item of incomeTotals.results || []) incomeTotalsByWebsite.set(item.website_id, [...(incomeTotalsByWebsite.get(item.website_id) || []), { currency: item.currency, amount: Number(item.amount) }])
         return json((rows.results || []).map(row => {
-            const { domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, ...site } = row
+            const { domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, primary_resource_json: primaryResourceJson, ...site } = row
             const domains = JSON.parse(String(domainsJson || '[]'))
+            const primaryResource = primaryResourceJson ? JSON.parse(String(primaryResourceJson)) as { id: number; provider: string; name: string; status: string } : null
             const siteIncomes = incomeByWebsite.get(Number(site.id)) || []
             const currentIncome = siteIncomes.filter(item => item.income_month === currentMonth)
             const latestMonth = siteIncomes[0]?.income_month
@@ -82,7 +87,11 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 income_totals: incomeTotalsByWebsite.get(Number(site.id)) || [],
                 latest_effort: effortJson ? JSON.parse(String(effortJson)) : null,
                 resource_ids: JSON.parse(String(resourceIds || '[]')),
-                provider_account_ids: JSON.parse(String(accountIds || '[]'))
+                provider_account_ids: JSON.parse(String(accountIds || '[]')),
+                primary_resource_id: primaryResource?.id || null,
+                primary_resource_provider: primaryResource?.provider || null,
+                primary_resource_name: primaryResource?.name || null,
+                primary_resource_status: primaryResource?.status || null
             }
         }))
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取网站失败') }

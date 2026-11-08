@@ -136,6 +136,64 @@ export interface WebsiteResourceLink {
     resource?: ProviderResource
 }
 
+export type LinkSourceType = '搜索页' | 'SEO 查询页' | '工具目录' | '行业资源页' | '社区页面' | '可能的提交页' | '无法判断'
+export type LinkSubmissionMode = '人工提交' | '允许自动处理' | '仅观察'
+export type LinkSourceApprovalStatus = '待审核' | '已批准' | '已暂停' | '已拒绝' | '已失效'
+export type LinkOpportunityStatus = '待审核' | '待处理' | '已生成提交地址' | '请求已完成' | '已提交待审核' | '已确认公开链接' | '被拒绝' | '来源失效' | '请求失败' | '需要人工处理' | '已暂停'
+
+export interface LinkSource {
+    id?: number
+    name: string
+    source_url: string
+    source_type: LinkSourceType
+    country?: string | null
+    language?: string | null
+    topic_tags?: string | null
+    url_template?: string | null
+    submission_mode: LinkSubmissionMode
+    approval_status: LinkSourceApprovalStatus
+    enabled: number
+    audit_flags?: string | null
+    last_checked_at?: string | null
+    memo?: string | null
+    created_at?: string
+    updated_at?: string
+    opportunity_count?: number
+}
+
+export interface WebsiteLinkOpportunity {
+    id?: number
+    website_id: number
+    source_id: number
+    target_url: string
+    status: LinkOpportunityStatus
+    submission_url?: string | null
+    title?: string | null
+    description?: string | null
+    anchor_text?: string | null
+    next_run_at?: string | null
+    last_attempt_at?: string | null
+    evidence_url?: string | null
+    last_error?: string | null
+    memo?: string | null
+    source?: LinkSource
+    created_at?: string
+    updated_at?: string
+}
+
+export interface LinkAttempt {
+    id?: number
+    opportunity_id: number
+    attempted_at?: string
+    method: '人工' | '自动'
+    request_status: '已完成' | '失败' | '需要人工'
+    http_status?: number | null
+    confirmed_public_link: number
+    error_message?: string | null
+    response_summary?: string | null
+    evidence_url?: string | null
+}
+
 export interface ProviderCredential {
     id?: number
     account_id: number

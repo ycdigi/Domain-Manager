@@ -30,7 +30,7 @@ assert(fs.existsSync(path.join(root, 'functions/api/websites/[id]/operations/ind
 assert(fs.existsSync(path.join(root, 'src/views/Domains.vue')), '域名资产视图缺失')
 for (const file of ['src/components/DomainDetailDrawer.vue', 'src/components/DomainDialog.vue', 'functions/api/domains/[id]/todos/index.ts', 'functions/api/domains/[id]/todos/[todo_id]/index.ts']) assert(!fs.existsSync(path.join(root, file)), `旧域名功能入口仍存在: ${file}`)
 for (const table of ['domain_resources', 'domain_todos', 'domain_operations', 'adsense_income_domains']) assert(!source.includes(table), `运行代码仍引用已迁移数据表: ${table}`)
-for (const table of ['websites', 'domains', 'website_income', 'website_effort', 'website_tasks', 'website_click_snapshots', 'website_resources', 'website_operations', 'website_ai_notes']) assert(read('schema.sql').includes(`CREATE TABLE IF NOT EXISTS ${table}`), `网站模型缺表: ${table}`)
+for (const table of ['websites', 'domains', 'website_income', 'website_effort', 'website_tasks', 'website_click_snapshots', 'website_resources', 'website_operations', 'website_ai_notes', 'link_sources', 'website_link_opportunities', 'link_attempts']) assert(read('schema.sql').includes(`CREATE TABLE IF NOT EXISTS ${table}`), `网站模型缺表: ${table}`)
 assert(!source.includes('style="width:100%"'), '仍存在可迁移的 width:100% 内联样式')
 assert(!source.includes('<style scoped>'), '仍存在未外置的模板内联样式')
 

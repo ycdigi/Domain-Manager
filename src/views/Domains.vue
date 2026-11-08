@@ -35,7 +35,7 @@
         <el-form-item label="服务类型" required><el-input v-model="form.service_type" /></el-form-item>
         <el-form-item label="域名用途"><el-select v-model="form.domain_role"><el-option v-for="role in domainRoles" :key="role" :label="role" :value="role" /></el-select></el-form-item>
         <el-form-item label="状态"><el-select v-model="form.status"><el-option label="在线" value="在线" /><el-option label="离线" value="离线" /></el-select></el-form-item>
-        <el-form-item label="管理电脑"><el-input v-model="form.computer_name" maxlength="100" /></el-form-item>
+        <el-form-item label="管理电脑"><el-select v-model="form.computer_name" filterable allow-create clearable default-first-option placeholder="选择或输入电脑"><el-option v-for="name in computerNames" :key="name" :value="name" :label="name" /></el-select></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.memo" type="textarea" :rows="2" maxlength="2000" /></el-form-item>
       </el-form>
       <template #footer><div class="dialog-footer"><el-button :disabled="saving" @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveDomain">保存</el-button></div></template>
@@ -44,7 +44,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { computed, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Delete, Plus, Refresh } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
@@ -53,6 +53,7 @@ import { api } from '../utils/request'
 import { cachedGet, invalidateData } from '../utils/workspaceCache'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { getWriteQueue } from '../utils/writeQueue'
+import { sortComputerNames } from '../utils/computer-options'
 
 interface DomainRecord { id: number; website_id: number | null; domain: string; registrar: string; registrar_link?: string | null; registrar_date: string; expiry_date: string; service_type: string; domain_role: '主域名' | '跳转域名' | '备用域名'; is_primary: number; status: '在线' | '离线'; computer_name?: string | null; memo?: string | null; last_status_check_at?: string | null }
 const domainRoles = ['主域名', '跳转域名', '备用域名'] as const
@@ -62,6 +63,7 @@ const websites = ref<Website[]>([])
 const loading = ref(false); const saving = ref(false); const error = ref(''); const dialogVisible = ref(false); const editingId = ref<number>(); const checkingId = ref<number | null>(null)
 const emptyForm = () => ({ website_id: undefined as number | undefined, domain: '', registrar: '', registrar_link: '', registrar_date: '', expiry_date: '', service_type: '网站', domain_role: '备用域名', status: '离线', computer_name: '', memo: '' })
 const form = reactive(emptyForm())
+const computerNames = computed(() => sortComputerNames(domains.value.map(domain => domain.computer_name)))
 const load = async (force = false) => {
   loading.value = true; error.value = ''
   try {

@@ -25,6 +25,19 @@
 .website-detail-drawer .portfolio-income-form, .website-detail-drawer .portfolio-effort-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:var(--space-xs); margin-bottom:var(--space-sm); }
 .website-detail-drawer .portfolio-income-form .el-button, .website-detail-drawer .portfolio-effort-form .el-button { grid-column:1/-1; }
 .website-detail-drawer .portfolio-operation-form { display:grid; grid-template-columns:1fr 1fr auto; gap:var(--space-xs); margin-bottom:var(--space-sm); }
+.website-detail-drawer .portfolio-link-form { display:grid; grid-template-columns:1.2fr 1.4fr 1fr 1fr 150px auto; gap:var(--space-xs); padding-bottom:var(--space-sm); border-bottom:1px solid var(--color-rule); }
+.website-detail-drawer .portfolio-link-form .portfolio-detail-full { grid-column:1/-1; }
+.website-detail-drawer .portfolio-link-list { display:grid; }
+.website-detail-drawer .portfolio-link-row { display:grid; grid-template-columns:minmax(0,1fr) 190px; align-items:start; gap:var(--space-md); padding:var(--space-sm) 0; border-bottom:1px solid var(--color-rule); }
+.website-detail-drawer .portfolio-link-main { display:grid; min-width:0; gap:var(--space-2xs); }
+.website-detail-drawer .portfolio-link-main a { color:var(--color-link); overflow-wrap:anywhere; }
+.website-detail-drawer .portfolio-link-main small { color:var(--color-muted); font-size:var(--text-xs); overflow-wrap:anywhere; }
+.website-detail-drawer .portfolio-link-error { color:var(--color-error) !important; }
+.website-detail-drawer .portfolio-link-preview { margin:var(--space-xs) 0 0; color:var(--color-muted); font-size:var(--text-xs); overflow-wrap:anywhere; }
+.website-detail-drawer .portfolio-attempt-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 var(--space-md); }
+.website-detail-drawer .portfolio-attempt-full { grid-column:1/-1; }
+.website-detail-drawer .portfolio-attempt-history { margin-top:var(--space-md); padding-top:var(--space-sm); border-top:1px solid var(--color-rule); }
+.website-detail-drawer .portfolio-attempt-history h3 { margin:0 0 var(--space-xs); font-size:var(--text-sm); }
 .website-detail-drawer .portfolio-note-row { padding:var(--space-sm) 0; border-bottom:1px solid var(--color-rule); }
 .website-detail-drawer .portfolio-note-row header { display:flex; align-items:center; justify-content:space-between; gap:var(--space-sm); }
 .website-detail-drawer .portfolio-note-row header > div:first-child { display:grid; gap:var(--space-2xs); }
@@ -44,5 +57,8 @@
  .website-detail-drawer .portfolio-task-controls { justify-content:flex-start; }
  .website-detail-drawer .portfolio-operation-form { grid-template-columns:1fr 1fr; }
  .website-detail-drawer .portfolio-operation-form .el-button { grid-column:1/-1; }
+ .website-detail-drawer .portfolio-link-form, .website-detail-drawer .portfolio-attempt-form-grid { grid-template-columns:1fr; }
+ .website-detail-drawer .portfolio-link-form .portfolio-detail-full, .website-detail-drawer .portfolio-attempt-full { grid-column:auto; }
+ .website-detail-drawer .portfolio-link-row { grid-template-columns:minmax(0,1fr); }
  .website-detail-drawer .portfolio-note-row header { align-items:flex-start; flex-direction:column; }
 }

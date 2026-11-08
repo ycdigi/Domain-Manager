@@ -121,12 +121,11 @@ try:
         if available_resources:
             resource = available_resources[0]
             selected_resource_id = resource['id']
-            provider_label = {'github': 'GitHub', 'cloudflare': 'Cloudflare', 'vhost': '虚拟主机', 'vps': 'VPS'}[resource['provider']]
             with page.expect_response(lambda response: response.url.endswith('/api/resources') and response.request.method == 'GET'):
                 site_row.locator('.el-select:has(input[aria-label="服务商 / 资源：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
             with page.expect_response(lambda response: response.url.endswith('/api/resources/links') and response.request.method == 'POST') as resource_response:
-                page.get_by_role('option', name=f"{provider_label} · {resource['name']}", exact=True).click()
-            assert json.loads(resource_response.value.request.post_data) == {'website_id': site_id, 'resource_id': resource['id'], 'role': {'github': '代码仓库', 'cloudflare': '部署平台', 'vhost': '虚拟主机', 'vps': 'VPS'}[resource['provider']], 'is_primary': False}
+                page.get_by_role('option', name=resource['name'], exact=True).click()
+            assert json.loads(resource_response.value.request.post_data) == {'website_id': site_id, 'resource_id': resource['id'], 'role': {'github': '代码仓库', 'cloudflare': '部署平台', 'vhost': '虚拟主机', 'vps': 'VPS'}[resource['provider']], 'is_primary': True}
         local_sites = call('/api/websites')
         machines = {domain.get('computer_name') for site in local_sites for domain in site['domains'] if domain.get('computer_name')}
         current_machine = next(domain.get('computer_name') for site in local_sites if site['id'] == site_id for domain in site['domains'] if domain['is_primary'])

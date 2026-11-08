@@ -38,7 +38,7 @@ sites = [
          resource_ids=[], resource_names=None, open_task_count=0, review_count=0),
 ]
 resources = [dict(id=1, provider="cloudflare", name="Build Site", status="正常"), dict(id=2, provider="github", name="Source Repo", status="正常")]
-resource_links = [dict(id=1, website_id=6, resource_id=2, role="代码仓库")]
+resource_links = [dict(id=1, website_id=6, resource_id=2, role="代码仓库", is_primary=0)]
 resource_deletions = []
 fail_resource_add = {"value": True}
 pending_action_writes = []
@@ -73,10 +73,16 @@ with sync_playwright() as p:
                 data = [] if mode["value"] == "empty" else json.loads(json.dumps(sites))
                 if mode["resource_refresh"]:
                     for site in data:
-                        ids = sorted(link["resource_id"] for link in resource_links if link["website_id"] == site["id"])
+                        links = [link for link in resource_links if link["website_id"] == site["id"]]
+                        ids = sorted(link["resource_id"] for link in links)
                         site["resource_ids"] = ids
                         selected = [resource for resource in resources if resource["id"] in ids]
                         site["resource_names"] = ", ".join(f"{resource['provider']}: {resource['name']}" for resource in selected) or None
+                        primary = next((link for link in links if link.get("is_primary")), links[0] if links else None)
+                        primary_resource = next((resource for resource in selected if resource["id"] == primary["resource_id"]), None) if primary else None
+                        site["primary_resource_id"] = primary_resource["id"] if primary_resource else None
+                        site["primary_resource_provider"] = primary_resource["provider"] if primary_resource else None
+                        site["primary_resource_name"] = primary_resource["name"] if primary_resource else None
                 route.fulfill(json={"status": 200, "message": "成功", "data": data})
         elif url.endswith("/api/domains") and request.method == "GET":
             domains = [domain for site in sites for domain in site["domains"]]
@@ -108,12 +114,21 @@ with sync_playwright() as p:
                 mode["resource_refresh"] = True
                 route.fulfill(status=400, json={"status": 400, "message": "模拟资源关联失败", "data": None})
                 return
+            if link.get("is_primary"):
+                for existing in resource_links:
+                    if existing["website_id"] == link["website_id"]:
+                        existing["is_primary"] = 0
             link.update(id=len(resource_links) + 1, resource_id=int(link["resource_id"]))
             resource_links.append(link)
             site = next(site for site in sites if site["id"] == link["website_id"])
             site["resource_ids"] = sorted(set(site.get("resource_ids", []) + [link["resource_id"]]))
             selected = [resource for resource in resources if resource["id"] in site["resource_ids"]]
             site["resource_names"] = ", ".join(f"{resource['provider']}: {resource['name']}" for resource in selected) or None
+            primary_resource = next((resource for resource in selected if resource["id"] == link["resource_id"]), None)
+            if link.get("is_primary") and primary_resource:
+                site["primary_resource_id"] = primary_resource["id"]
+                site["primary_resource_provider"] = primary_resource["provider"]
+                site["primary_resource_name"] = primary_resource["name"]
             route.fulfill(status=201, json={"status": 201, "message": "资源关联成功", "data": link})
         elif url.endswith("/api/resources/links") and request.method == "DELETE":
             link_id = int(request.url.split("id=")[-1])
@@ -122,6 +137,10 @@ with sync_playwright() as p:
             resource_links.remove(removed)
             site = next(site for site in sites if site["id"] == removed["website_id"])
             site["resource_ids"] = [resource_id for resource_id in site.get("resource_ids", []) if resource_id != removed["resource_id"]]
+            if site.get("primary_resource_id") == removed["resource_id"]:
+                site["primary_resource_id"] = None
+                site["primary_resource_provider"] = None
+                site["primary_resource_name"] = None
             route.fulfill(json={"status": 200, "message": "资源关联已解除", "data": None})
         elif "/api/websites/" in url and request.method == "PATCH" and url.rsplit("/", 1)[-1].isdigit():
             website_id = int(url.rsplit("/", 1)[-1])
@@ -202,11 +221,11 @@ with sync_playwright() as p:
     alpha_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Alpha build"))
     click_select(alpha_row, "服务商 / 资源：Alpha build")
     with page.expect_response(lambda response: response.url.endswith("/api/resources/links") and response.request.method == "POST") as failed_resource_add:
-        page.get_by_role("option", name="Cloudflare · Build Site", exact=True).click()
+        page.get_by_role("option", name="Build Site", exact=True).click()
     assert failed_resource_add.value.status == 400
-    assert resource_links == [dict(id=1, website_id=6, resource_id=2, role="代码仓库")]
+    assert resource_links == [dict(id=1, website_id=6, resource_id=2, role="代码仓库", is_primary=0)]
     assert resource_deletions == [], "old resources must remain until new associations succeed"
-    expect(alpha_row.locator('.el-select:has(input[aria-label="服务商 / 资源：Alpha build"])')).to_contain_text("GitHub")
+    expect(alpha_row.locator('.el-select:has(input[aria-label="服务商 / 资源：Alpha build"])')).to_contain_text("Source Repo")
     build_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
     build_row.get_by_role("button", name="编辑日点击：Build one").click()
     click_editor = page.locator('.portfolio-click-editor:visible')
@@ -221,8 +240,8 @@ with sync_playwright() as p:
     assert json.loads(platform_response.value.request.post_data) == {"platform": "Next.js", "platform_other": None}
     click_select(build_row, "服务商 / 资源：Build one")
     with page.expect_response(lambda response: response.url.endswith("/api/resources/links") and response.request.method == "POST") as resource_response:
-        page.get_by_role("option", name="Cloudflare · Build Site", exact=True).click()
-    assert json.loads(resource_response.value.request.post_data) == {"website_id": 1, "resource_id": 1, "role": "部署平台", "is_primary": False}
+        page.get_by_role("option", name="Build Site", exact=True).click()
+    assert json.loads(resource_response.value.request.post_data) == {"website_id": 1, "resource_id": 1, "role": "部署平台", "is_primary": True}
     with page.expect_response(lambda response: response.url.endswith("/api/domains/1") and response.request.method == "PATCH") as computer_response:
         click_select(build_row, "电脑：Build one")
         page.get_by_role("option", name="Windows PC", exact=True).click()
