@@ -32,6 +32,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (!targetUrl) return json(null, 400, '目标 URL 必须是有效的 HTTP 或 HTTPS 地址')
         const status = data.status == null ? (canQueueOpportunity(source.approval_status, source.enabled) ? '待处理' : '待审核') : String(data.status)
         const statusError = validateOpportunityStatus(status); if (statusError) return json(null, 400, statusError)
+        if (status === '已确认公开链接') return json(null, 400, '公开链接结论必须通过带证据的人工尝试记录')
         if (status === '待处理' && !canQueueOpportunity(source.approval_status, source.enabled)) return json(null, 400, '来源必须已批准并启用后才能进入待处理')
         const submissionUrl = data.submission_url == null || data.submission_url === '' ? null : validHttpUrl(data.submission_url)
         if (data.submission_url != null && !submissionUrl) return json(null, 400, '提交 URL 必须是有效的 HTTP 或 HTTPS 地址')

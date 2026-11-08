@@ -97,6 +97,13 @@ test('opportunities require an approved enabled source before entering the queue
   await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'https://example.com/' }, 'POST'), 409)
 })
 
+test('public-link conclusions can only be written by an evidenced attempt', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url,approval_status,enabled) VALUES ('Source','https://source.example','已批准',1);")
+  await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'site.example', status: '已确认公开链接' }, 'POST'), 400)
+  await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'site.example' }, 'POST'), 201)
+  await call(opportunityEdit.onRequestPatch, context('/api/websites/1/link-opportunities/1', { status: '已确认公开链接' }, 'PATCH'), 400)
+})
+
 test('source import stays offline and imports audited rows as pending observation', async () => {
   const result = await call(sourceImport.onRequestPost, context('/api/link-sources/import', { rows: [
     { source_url: 'https://one.example', url_template: 'https://one.example/?url={{target_url}}', source_type: '工具目录', audit_flags: ['海外候选'] },

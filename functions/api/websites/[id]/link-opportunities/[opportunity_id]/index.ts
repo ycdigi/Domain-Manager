@@ -21,6 +21,7 @@ export const onRequestPatch: PagesFunction<Env> = async context => {
         if (!targetUrl) return json(null, 400, '目标 URL 必须是有效的 HTTP 或 HTTPS 地址')
         const status = String(merged.status)
         const statusError = validateOpportunityStatus(status); if (statusError) return json(null, 400, statusError)
+        if (status === '已确认公开链接') return json(null, 400, '公开链接结论必须通过带证据的人工尝试记录')
         if (status === '待处理' && !canQueueOpportunity(current.approval_status, current.source_enabled)) return json(null, 400, '来源必须已批准并启用后才能进入待处理')
         const submissionUrl = body.submission_url === undefined ? current.submission_url : urlField(body.submission_url)
         const evidenceUrl = body.evidence_url === undefined ? current.evidence_url : urlField(body.evidence_url)
