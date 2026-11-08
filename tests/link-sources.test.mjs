@@ -80,6 +80,17 @@ test('review results classify sources for the funnel without approving or enabli
   ])
 })
 
+test('running review summaries do not claim a completion time', async () => {
+  store.sql("INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example');")
+  await call(sourceReview.onRequestPost, context('/api/link-sources/review', {
+    run: { planned_count: 1, completed_count: 0, failed_count: 0, status: '运行中', started_at: '2026-11-08T14:21:07.623Z' },
+    results: []
+  }, 'POST'))
+  assert.deepEqual(store.sql('SELECT status,started_at,completed_at FROM link_source_review_runs;'), [
+    { status: '运行中', started_at: '2026-11-08T14:21:07.623Z', completed_at: null }
+  ])
+})
+
 test('v1.19 migration preserves attempts and converts direct historical outcomes', () => {
   store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url,approval_status,enabled) VALUES ('Source','https://source.example','已批准',1); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','被拒绝');")
   store.sql('DROP INDEX idx_link_attempts_opportunity; DROP TABLE link_attempts; CREATE TABLE link_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, opportunity_id INTEGER NOT NULL, attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP, method TEXT NOT NULL CHECK(method IN (\'人工\',\'自动\')), request_status TEXT NOT NULL CHECK(request_status IN (\'已完成\',\'失败\',\'需要人工\')), http_status INTEGER, confirmed_public_link INTEGER NOT NULL DEFAULT 0 CHECK(confirmed_public_link IN (0,1)), error_message TEXT, response_summary TEXT, evidence_url TEXT, FOREIGN KEY(opportunity_id) REFERENCES website_link_opportunities(id) ON DELETE CASCADE); CREATE INDEX idx_link_attempts_opportunity ON link_attempts(opportunity_id, attempted_at DESC); INSERT INTO link_attempts(opportunity_id,method,request_status,response_summary) VALUES (1,\'人工\',\'需要人工\',\'保留旧记录\');')

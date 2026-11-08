@@ -23,8 +23,12 @@ export const buildVisitUrl = (source, targetUrl) => {
   const target = normalizeTargetUrl(targetUrl)
   if (!target) return null
   const template = typeof source.url_template === 'string' && source.url_template.trim() ? source.url_template.trim() : null
-  const raw = template ? template.replace(/\{\{target_url\}\}/g, encodeURIComponent(target)) : source.source_url
-  return normalizeTargetUrl(raw)
+  if (template) return normalizeTargetUrl(template.replace(/\{\{target_url\}\}/g, encodeURIComponent(target)))
+  const sourceUrl = normalizeTargetUrl(source.source_url)
+  if (!sourceUrl) return null
+  const visitUrl = new URL(sourceUrl)
+  visitUrl.searchParams.set('dm_target_url', target)
+  return visitUrl.toString().replace(/\/$/, '')
 }
 
 export const classifyResponse = ({ status, finalUrl, requestedUrl, error } = {}) => {
@@ -86,14 +90,15 @@ const apiRequest = async (baseUrl, token, endpoint, options = {}) => {
 const loadState = async file => {
   try { return JSON.parse(await fs.readFile(file, 'utf8')) } catch { return { completed: {}, sourceResults: {} } }
 }
-const saveState = async (file, state) => {
+export const saveState = async (file, state) => {
+  await fs.mkdir(path.dirname(file), { recursive: true })
   const temp = `${file}.tmp`
   await fs.writeFile(temp, JSON.stringify(state, null, 2))
   await fs.rename(temp, file)
 }
 const numberEnv = (name, fallback) => Number.isFinite(Number(process.env[name])) ? Number(process.env[name]) : fallback
 
-export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, intervalMinutes = DEFAULT_MINUTES, stayMinMs = DEFAULT_STAY_MIN_MS, stayMaxMs = DEFAULT_STAY_MAX_MS, executablePath, wsEndpoint, shouldStop = () => false } = {}) => {
+export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, intervalMinutes = DEFAULT_MINUTES, stayMinMs = DEFAULT_STAY_MIN_MS, stayMaxMs = DEFAULT_STAY_MAX_MS, executablePath, wsEndpoint, headless = false, shouldStop = () => false } = {}) => {
   if (!baseUrl || !token) throw new Error('需要 DOMAIN_MANAGER_URL 和 DOMAIN_MANAGER_API_TOKEN')
   const [websites, sources] = await Promise.all([
     apiRequest(baseUrl, token, '/api/websites?lifecycle=active'),
@@ -108,14 +113,17 @@ export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, inte
     await apiRequest(baseUrl, token, '/api/link-sources/review', { method: 'POST', body: JSON.stringify({ run: { planned_count: total, completed_count: total, failed_count: 0, status: '已完成', started_at: startedAt, completed_at: new Date().toISOString() }, results: Object.values(state.sourceResults) }) })
     return { planned: total, completed: total, skipped: 0, failed: 0 }
   }
-  const browser = wsEndpoint
-    ? await chromium.connectOverCDP(wsEndpoint)
-    : await chromium.launch({ headless: false, executablePath: executablePath || process.env.BROWSER_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' })
-  const context = wsEndpoint ? await browser.newContext() : (browser.contexts()[0] || await browser.newContext())
-  const page = context.pages()[0] || await context.newPage()
+  let browser
+  let context
   let failed = 0
   let stopped = false
+  let executionError = null
   try {
+    browser = wsEndpoint
+      ? await chromium.connectOverCDP(wsEndpoint)
+      : await chromium.launch({ headless, executablePath: executablePath || process.env.BROWSER_EXECUTABLE_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' })
+    context = wsEndpoint ? await browser.newContext() : (browser.contexts()[0] || await browser.newContext())
+    const page = context.pages()[0] || await context.newPage()
     for (const item of queue) {
       if (shouldStop()) { stopped = true; break }
       const source = sources.find(row => Number(row.id) === item.source_id)
@@ -133,11 +141,22 @@ export const run = async ({ baseUrl, token, stateFile = DEFAULT_STATE_FILE, inte
       await saveState(stateFile, state)
       if (queue.indexOf(item) < queue.length - 1) await sleep(Math.max(0, intervalMinutes * 60_000 - (stayMinMs + 1_000)))
     }
+  } catch (error) {
+    executionError = error instanceof Error ? error : new Error(String(error))
+    failed += 1
   } finally {
-    if (wsEndpoint) await context.close()
-    else await browser.close()
+    if (wsEndpoint && context) await context.close()
+    else if (browser) await browser.close()
   }
-  await apiRequest(baseUrl, token, '/api/link-sources/review', { method: 'POST', body: JSON.stringify({ run: { planned_count: total, completed_count: Object.keys(state.completed).length, failed_count: failed, status: stopped || failed ? '部分完成' : '已完成', started_at: startedAt, completed_at: new Date().toISOString() }, results: Object.values(state.sourceResults) }) })
+  const finalStatus = executionError ? '失败' : stopped || failed ? '部分完成' : '已完成'
+  let finalError = null
+  try {
+    await apiRequest(baseUrl, token, '/api/link-sources/review', { method: 'POST', body: JSON.stringify({ run: { planned_count: total, completed_count: Object.keys(state.completed).length, failed_count: failed, status: finalStatus, started_at: startedAt, completed_at: new Date().toISOString() }, results: Object.values(state.sourceResults) }) })
+  } catch (error) {
+    finalError = error instanceof Error ? error : new Error(String(error))
+  }
+  if (executionError) throw executionError
+  if (finalError) throw finalError
   return { planned: total, completed: Object.keys(state.completed).length, skipped: 0, failed, stopped }
 }
 

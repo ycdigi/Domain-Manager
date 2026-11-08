@@ -1,6 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { buildQueue, buildVisitUrl, classifyResponse, mergeSourceResult } from '../scripts/link-source-review-worker.mjs'
+import fs from 'node:fs/promises'
+import os from 'node:os'
+import path from 'node:path'
+import { buildQueue, buildVisitUrl, classifyResponse, mergeSourceResult, saveState } from '../scripts/link-source-review-worker.mjs'
 
 test('worker creates one visit for every active website and source', () => {
   const queue = buildQueue([
@@ -12,6 +15,20 @@ test('worker creates one visit for every active website and source', () => {
   ])
   assert.equal(queue.length, 2)
   assert.equal(queue[1].source_url, 'https://directory.example/submit?url=https%3A%2F%2Fone.example')
+})
+
+test('worker carries the target website into sources without a URL template', () => {
+  const visitUrl = buildVisitUrl({ source_url: 'https://directory.example/page?tab=tools' }, 'one.example')
+  assert.equal(new URL(visitUrl).searchParams.get('dm_target_url'), 'https://one.example')
+})
+
+test('worker creates the local checkpoint directory before saving progress', async () => {
+  const directory = await fs.mkdtemp(path.join(os.tmpdir(), 'link-review-state-'))
+  const stateFile = path.join(directory, 'nested', 'state.json')
+  const state = { completed: { '1:2': { check_status: '可访问' } }, sourceResults: {} }
+  await saveState(stateFile, state)
+  assert.deepEqual(JSON.parse(await fs.readFile(stateFile, 'utf8')), state)
+  await fs.rm(directory, { recursive: true, force: true })
 })
 
 test('worker resumes completed combinations from local state', () => {

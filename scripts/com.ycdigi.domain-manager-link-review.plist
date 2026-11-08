@@ -11,6 +11,13 @@
   </array>
   <key>WorkingDirectory</key>
   <string>/Users/yc/Documents/Domain Manager</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>HOME</key>
+    <string>/Users/yc</string>
+    <key>PATH</key>
+    <string>/Users/yc/.nvm/versions/node/v20.20.0/bin:/usr/bin:/bin</string>
+  </dict>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
