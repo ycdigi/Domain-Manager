@@ -276,7 +276,6 @@ CREATE TABLE IF NOT EXISTS link_sources (
 CREATE INDEX IF NOT EXISTS idx_link_sources_review ON link_sources(approval_status, enabled, source_type);
 CREATE INDEX IF NOT EXISTS idx_link_sources_country_language ON link_sources(country, language);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_link_sources_source_template ON link_sources(source_url, COALESCE(url_template, ''));
-CREATE UNIQUE INDEX IF NOT EXISTS uq_link_sources_source_template ON link_sources(source_url, COALESCE(url_template, ''));
 
 CREATE TABLE IF NOT EXISTS website_link_opportunities (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -309,11 +308,36 @@ CREATE TABLE IF NOT EXISTS link_attempts (
     attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     method TEXT NOT NULL CHECK (method IN ('人工', '自动')),
     request_status TEXT NOT NULL CHECK (request_status IN ('已完成', '失败', '需要人工')),
+    result_status TEXT CHECK (result_status IN ('已提交待审核', '被拒绝', '来源失效')),
     http_status INTEGER,
     confirmed_public_link INTEGER NOT NULL DEFAULT 0 CHECK (confirmed_public_link IN (0, 1)),
     error_message TEXT,
     response_summary TEXT,
     evidence_url TEXT,
+    CHECK (confirmed_public_link = 0 OR (method = '人工' AND request_status = '已完成' AND result_status IS NULL AND evidence_url IS NOT NULL)),
+    CHECK (result_status IS NULL OR (method = '人工' AND request_status = '已完成')),
     FOREIGN KEY (opportunity_id) REFERENCES website_link_opportunities(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_link_attempts_opportunity ON link_attempts(opportunity_id, attempted_at DESC);
+
+CREATE TRIGGER IF NOT EXISTS trg_link_attempts_public_link_requires_approved_source_insert
+BEFORE INSERT ON link_attempts
+WHEN NEW.confirmed_public_link=1 AND NOT EXISTS (
+    SELECT 1 FROM website_link_opportunities o
+    JOIN link_sources s ON s.id=o.source_id
+    WHERE o.id=NEW.opportunity_id AND s.approval_status='已批准' AND s.enabled=1
+)
+BEGIN
+    SELECT RAISE(ABORT, 'public link confirmation requires an approved enabled source');
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_link_attempts_public_link_requires_approved_source_update
+BEFORE UPDATE OF opportunity_id, confirmed_public_link ON link_attempts
+WHEN NEW.confirmed_public_link=1 AND NOT EXISTS (
+    SELECT 1 FROM website_link_opportunities o
+    JOIN link_sources s ON s.id=o.source_id
+    WHERE o.id=NEW.opportunity_id AND s.approval_status='已批准' AND s.enabled=1
+)
+BEGIN
+    SELECT RAISE(ABORT, 'public link confirmation requires an approved enabled source');
+END;

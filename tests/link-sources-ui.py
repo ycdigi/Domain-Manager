@@ -69,7 +69,10 @@ with sync_playwright() as p:
         elif '/attempts' in url and method == 'POST':
             body = json.loads(request.post_data); body.setdefault('method', '人工'); body.update(id=len(attempts) + 1, opportunity_id=1, attempted_at='2026-11-08 12:00:00')
             attempts.append(body)
-            opportunities[0].update(status='已确认公开链接' if body['confirmed_public_link'] else '请求已完成', last_attempt_at=body['attempted_at'], evidence_url=body.get('evidence_url'))
+            request_status = body['request_status']
+            result_status = body.get('result_status')
+            status = '已确认公开链接' if body['confirmed_public_link'] else result_status or ('请求失败' if request_status == '失败' else '需要人工处理' if request_status == '需要人工' else '请求已完成')
+            opportunities[0].update(status=status, last_attempt_at=body['attempted_at'], evidence_url=body.get('evidence_url'))
             route.fulfill(status=201, json={'status': 201, 'message': '已记录', 'data': body})
             return
         elif '/api/websites/1/link-opportunities/1' in url and method == 'PATCH':
@@ -135,6 +138,13 @@ with sync_playwright() as p:
     attempt.get_by_role('button', name='保存尝试', exact=True).click()
     expect(page.get_by_text('已确认公开链接', exact=True).first).to_be_visible()
     assert attempts[0]['method'] == '人工' and attempts[0]['confirmed_public_link'] is True
+    page.get_by_role('button', name='记录人工尝试', exact=True).click()
+    attempt = page.get_by_role('dialog', name='记录外链尝试 · Example directory', exact=True)
+    attempt.locator('.el-select__wrapper').first.click()
+    page.get_by_role('option', name='被拒绝', exact=True).click()
+    attempt.get_by_role('button', name='保存尝试', exact=True).click()
+    expect(page.get_by_text('被拒绝', exact=True).first).to_be_visible()
+    assert attempts[1]['result_status'] == '被拒绝' and opportunities[0]['status'] == '被拒绝'
     assert not errors, errors
     browser.close()
 

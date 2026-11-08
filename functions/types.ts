@@ -187,6 +187,7 @@ export interface LinkAttempt {
     attempted_at?: string
     method: '人工' | '自动'
     request_status: '已完成' | '失败' | '需要人工'
+    result_status?: '已提交待审核' | '被拒绝' | '来源失效' | null
     http_status?: number | null
     confirmed_public_link: number
     error_message?: string | null

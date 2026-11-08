@@ -5,6 +5,10 @@ export const sourceStatusValues = linkSourceApprovalStatuses as readonly LinkSou
 export const sourceTypeValues = linkSourceTypes as readonly LinkSourceType[]
 export const submissionModeValues = linkSubmissionModes as readonly LinkSubmissionMode[]
 export const opportunityStatusValues = linkOpportunityStatuses as readonly LinkOpportunityStatus[]
+export const opportunityStatusesRequiringApprovedSource = ['待处理', '已生成提交地址'] as const
+export const opportunityStatusesWrittenByAttempt = ['请求已完成', '已提交待审核', '已确认公开链接', '被拒绝', '来源失效', '请求失败', '需要人工处理'] as const
+export const attemptRequestStatuses = ['已完成', '失败', '需要人工'] as const
+export const attemptResultStatuses = ['已提交待审核', '被拒绝', '来源失效'] as const
 
 export const validateSourceInput = (data: Record<string, unknown>, partial = false) => {
     if (!partial || data.name !== undefined) {
@@ -37,5 +41,16 @@ export const effectiveSourceEnabled = (approvalStatus: LinkSourceApprovalStatus,
 export const canQueueOpportunity = (approvalStatus: unknown, enabled: unknown) => approvalStatus === '已批准' && Number(enabled) === 1
 
 export const validateOpportunityStatus = (status: unknown) => typeof status === 'string' && opportunityStatusValues.includes(status as LinkOpportunityStatus) ? null : '外链候选状态无效'
+
+export const requiresApprovedSource = (status: unknown) => opportunityStatusesRequiringApprovedSource.includes(status as typeof opportunityStatusesRequiringApprovedSource[number])
+export const isAttemptWrittenStatus = (status: unknown) => opportunityStatusesWrittenByAttempt.includes(status as typeof opportunityStatusesWrittenByAttempt[number])
+
+export const opportunityStatusFromAttempt = (requestStatus: typeof attemptRequestStatuses[number], confirmed: number, resultStatus?: typeof attemptResultStatuses[number] | null): LinkOpportunityStatus => {
+    if (confirmed) return '已确认公开链接'
+    if (resultStatus) return resultStatus
+    if (requestStatus === '失败') return '请求失败'
+    if (requestStatus === '需要人工') return '需要人工处理'
+    return '请求已完成'
+}
 
 export const normalizeOpportunityUrl = (value: unknown) => normalizeTargetUrl(value)

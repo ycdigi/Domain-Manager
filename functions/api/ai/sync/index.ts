@@ -39,7 +39,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 s.name AS source_name, s.source_url, s.source_type, s.country, s.language, s.topic_tags, s.url_template, s.submission_mode, s.approval_status, s.enabled AS source_enabled
                 FROM website_link_opportunities o JOIN link_sources s ON s.id=o.source_id
                 WHERE o.website_id=? ORDER BY COALESCE(o.next_run_at, '9999-12-31'), o.updated_at DESC, o.id DESC`).bind(site.id).all<Record<string, unknown>>(),
-            context.env.DB.prepare(`SELECT a.id, a.opportunity_id, a.attempted_at, a.method, a.request_status, a.http_status, a.confirmed_public_link, a.error_message, a.response_summary, a.evidence_url
+            context.env.DB.prepare(`SELECT a.id, a.opportunity_id, a.attempted_at, a.method, a.request_status, a.result_status, a.http_status, a.confirmed_public_link, a.error_message, a.response_summary, a.evidence_url
                 FROM link_attempts a JOIN website_link_opportunities o ON o.id=a.opportunity_id
                 WHERE o.website_id=? ORDER BY a.attempted_at DESC, a.id DESC`).bind(site.id).all<Record<string, unknown>>()
         ])
@@ -55,6 +55,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 attempted_at: attempt.attempted_at,
                 method: attempt.method,
                 request_status: attempt.request_status,
+                result_status: attempt.result_status,
                 http_status: attempt.http_status,
                 confirmed_public_link: attempt.confirmed_public_link,
                 error_message: attempt.error_message,

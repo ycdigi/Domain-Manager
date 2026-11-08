@@ -2,7 +2,9 @@ import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 import { validateWebsiteFields } from '../../domain/website-validation'
+import { attemptRequestStatuses, attemptResultStatuses, canQueueOpportunity, opportunityStatusFromAttempt, validateOpportunityStatus, validateSourceInput } from '../../domain/link-sources'
 import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
+import { generateSubmissionUrl, normalizeSourceUrl, normalizeTargetUrl, normalizeUrlTemplate } from '../../../shared/link-sources'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const websiteColumns = ['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override']
@@ -58,6 +60,72 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     if (!row || !Number.isInteger(row.id) || row.id <= 0 || ids.has(row.id)) errors.push({ domain: table, error: '记录 ID 必须是唯一正整数' })
                     if (row) ids.add(row.id)
                 }
+            }
+            const sourcesById = new Map<number, Row>()
+            const sourceKeys = new Set<string>()
+            for (const source of Array.isArray(input.link_sources) ? input.link_sources : []) {
+                if (!source || !Number.isInteger(source.id)) continue
+                const normalized = { ...source, approval_status: source.approval_status || '待审核', submission_mode: source.submission_mode || '仅观察', enabled: source.enabled ?? 0, source_type: source.source_type || '无法判断' }
+                const validation = validateSourceInput(normalized)
+                const sourceUrl = normalizeSourceUrl(source.source_url)
+                const templateResult = source.url_template == null || source.url_template === '' ? { template: null, error: undefined } : normalizeUrlTemplate(source.url_template)
+                const key = `${sourceUrl || ''}\u0000${templateResult.template || ''}`
+                if (validation || !sourceUrl || templateResult.error) errors.push({ domain: `link_sources:${source.id}`, error: validation || templateResult.error || '来源 URL 无效' })
+                if (normalized.approval_status !== '已批准' && Number(normalized.enabled) !== 0 && normalized.enabled !== false) errors.push({ domain: `link_sources:${source.id}`, error: '未批准来源不能启用' })
+                if (sourceKeys.has(key)) errors.push({ domain: `link_sources:${source.id}`, error: '来源 URL 与模板重复' })
+                sourceKeys.add(key)
+                sourcesById.set(Number(source.id), { ...normalized, source_url: sourceUrl, url_template: templateResult.template })
+            }
+            const opportunitiesById = new Map<number, Row>()
+            const attemptsByOpportunity = new Map<number, Row[]>()
+            for (const opportunity of Array.isArray(input.website_link_opportunities) ? input.website_link_opportunities : []) {
+                if (!opportunity || !Number.isInteger(opportunity.id)) continue
+                const source = sourcesById.get(Number(opportunity.source_id))
+                const status = opportunity.status || '待审核'
+                const statusError = validateOpportunityStatus(status)
+                const targetUrl = normalizeTargetUrl(opportunity.target_url)
+                const submissionUrl = opportunity.submission_url == null || opportunity.submission_url === '' ? null : normalizeSourceUrl(opportunity.submission_url)
+                const evidenceUrl = opportunity.evidence_url == null || opportunity.evidence_url === '' ? null : normalizeSourceUrl(opportunity.evidence_url)
+                if (statusError) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: statusError })
+                if (!source) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '关联的外链来源无效' })
+                if (!targetUrl) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '目标 URL 无效' })
+                if (opportunity.submission_url && !submissionUrl) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '提交 URL 无效' })
+                if (opportunity.evidence_url && !evidenceUrl) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '证据 URL 无效' })
+                if (source && ['待处理', '已生成提交地址'].includes(status) && !canQueueOpportunity(source.approval_status, source.enabled)) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '未批准或停用的来源不能保留在排队状态' })
+                const generatedUrl = source && targetUrl ? generateSubmissionUrl(source.url_template, targetUrl) : null
+                if (submissionUrl && normalizeSourceUrl(submissionUrl) !== normalizeSourceUrl(generatedUrl)) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '提交 URL 必须与来源模板和目标 URL 一致' })
+                if (status === '已生成提交地址' && !submissionUrl) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '已生成提交地址状态必须保存对应 URL' })
+                if (status === '已确认公开链接' && !evidenceUrl) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '已确认公开链接必须保留证据 URL' })
+                opportunitiesById.set(Number(opportunity.id), { ...opportunity, status })
+            }
+            for (const attempt of Array.isArray(input.link_attempts) ? input.link_attempts : []) {
+                if (!attempt || !Number.isInteger(attempt.id)) continue
+                const requestStatus = attempt.request_status
+                const resultStatus = attempt.result_status == null || attempt.result_status === '' ? null : attempt.result_status
+                const method = attempt.method || '人工'
+                const confirmed = attempt.confirmed_public_link === 1 || attempt.confirmed_public_link === true
+                const evidenceUrl = attempt.evidence_url == null || attempt.evidence_url === '' ? null : normalizeSourceUrl(attempt.evidence_url)
+                if (!['人工', '自动'].includes(method) || !attemptRequestStatuses.includes(requestStatus)) errors.push({ domain: `link_attempts:${attempt.id}`, error: '尝试方式或处理结果无效' })
+                if (resultStatus !== null && (!attemptResultStatuses.includes(resultStatus) || method !== '人工' || requestStatus !== '已完成')) errors.push({ domain: `link_attempts:${attempt.id}`, error: '人工目录结论无效' })
+                if (attempt.http_status != null && (!Number.isInteger(attempt.http_status) || attempt.http_status < 100 || attempt.http_status > 599)) errors.push({ domain: `link_attempts:${attempt.id}`, error: 'HTTP 状态码无效' })
+                if (attempt.confirmed_public_link != null && ![0, 1, false, true].includes(attempt.confirmed_public_link)) errors.push({ domain: `link_attempts:${attempt.id}`, error: '公开链接确认值无效' })
+                if (attempt.evidence_url && !evidenceUrl) errors.push({ domain: `link_attempts:${attempt.id}`, error: '尝试证据 URL 无效' })
+                if (confirmed && (method !== '人工' || requestStatus !== '已完成' || resultStatus !== null || !evidenceUrl)) errors.push({ domain: `link_attempts:${attempt.id}`, error: '确认公开链接必须是带证据的人工已完成记录，不能同时包含其他结论' })
+                const history = attemptsByOpportunity.get(Number(attempt.opportunity_id)) || []
+                history.push({ ...attempt, method, result_status: resultStatus, confirmed_public_link: confirmed ? 1 : 0, evidence_url: evidenceUrl })
+                attemptsByOpportunity.set(Number(attempt.opportunity_id), history)
+            }
+            for (const opportunity of opportunitiesById.values()) {
+                if (!['请求已完成', '已提交待审核', '已确认公开链接', '被拒绝', '来源失效', '请求失败', '需要人工处理'].includes(opportunity.status)) continue
+                const history = (attemptsByOpportunity.get(Number(opportunity.id)) || []).sort((left, right) => Number(right.id) - Number(left.id))
+                const latest = history[0]
+                const expectedStatus = latest ? opportunityStatusFromAttempt(latest.request_status, latest.confirmed_public_link, latest.result_status) : null
+                if (expectedStatus !== opportunity.status) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '结果状态必须与最近一条人工尝试记录一致' })
+                if (opportunity.status === '来源失效') {
+                    const source = sourcesById.get(Number(opportunity.source_id))
+                    if (source && (source.approval_status !== '已失效' || Number(source.enabled) !== 0)) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '来源失效结果必须同步停用来源' })
+                }
+                if (opportunity.status === '已确认公开链接' && latest?.evidence_url !== normalizeSourceUrl(opportunity.evidence_url)) errors.push({ domain: `website_link_opportunities:${opportunity.id}`, error: '公开链接结论与尝试证据不一致' })
             }
             for (const site of websites) {
                 const name = String(site.name || '未知网站')
@@ -268,9 +336,11 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 resourceMap.set(Number(oldResource.id), id)
             }
             for (const oldSource of input.link_sources || []) {
-                const existing = await db.prepare('SELECT id FROM link_sources WHERE source_url=? AND url_template IS ?').bind(oldSource.source_url, oldSource.url_template || null).first<{ id: number }>()
+                const sourceUrl = normalizeSourceUrl(oldSource.source_url)!
+                const template = oldSource.url_template == null || oldSource.url_template === '' ? null : normalizeUrlTemplate(oldSource.url_template).template
+                const existing = await db.prepare('SELECT id FROM link_sources WHERE source_url=? AND url_template IS ?').bind(sourceUrl, template).first<{ id: number }>()
                 const id = existing?.id || await allocateId('link_sources')
-                const values = [oldSource.name, oldSource.source_url, oldSource.source_type || '无法判断', oldSource.country || null, oldSource.language || null, oldSource.topic_tags || null, oldSource.url_template || null, oldSource.submission_mode || '仅观察', oldSource.approval_status || '待审核', oldSource.approval_status === '已批准' ? (oldSource.enabled ?? 1) : 0, oldSource.audit_flags || null, oldSource.last_checked_at || null, oldSource.memo || null]
+                const values = [oldSource.name, sourceUrl, oldSource.source_type || '无法判断', oldSource.country || null, oldSource.language || null, oldSource.topic_tags || null, template, oldSource.submission_mode || '仅观察', oldSource.approval_status || '待审核', oldSource.approval_status === '已批准' ? (oldSource.enabled ?? 1) : 0, oldSource.audit_flags || null, oldSource.last_checked_at || null, oldSource.memo || null]
                 write(existing
                     ? db.prepare('UPDATE link_sources SET name=?,source_url=?,source_type=?,country=?,language=?,topic_tags=?,url_template=?,submission_mode=?,approval_status=?,enabled=?,audit_flags=?,last_checked_at=?,memo=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(...values, id)
                     : db.prepare('INSERT INTO link_sources (id,name,source_url,source_type,country,language,topic_tags,url_template,submission_mode,approval_status,enabled,audit_flags,last_checked_at,memo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
@@ -283,9 +353,10 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             }
             for (const oldOpportunity of input.website_link_opportunities || []) {
                 const websiteId = siteMap.get(Number(oldOpportunity.website_id)); const sourceId = linkSourceMap.get(Number(oldOpportunity.source_id)); if (!websiteId || !sourceId) continue
-                const existing = await db.prepare('SELECT id FROM website_link_opportunities WHERE website_id=? AND source_id=? AND target_url=?').bind(websiteId, sourceId, oldOpportunity.target_url).first<{ id: number }>()
+                const targetUrl = normalizeTargetUrl(oldOpportunity.target_url)!
+                const existing = await db.prepare('SELECT id FROM website_link_opportunities WHERE website_id=? AND source_id=? AND target_url=?').bind(websiteId, sourceId, targetUrl).first<{ id: number }>()
                 const id = existing?.id || await allocateId('website_link_opportunities')
-                const values = [websiteId, sourceId, oldOpportunity.target_url, oldOpportunity.status || '待审核', oldOpportunity.submission_url || null, oldOpportunity.title || null, oldOpportunity.description || null, oldOpportunity.anchor_text || null, oldOpportunity.next_run_at || null, oldOpportunity.last_attempt_at || null, oldOpportunity.evidence_url || null, oldOpportunity.last_error || null, oldOpportunity.memo || null]
+                const values = [websiteId, sourceId, targetUrl, oldOpportunity.status || '待审核', oldOpportunity.submission_url ? normalizeSourceUrl(oldOpportunity.submission_url) : null, oldOpportunity.title || null, oldOpportunity.description || null, oldOpportunity.anchor_text || null, oldOpportunity.next_run_at || null, oldOpportunity.last_attempt_at || null, oldOpportunity.evidence_url ? normalizeSourceUrl(oldOpportunity.evidence_url) : null, oldOpportunity.last_error || null, oldOpportunity.memo || null]
                 write(existing
                     ? db.prepare('UPDATE website_link_opportunities SET website_id=?,source_id=?,target_url=?,status=?,submission_url=?,title=?,description=?,anchor_text=?,next_run_at=?,last_attempt_at=?,evidence_url=?,last_error=?,memo=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(...values, id)
                     : db.prepare('INSERT INTO website_link_opportunities (id,website_id,source_id,target_url,status,submission_url,title,description,anchor_text,next_run_at,last_attempt_at,evidence_url,last_error,memo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
@@ -295,10 +366,10 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 const opportunityId = opportunityMap.get(Number(oldAttempt.opportunity_id)); if (!opportunityId) continue
                 const existing = await db.prepare('SELECT id FROM link_attempts WHERE id=?').bind(oldAttempt.id).first<{ id: number }>()
                 const id = existing?.id || await allocateId('link_attempts')
-                const values = [opportunityId, oldAttempt.attempted_at || null, oldAttempt.method || '人工', oldAttempt.request_status || '需要人工', oldAttempt.http_status ?? null, oldAttempt.confirmed_public_link || 0, oldAttempt.error_message || null, oldAttempt.response_summary || null, oldAttempt.evidence_url || null]
+                const values = [opportunityId, oldAttempt.attempted_at || null, oldAttempt.method || '人工', oldAttempt.request_status || '需要人工', oldAttempt.result_status || null, oldAttempt.http_status ?? null, oldAttempt.confirmed_public_link ? 1 : 0, oldAttempt.error_message || null, oldAttempt.response_summary || null, oldAttempt.evidence_url ? normalizeSourceUrl(oldAttempt.evidence_url) : null]
                 write(existing
-                    ? db.prepare('UPDATE link_attempts SET opportunity_id=?,attempted_at=?,method=?,request_status=?,http_status=?,confirmed_public_link=?,error_message=?,response_summary=?,evidence_url=? WHERE id=?').bind(...values, id)
-                    : db.prepare('INSERT INTO link_attempts (id,opportunity_id,attempted_at,method,request_status,http_status,confirmed_public_link,error_message,response_summary,evidence_url) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
+                    ? db.prepare('UPDATE link_attempts SET opportunity_id=?,attempted_at=?,method=?,request_status=?,result_status=?,http_status=?,confirmed_public_link=?,error_message=?,response_summary=?,evidence_url=? WHERE id=?').bind(...values, id)
+                    : db.prepare('INSERT INTO link_attempts (id,opportunity_id,attempted_at,method,request_status,result_status,http_status,confirmed_public_link,error_message,response_summary,evidence_url) VALUES (?,?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
             }
             if (statements.length) await db.batch(statements)
         }

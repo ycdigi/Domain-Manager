@@ -5,6 +5,7 @@ export const linkSourceTypes = ['搜索页', 'SEO 查询页', '工具目录', '�
 export const linkSubmissionModes = ['人工提交', '允许自动处理', '仅观察'] as const
 export const linkSourceApprovalStatuses = ['待审核', '已批准', '已暂停', '已拒绝', '已失效'] as const
 export const linkOpportunityStatuses = ['待审核', '待处理', '已生成提交地址', '请求已完成', '已提交待审核', '已确认公开链接', '被拒绝', '来源失效', '请求失败', '需要人工处理', '已暂停'] as const
+export const linkOpportunityManualStatuses = ['待审核', '待处理', '已生成提交地址', '已暂停'] as const
 
 export type LinkSourceType = typeof linkSourceTypes[number]
 export type LinkSubmissionMode = typeof linkSubmissionModes[number]
@@ -61,6 +62,7 @@ export interface LinkAttempt {
   attempted_at: string
   method: '人工' | '自动'
   request_status: '已完成' | '失败' | '需要人工'
+  result_status?: '已提交待审核' | '被拒绝' | '来源失效' | null
   http_status?: number | null
   confirmed_public_link: number
   error_message?: string | null

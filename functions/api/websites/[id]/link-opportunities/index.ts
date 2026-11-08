@@ -1,7 +1,7 @@
 import type { Env, WebsiteLinkOpportunity } from '../../../../types'
 import { checkAuth } from '../../../../utils/auth'
-import { canQueueOpportunity, validateOpportunityStatus } from '../../../../domain/link-sources'
-import { normalizeSourceUrl, normalizeTargetUrl } from '../../../../../shared/link-sources'
+import { canQueueOpportunity, isAttemptWrittenStatus, requiresApprovedSource, validateOpportunityStatus } from '../../../../domain/link-sources'
+import { generateSubmissionUrl, normalizeSourceUrl, normalizeTargetUrl } from '../../../../../shared/link-sources'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 const textField = (value: unknown, max: number) => value == null || value === '' ? null : typeof value === 'string' && value.length <= max ? value.trim() : undefined
@@ -23,6 +23,8 @@ export const onRequestPost: PagesFunction<Env> = async context => {
     try {
         const websiteId = Number(context.params.id)
         const data = await context.request.json() as Record<string, unknown>
+        const allowed = new Set(['source_id', 'target_url', 'status', 'submission_url', 'title', 'description', 'anchor_text', 'next_run_at', 'memo'])
+        if (Object.keys(data).some(key => !allowed.has(key))) return json(null, 400, '外链候选包含不支持的字段')
         if (!Number.isInteger(websiteId) || websiteId < 1) return json(null, 400, '网站编号无效')
         if (!await context.env.DB.prepare('SELECT id FROM websites WHERE id=?').bind(websiteId).first()) return json(null, 404, '网站不存在')
         const sourceId = Number(data.source_id)
@@ -33,12 +35,16 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const status = data.status == null ? (canQueueOpportunity(source.approval_status, source.enabled) ? '待处理' : '待审核') : String(data.status)
         const statusError = validateOpportunityStatus(status); if (statusError) return json(null, 400, statusError)
         if (status === '已确认公开链接') return json(null, 400, '公开链接结论必须通过带证据的人工尝试记录')
-        if (status === '待处理' && !canQueueOpportunity(source.approval_status, source.enabled)) return json(null, 400, '来源必须已批准并启用后才能进入待处理')
-        const submissionUrl = data.submission_url == null || data.submission_url === '' ? null : validHttpUrl(data.submission_url)
+        if (isAttemptWrittenStatus(status)) return json(null, 400, '请求结果必须通过人工尝试记录')
+        if (requiresApprovedSource(status) && !canQueueOpportunity(source.approval_status, source.enabled)) return json(null, 400, '来源必须已批准并启用后才能进入处理流程')
+        const submissionUrl = status === '已生成提交地址' ? generateSubmissionUrl(source.url_template, targetUrl) : null
+        const suppliedSubmissionUrl = data.submission_url == null || data.submission_url === '' ? null : validHttpUrl(data.submission_url)
         if (data.submission_url != null && !submissionUrl) return json(null, 400, '提交 URL 必须是有效的 HTTP 或 HTTPS 地址')
-        const fields = { title: textField(data.title, 300), description: textField(data.description, 5000), anchor_text: textField(data.anchor_text, 300), next_run_at: textField(data.next_run_at, 50), evidence_url: data.evidence_url == null || data.evidence_url === '' ? null : validHttpUrl(data.evidence_url), memo: textField(data.memo, 5000) }
-        if (fields.title === undefined || fields.description === undefined || fields.anchor_text === undefined || fields.next_run_at === undefined || fields.evidence_url === undefined || fields.memo === undefined) return json(null, 400, '外链候选字段格式无效')
-        const result = await context.env.DB.prepare(`INSERT INTO website_link_opportunities (website_id,source_id,target_url,status,submission_url,title,description,anchor_text,next_run_at,evidence_url,memo) VALUES (?,?,?,?,?,?,?,?,?,?,?) RETURNING *`).bind(websiteId, sourceId, targetUrl, status, submissionUrl, fields.title, fields.description, fields.anchor_text, fields.next_run_at, fields.evidence_url, fields.memo).run<WebsiteLinkOpportunity>()
+        if (data.submission_url != null && suppliedSubmissionUrl !== normalizeSourceUrl(submissionUrl)) return json(null, 400, '提交 URL 必须由已审核来源模板生成')
+        if (status === '已生成提交地址' && !submissionUrl) return json(null, 400, '已审核来源没有可用模板，无法生成提交地址')
+        const fields = { title: textField(data.title, 300), description: textField(data.description, 5000), anchor_text: textField(data.anchor_text, 300), next_run_at: textField(data.next_run_at, 50), memo: textField(data.memo, 5000) }
+        if (fields.title === undefined || fields.description === undefined || fields.anchor_text === undefined || fields.next_run_at === undefined || fields.memo === undefined) return json(null, 400, '外链候选字段格式无效')
+        const result = await context.env.DB.prepare(`INSERT INTO website_link_opportunities (website_id,source_id,target_url,status,submission_url,title,description,anchor_text,next_run_at,memo) VALUES (?,?,?,?,?,?,?,?,?,?) RETURNING *`).bind(websiteId, sourceId, targetUrl, status, submissionUrl, fields.title, fields.description, fields.anchor_text, fields.next_run_at, fields.memo).run<WebsiteLinkOpportunity>()
         return json(result.results?.[0] || null, 201, '网站外链候选已创建')
     } catch (error) { return json(null, 409, error instanceof Error ? error.message : '网站外链候选创建失败') }
 }

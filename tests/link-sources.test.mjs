@@ -11,6 +11,8 @@ import { database } from './helpers/database.mjs'
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const migration = fs.readFileSync(path.join(root, 'schema-migration-v1.17.0.sql'), 'utf8')
 const migration118 = fs.readFileSync(path.join(root, 'schema-migration-v1.18.0.sql'), 'utf8')
+const migration119 = fs.readFileSync(path.join(root, 'schema-migration-v1.19.0.sql'), 'utf8')
+const migration1191 = fs.readFileSync(path.join(root, 'schema-migration-v1.19.1.sql'), 'utf8')
 const server = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true, include: [] }, server: { middlewareMode: true }, appType: 'custom' })
 const sources = await server.ssrLoadModule('/functions/api/link-sources/index.ts')
 const sourceEdit = await server.ssrLoadModule('/functions/api/link-sources/[id]/index.ts')
@@ -40,6 +42,21 @@ test('v1.17 migration is repeatable and creates the link tables', () => {
   const tables = store.sql("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('link_sources','website_link_opportunities','link_attempts') ORDER BY name;")
   assert.deepEqual(tables.map(row => row.name), ['link_attempts', 'link_sources', 'website_link_opportunities'])
   assert.equal(store.sql("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='uq_link_sources_source_template';")[0].count, 1)
+})
+
+test('v1.19 migration preserves attempts and converts direct historical outcomes', () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url,approval_status,enabled) VALUES ('Source','https://source.example','已批准',1); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','被拒绝');")
+  store.sql('DROP INDEX idx_link_attempts_opportunity; DROP TABLE link_attempts; CREATE TABLE link_attempts (id INTEGER PRIMARY KEY AUTOINCREMENT, opportunity_id INTEGER NOT NULL, attempted_at DATETIME DEFAULT CURRENT_TIMESTAMP, method TEXT NOT NULL CHECK(method IN (\'人工\',\'自动\')), request_status TEXT NOT NULL CHECK(request_status IN (\'已完成\',\'失败\',\'需要人工\')), http_status INTEGER, confirmed_public_link INTEGER NOT NULL DEFAULT 0 CHECK(confirmed_public_link IN (0,1)), error_message TEXT, response_summary TEXT, evidence_url TEXT, FOREIGN KEY(opportunity_id) REFERENCES website_link_opportunities(id) ON DELETE CASCADE); CREATE INDEX idx_link_attempts_opportunity ON link_attempts(opportunity_id, attempted_at DESC); INSERT INTO link_attempts(opportunity_id,method,request_status,response_summary) VALUES (1,\'人工\',\'需要人工\',\'保留旧记录\');')
+  store.script(migration119)
+  assert.deepEqual(store.sql('SELECT request_status,result_status,response_summary FROM link_attempts ORDER BY id;'), [
+    { request_status: '需要人工', result_status: null, response_summary: '保留旧记录' },
+    { request_status: '已完成', result_status: '被拒绝', response_summary: 'v1.19.0 迁移补记历史候选状态：被拒绝' }
+  ])
+  assert.throws(() => store.sql("INSERT INTO link_attempts(opportunity_id,method,request_status,result_status) VALUES (1,'自动','已完成','被拒绝');"))
+  store.script(migration1191)
+  store.script(migration1191)
+  assert.throws(() => store.sql("INSERT INTO link_attempts(opportunity_id,method,request_status,result_status,confirmed_public_link,evidence_url) VALUES (1,'人工','已完成','被拒绝',1,'https://source.example/page');"))
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_attempts;')[0].count, 2)
 })
 
 test('sources default to pending observation and approved sources become enabled', async () => {
@@ -97,6 +114,50 @@ test('opportunities require an approved enabled source before entering the queue
   await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'https://example.com/' }, 'POST'), 409)
 })
 
+test('unapproved sources cannot generate submission addresses or enter the processing workflow', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url,url_template) VALUES ('Pending','https://directory.example','https://directory.example/?url={{target_url}}');")
+  await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', {
+    source_id: 1, target_url: 'site.example', status: '已生成提交地址', submission_url: 'https://directory.example/?url=https%3A%2F%2Fsite.example'
+  }, 'POST'), 400)
+  const candidate = await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'site.example' }, 'POST'), 201)
+  assert.equal(candidate.status, '待审核')
+  await call(opportunityEdit.onRequestPatch, context('/api/websites/1/link-opportunities/1', { status: '已生成提交地址' }, 'PATCH'), 400)
+  await call(opportunityEdit.onRequestPatch, context('/api/websites/1/link-opportunities/1', { status: '请求已完成' }, 'PATCH'), 400)
+})
+
+test('attempt-derived statuses and automatic attempts cannot bypass manual evidence flow', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url,approval_status,enabled) VALUES ('Source','https://source.example','已批准',1); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','待处理');")
+  for (const status of ['请求已完成', '请求失败', '需要人工处理', '已提交待审核']) await call(opportunityEdit.onRequestPatch, context('/api/websites/1/link-opportunities/1', { status }, 'PATCH'), 400)
+  await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '人工', request_status: '失败', result_status: '被拒绝'
+  }, 'POST'), 400)
+  await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '自动', request_status: '已完成'
+  }, 'POST'), 400)
+  for (const result_status of ['已提交待审核', '被拒绝', '来源失效']) {
+    await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+      method: '人工', request_status: '已完成', result_status
+    }, 'POST'), 201)
+  }
+  assert.deepEqual(store.sql('SELECT result_status FROM link_attempts ORDER BY id;').map(row => row.result_status), ['已提交待审核', '被拒绝', '来源失效'])
+})
+
+test('a source-invalid attempt disables the source and pauses other queued candidates', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site one'),('Site two'),('Site three'); INSERT INTO link_sources(name,source_url,approval_status,enabled) VALUES ('Source','https://source.example','已批准',1); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://one.example','待处理'),(2,1,'https://two.example','已生成提交地址'),(3,1,'https://three.example','待处理');")
+  await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '人工', request_status: '已完成', result_status: '来源失效', response_summary: '来源页面已下线'
+  }, 'POST'), 201)
+  assert.deepEqual(store.sql('SELECT approval_status,enabled FROM link_sources;'), [{ approval_status: '已失效', enabled: 0 }])
+  assert.deepEqual(store.sql('SELECT status FROM website_link_opportunities ORDER BY id;').map(row => row.status), ['来源失效', '已暂停', '已暂停'])
+})
+
+test('a public-link conclusion requires an approved and enabled source at attempt time', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url) VALUES ('Pending','https://pending.example'); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','待审核');")
+  await call(opportunityAttempts.onRequestPost, context('/api/websites/1/link-opportunities/1/attempts', {
+    method: '人工', request_status: '已完成', confirmed_public_link: 1, evidence_url: 'https://pending.example/page'
+  }, 'POST'), 400)
+})
+
 test('public-link conclusions can only be written by an evidenced attempt', async () => {
   store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO link_sources(name,source_url,approval_status,enabled) VALUES ('Source','https://source.example','已批准',1);")
   await call(opportunities.onRequestPost, context('/api/websites/1/link-opportunities', { source_id: 1, target_url: 'site.example', status: '已确认公开链接' }, 'POST'), 400)
@@ -122,7 +183,7 @@ test('website deletion cascades opportunities and attempts', () => {
 })
 
 test('link source data is included in snapshot export and can be restored', async () => {
-  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'site.example','r','2026-01-01','2027-01-01','网站'); INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'); INSERT INTO website_link_opportunities(website_id,source_id,target_url) VALUES (1,1,'https://site.example'); INSERT INTO link_attempts(opportunity_id,method,request_status) VALUES (1,'人工','需要人工');")
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'site.example','r','2026-01-01','2027-01-01','网站'); INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','被拒绝'); INSERT INTO link_attempts(opportunity_id,method,request_status,result_status,response_summary) VALUES (1,'人工','已完成','被拒绝','目录拒绝');")
   const snapshot = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
   assert.equal(snapshot.link_sources.length, 1)
   assert.equal(snapshot.website_link_opportunities.length, 1)
@@ -132,6 +193,15 @@ test('link source data is included in snapshot export and can be restored', asyn
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_sources;')[0].count, 1)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_link_opportunities;')[0].count, 1)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_attempts;')[0].count, 1)
+  assert.deepEqual(store.sql('SELECT request_status,result_status,response_summary FROM link_attempts;'), [{ request_status: '已完成', result_status: '被拒绝', response_summary: '目录拒绝' }])
+})
+
+test('snapshot import rejects result states that have no matching attempt history', async () => {
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'site.example','r','2026-01-01','2027-01-01','网站'); INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','被拒绝');")
+  const snapshot = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
+  store.sql('DELETE FROM websites; DELETE FROM link_sources;')
+  await call(importData.onRequestPost, context('/api/domains/import', snapshot, 'POST'), 400)
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM websites;')[0].count, 0)
 })
 
 test('audit script classifies, cleans and reports duplicate templates without network access', () => {
@@ -172,4 +242,5 @@ test('manual attempts persist evidence and update the candidate status without r
     method: '人工', request_status: '失败', confirmed_public_link: 0, error_message: '页面拒绝提交'
   }, 'POST'), 201)
   assert.equal(store.sql('SELECT status FROM website_link_opportunities WHERE id=1;')[0].status, '请求失败')
+  assert.equal(store.sql('SELECT evidence_url FROM website_link_opportunities WHERE id=1;')[0].evidence_url, null)
 })
