@@ -138,7 +138,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (!Object.keys(item).some(key => key !== 'opportunity_id')) return json(null, 400, '外链候选更新没有可保存字段')
             const existingOpportunity = await db.prepare('SELECT id FROM website_link_opportunities WHERE id=? AND website_id=?').bind(opportunityId, websiteId).first<{ id: number }>()
             if (!existingOpportunity) return json(null, 404, `找不到网站内外链候选 ${String(item.opportunity_id)}`)
-            for (const [key, maxLength] of [['title', 200], ['description', 5000], ['anchor_text', 500], ['memo', 5000]] as const) {
+            for (const [key, maxLength] of [['title', 300], ['description', 5000], ['anchor_text', 300], ['memo', 5000]] as const) {
                 const value = item[key]
                 if (value !== undefined && value !== null && (typeof value !== 'string' || value.length > maxLength)) return json(null, 400, `${key} 必须是字符串或 null，且不能超过 ${maxLength} 个字符`)
             }
