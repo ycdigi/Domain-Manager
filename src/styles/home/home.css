@@ -33,9 +33,17 @@
 .portfolio-table td { height:58px; min-width:0; padding:7px 9px; border-bottom:1px solid var(--color-rule); color:var(--color-ink); vertical-align:middle; }
 .portfolio-table tbody tr:last-child td { border-bottom:0; }
 .portfolio-table tbody tr:hover td { background:var(--color-accent-paper); }
+.portfolio-table tbody tr.is-expiring-soon td { background:color-mix(in srgb, var(--color-error) 8%, var(--color-paper)); }
+.portfolio-table tbody tr.is-expired td { background:color-mix(in srgb, var(--color-error) 16%, var(--color-paper)); }
+.portfolio-table tbody tr.is-expiring-soon:hover td { background:color-mix(in srgb, var(--color-error) 12%, var(--color-accent-paper)); }
+.portfolio-table tbody tr.is-expired:hover td { background:color-mix(in srgb, var(--color-error) 20%, var(--color-accent-paper)); }
 .portfolio-table .portfolio-site-column { position:sticky; left:0; z-index:2; width:205px; background:var(--color-paper); }
 .portfolio-table th.portfolio-site-column { z-index:3; background:var(--color-paper-2); }
 .portfolio-table tbody tr:hover .portfolio-site-column { background:var(--color-accent-paper); }
+.portfolio-table tbody tr.is-expiring-soon .portfolio-site-column { background:color-mix(in srgb, var(--color-error) 8%, var(--color-paper)); }
+.portfolio-table tbody tr.is-expired .portfolio-site-column { background:color-mix(in srgb, var(--color-error) 16%, var(--color-paper)); }
+.portfolio-table tbody tr.is-expiring-soon:hover .portfolio-site-column { background:color-mix(in srgb, var(--color-error) 12%, var(--color-accent-paper)); }
+.portfolio-table tbody tr.is-expired:hover .portfolio-site-column { background:color-mix(in srgb, var(--color-error) 20%, var(--color-accent-paper)); }
 .portfolio-header-with-selection { display:flex; align-items:center; gap:6px; min-width:0; }
 .portfolio-header-with-selection .el-checkbox { flex:0 0 auto; margin-right:0; }
 .portfolio-identity { display:grid; grid-template-columns:24px 10px minmax(0,1fr); align-items:center; column-gap:6px; min-width:0; }

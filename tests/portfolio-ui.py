@@ -1,14 +1,17 @@
 """Browser acceptance for the website portfolio. Run with Vite at port 5173."""
 import base64
+import datetime
 import json
 from playwright.sync_api import sync_playwright, expect
+
+today = datetime.date.today()
 
 sites = [
     dict(id=1, name="Build one", stage="验证", lifecycle="active", ownership="自营网站", platform="Astro",
          industry="资讯站", potential="先验证搜索需求", priority_order=0, next_action="发布首篇内容",
          next_action_due_date="2026-11-14", next_action_status="待做", adsense_connected="未知", gsc_connected="已开通",
          current_income=[dict(source="AdSense", currency="USD", amount=120)], income_totals=[dict(currency="USD", amount=120)],
-         daily_clicks=12, domains=[dict(id=1, website_id=1, domain="build-one.test", domain_role="主域名", is_primary=1, expiry_date="2027-01-01", computer_name="Mac Mini Luokun")],
+         daily_clicks=12, domains=[dict(id=1, website_id=1, domain="build-one.test", domain_role="主域名", is_primary=1, expiry_date=(today - datetime.timedelta(days=1)).isoformat(), computer_name="Mac Mini Luokun")],
          resource_ids=[], resource_names=None,
          open_task_count=1, review_count=0),
     dict(id=2, name="Stopped project", stage="维护", lifecycle="stopped", ownership="自营网站", platform="WordPress",
@@ -30,7 +33,7 @@ sites = [
          open_task_count=1, review_count=1),
     dict(id=6, name="Alpha build", stage="验证", lifecycle="active", ownership="自营网站", platform="Astro",
          industry="资讯站", priority_order=1, next_action="提交初版", next_action_status="待做", adsense_connected="未知", gsc_connected="未知",
-         domains=[dict(id=6, website_id=6, domain="alpha-build.test", domain_role="主域名", is_primary=1, expiry_date="2027-05-01", computer_name="Windows PC")],
+         domains=[dict(id=6, website_id=6, domain="alpha-build.test", domain_role="主域名", is_primary=1, expiry_date=(today + datetime.timedelta(days=30)).isoformat(), computer_name="Windows PC")],
          resource_ids=[], resource_names=None, open_task_count=0, review_count=0),
     dict(id=7, name="Pause one", stage="暂停", lifecycle="active", ownership="自营网站", platform="其他",
          platform_other="Custom CMS", industry="其他", priority_order=0, potential="等待预算", adsense_connected="未知", gsc_connected="未知",
@@ -173,6 +176,10 @@ with sync_playwright() as p:
     page.route("http://127.0.0.1:5173/api/**", route_api)
     page.goto("http://127.0.0.1:5173/home")
     page.wait_for_load_state("networkidle")
+    build_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
+    alpha_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Alpha build"))
+    assert "is-expired" in (build_row.get_attribute("class") or "")
+    assert "is-expiring-soon" in (alpha_row.get_attribute("class") or "")
     expect(page.get_by_role("heading", name="网站组合", exact=True)).to_be_visible()
     expect(page.locator('.workspace-navigation').get_by_role('button', name='外链来源', exact=True)).to_have_count(0)
     expect(page.get_by_text("Build one", exact=True)).to_be_visible()
