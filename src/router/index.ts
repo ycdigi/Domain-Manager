@@ -27,7 +27,6 @@ const router = createRouter({
                 { path: 'domains', name: 'Domains', component: () => import('../views/Domains.vue') },
                 { path: 'resources', name: 'Resources', component: () => import('../views/Resources.vue') },
                 { path: 'adsense', name: 'Adsense', component: () => import('../views/Adsense.vue') },
-                { path: 'links', name: 'Links', component: () => import('../views/LinkSources.vue') },
                 { path: 'data', name: 'Data', component: () => import('../views/DataManagement.vue') }
             ]
         }

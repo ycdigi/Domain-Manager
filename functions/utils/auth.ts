@@ -5,7 +5,6 @@ export interface AuthResult {
     message?: string;
     userId?: string;
 }
-
 const encoder = new TextEncoder()
 const encodeBase64Url = (bytes: Uint8Array) => {
     let binary = ''
@@ -73,10 +72,4 @@ export const checkApiToken = async (context: EventContext<Env, any, any>) => {
         })
     }
     return null
-}
-
-export const checkSessionOrApiToken = async (context: EventContext<Env, any, any>) => {
-    const sessionError = await checkAuth(context)
-    if (!sessionError) return null
-    return checkApiToken(context)
 }

@@ -124,7 +124,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 移除 Telegram 通知功能时，先备份已有数据库，再执行一次 `schema-migration-v1.13.0.sql`；该迁移会删除通知配置和网站通知字段，不要重复迁移
    - 网站详情 Todo 使用独立表保存标题和可选描述；已有数据库执行一次 `schema-migration-v1.14.0.sql`
    - 网站与域名拆分、收入/投入历史、网站任务及 SEO 复查闭环；先备份并在本地验证旧库，再执行一次 `schema-migration-v1.15.0.sql`
-   - 外链来源漏斗和 Mac Mini 轮询汇总；先备份已有数据库，再执行一次 `schema-migration-v1.20.0.sql`
+   - 移除外链来源、候选和轮询数据；先备份已有数据库，再执行一次 `schema-migration-v1.21.0.sql`
 
 ### D1 命令行管理
 
@@ -264,17 +264,6 @@ npm run domains:enrich -- \
 `POST /api/domains/check` 接收 `{ "domain": "example.com" }` 并返回在线状态。网页会把结果写入域名资产记录；检查请求不代表台帐自动轮询域名。
 
 操作日期使用 `/api/websites/:id/operations` 管理，类型固定为 `SEO`、`内容`、`技术`、`其他`，同一网站同一天同一类型只保留一条。`/api/export/snapshot` 返回不含凭据的完整导出数据，数据管理页据此生成多工作表 Excel。
-
-### 外链来源轮询
-
-Mac Mini 本地执行器会按活动网站 × 来源生成组合队列。当前 101 个网站和 142 个来源为 14,342 个组合，每项打开来源页面并停留 10–15 秒。来源没有 URL 模板时，访问地址会追加 `dm_target_url` 查询参数携带当前目标域名；这只是访问组合标记，不是表单提交或外链成功证明。执行器在本地保存断点，D1 只保存最新运行汇总和每个来源的最终漏斗结果。日常不需要命令行：打开台账的“外链来源”页面，点击“开始轮询”即可；页面关闭后仍会继续运行。
-
-```bash
-cp scripts/com.ycdigi.domain-manager-link-review.plist "$HOME/Library/LaunchAgents/"
-launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.ycdigi.domain-manager-link-review.plist"
-```
-
-首次安装后台服务才需要上面的两行。按钮点击时会自动使用当前台账登录会话。“建议保留”只表示页面可访问或发生重定向；“待删除”表示 404、受阻、超时或错误。系统不会提交表单、登录来源、检查 Google，也不会把访问记录标记为已获得外链。来源页可手动删除不需要的来源。
 
 域名的轻量行内编辑使用：
 

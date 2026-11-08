@@ -1,5 +1,5 @@
 import type { Env } from '../../types'
-import { checkAuth, checkSessionOrApiToken } from '../../utils/auth'
+import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 import { validateWebsiteFields } from '../../domain/website-validation'
 import { websiteIncomeRowsCte } from '../../domain/website-income'
@@ -14,7 +14,7 @@ const validSiteFields = (fields: Record<string, unknown>) => {
 }
 
 export const onRequestGet: PagesFunction<Env> = async context => {
-    const authError = await checkSessionOrApiToken(context); if (authError) return authError
+    const authError = await checkAuth(context); if (authError) return authError
     try {
         const params = new URL(context.request.url).searchParams
         const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())

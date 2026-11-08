@@ -83,27 +83,6 @@
       </section>
 
       <section class="portfolio-detail-section">
-        <div class="portfolio-detail-heading"><h2>外链候选</h2><span>{{ opportunities.length }} 项</span></div>
-        <form class="portfolio-link-form" @submit.prevent="addOpportunity">
-          <el-select v-model="opportunityForm.source_id" filterable placeholder="选择来源" aria-label="外链来源" required><el-option v-for="source in linkSources" :key="source.id" :label="source.name" :value="source.id"><span>{{ source.name }} · {{ source.approval_status }}</span></el-option></el-select>
-          <el-input v-model="opportunityForm.target_url" placeholder="目标 URL 或裸域名" aria-label="外链目标 URL" required />
-          <el-input v-model="opportunityForm.title" placeholder="目标标题（可选）" aria-label="外链目标标题" />
-          <el-input v-model="opportunityForm.anchor_text" placeholder="锚文本（可选）" aria-label="外链锚文本" />
-          <el-date-picker v-model="opportunityForm.next_run_at" type="date" value-format="YYYY-MM-DD" clearable placeholder="下次处理日" aria-label="下次处理日" />
-          <el-button type="primary" :loading="savingLink" native-type="submit">添加候选</el-button>
-          <el-input v-model="opportunityForm.description" class="portfolio-detail-full" type="textarea" :rows="2" maxlength="5000" placeholder="候选说明（可选）" aria-label="外链候选说明" />
-        </form>
-        <p v-if="generatedOpportunityAddress" class="portfolio-link-preview">生成地址预览：<a :href="generatedOpportunityAddress" target="_blank" rel="noopener noreferrer">{{ generatedOpportunityAddress }}</a></p>
-        <div v-if="opportunities.length" class="portfolio-link-list">
-          <article v-for="item in opportunities" :key="item.id" class="portfolio-link-row">
-            <div class="portfolio-link-main"><div class="portfolio-task-title"><strong>{{ item.source_name || `来源 #${item.source_id}` }}</strong><el-tag size="small" :type="item.status === '已确认公开链接' ? 'success' : item.status === '请求失败' ? 'danger' : item.status === '待处理' ? 'warning' : 'info'">{{ item.status }}</el-tag></div><strong v-if="item.title">{{ item.title }}</strong><a :href="item.target_url" target="_blank" rel="noopener noreferrer">{{ item.target_url }}</a><p v-if="item.description">{{ item.description }}</p><small v-if="item.anchor_text">锚文本：{{ item.anchor_text }}</small><small>{{ item.source_type || '无法判断' }} · 来源 {{ item.approval_status || '未知' }}<template v-if="item.last_attempt_at"> · 最近处理 {{ item.last_attempt_at }}</template></small><a v-if="submissionAddress(item)" :href="submissionAddress(item)!" target="_blank" rel="noopener noreferrer">打开生成的提交地址</a><a v-else-if="item.source_url" :href="item.source_url" target="_blank" rel="noopener noreferrer">查看来源页</a><small v-if="item.evidence_url">证据：{{ item.evidence_url }}</small><small v-if="item.last_error" class="portfolio-link-error">{{ item.last_error }}</small></div>
-            <div class="portfolio-task-controls"><el-select size="small" :model-value="item.status" :aria-label="`${item.source_name || '外链候选'} 状态`" @change="value => updateOpportunity(item, { status: value })"><el-option v-for="status in linkOpportunityManualStatuses" :key="status" :label="status" :value="status" /></el-select><el-button text :icon="CopyDocument" :disabled="!submissionAddress(item)" title="复制提交地址" aria-label="复制提交地址" @click="copySubmission(item)" /><el-button text :icon="EditPen" title="编辑候选" aria-label="编辑候选" @click="openOpportunityEdit(item)" /><el-button text type="primary" title="记录人工尝试" aria-label="记录人工尝试" @click="openAttempt(item)">记录</el-button></div>
-          </article>
-        </div>
-        <p v-else class="portfolio-empty">还没有外链候选。先审核来源，再为这个网站添加候选。</p>
-      </section>
-
-      <section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>AI 提示词与想法</h2><el-button type="primary" @click="editNote()">新增记录</el-button></div>
         <article v-for="item in notes" :key="item.id" class="portfolio-note-row">
           <header><div><strong>{{ item.kind }}</strong><small>更新于 {{ item.updated_at || item.created_at || '未知' }} · {{ item.version_count || 1 }} 个版本</small></div><div class="portfolio-task-controls"><el-button text @click="editNote(item)">编辑</el-button><el-button text @click="showNoteHistory(item)">历史</el-button><el-button text type="danger" @click="archiveNote(item)">归档</el-button></div></header>
@@ -150,21 +129,12 @@
   <el-dialog v-model="historyVisible" title="记录历史" width="min(680px, 94vw)" append-to-body>
     <ol class="portfolio-note-history"><li v-for="version in noteHistory" :key="version.id"><strong>第 {{ version.version_no }} 版 · {{ version.created_at }}</strong><pre>{{ version.content }}</pre></li></ol>
   </el-dialog>
-  <el-dialog v-model="opportunityDialogVisible" title="编辑外链候选" width="min(680px, 94vw)" append-to-body>
-    <el-form label-position="top"><el-form-item label="标题"><el-input v-model="opportunityEdit.title" maxlength="300" /></el-form-item><el-form-item label="描述"><el-input v-model="opportunityEdit.description" type="textarea" :rows="3" maxlength="5000" /></el-form-item><el-form-item label="锚文本"><el-input v-model="opportunityEdit.anchor_text" maxlength="300" /></el-form-item><el-form-item label="状态"><el-select v-model="opportunityEdit.status"><el-option v-for="status in linkOpportunityManualStatuses" :key="status" :label="status" :value="status" /></el-select></el-form-item><el-form-item label="下次处理日"><el-date-picker v-model="opportunityEdit.next_run_at" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item><el-form-item label="备注"><el-input v-model="opportunityEdit.memo" type="textarea" :rows="4" maxlength="5000" /></el-form-item></el-form>
-    <template #footer><div class="dialog-footer"><el-button @click="opportunityDialogVisible = false">取消</el-button><el-button type="primary" :loading="savingLink" @click="saveOpportunityEdit">保存</el-button></div></template>
-  </el-dialog>
-  <el-dialog v-model="attemptDialogVisible" :title="`记录外链尝试 · ${attemptOpportunity?.source_name || ''}`" width="min(720px, 94vw)" append-to-body>
-    <el-form label-position="top"><div class="portfolio-attempt-form-grid"><el-form-item label="处理结果"><el-select v-model="attemptForm.outcome"><el-option label="已完成" value="已完成" /><el-option label="已提交待审核" value="已提交待审核" /><el-option label="被拒绝" value="被拒绝" /><el-option label="来源失效（同步停用来源）" value="来源失效" /><el-option label="请求失败" value="请求失败" /><el-option label="需要人工处理" value="需要人工处理" /></el-select></el-form-item><el-form-item label="HTTP 状态码"><el-input-number v-model="attemptForm.http_status" :min="100" :max="599" :precision="0" :controls="false" clearable /></el-form-item><el-form-item label="确认公开链接" class="portfolio-attempt-full"><el-switch v-model="attemptForm.confirmed_public_link" :disabled="attemptForm.outcome !== '已完成'" active-text="已确认页面公开展示目标链接" /></el-form-item><el-form-item label="证据 URL" class="portfolio-attempt-full"><el-input v-model="attemptForm.evidence_url" placeholder="可访问的证据页面地址" /></el-form-item><el-form-item label="响应摘要" class="portfolio-attempt-full"><el-input v-model="attemptForm.response_summary" type="textarea" :rows="3" maxlength="5000" /></el-form-item><el-form-item label="错误信息" class="portfolio-attempt-full"><el-input v-model="attemptForm.error_message" type="textarea" :rows="3" maxlength="5000" /></el-form-item></div></el-form>
-    <div v-if="attempts.length" class="portfolio-attempt-history"><h3>历史尝试</h3><div v-for="attempt in attempts" :key="attempt.id" class="portfolio-detail-row"><span>{{ attempt.attempted_at }} · {{ attemptOutcome(attempt) }}<template v-if="attempt.http_status"> · HTTP {{ attempt.http_status }}</template><template v-if="attempt.confirmed_public_link"> · 已确认公开链接</template></span><a v-if="attempt.evidence_url" :href="attempt.evidence_url" target="_blank" rel="noopener noreferrer">证据</a></div></div>
-    <template #footer><div class="dialog-footer"><el-button @click="attemptDialogVisible = false">取消</el-button><el-button type="primary" :loading="savingAttempt" @click="saveAttempt">保存尝试</el-button></div></template>
-  </el-dialog>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { CopyDocument, Delete, EditPen } from '@element-plus/icons-vue'
+import { Delete } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
 import { getWriteQueue } from '../utils/writeQueue'
@@ -172,9 +142,6 @@ import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import type { Website, WebsiteDomain, WebsiteTask, WebsiteTaskType } from '../api/websites'
 import { normalizeWebsiteIndustry } from '../../shared/website-classification'
-import { generateSubmissionUrl } from '../../shared/link-sources'
-import { linkOpportunityManualStatuses, getLinkSources, type LinkAttempt, type LinkSource, type WebsiteLinkOpportunity } from '../api/link-sources'
-import { copyText } from '../utils/clipboard'
 
 interface IncomeRow { id?: number | null; income_month: string; source: string; currency: string; amount: number; origin?: 'website' | 'adsense_account' }
 interface EffortRow { id: number; week_start: string; hours: number }
@@ -201,20 +168,12 @@ const incomes = ref<IncomeRow[]>([])
 const efforts = ref<EffortRow[]>([])
 const operations = ref<OperationRow[]>([])
 const notes = ref<AiNote[]>([])
-const linkSources = ref<LinkSource[]>([])
-const opportunities = ref<WebsiteLinkOpportunity[]>([])
-const attempts = ref<LinkAttempt[]>([])
 const noteHistory = ref<NoteVersion[]>([])
 const error = ref('')
-const saving = ref(false); const savingDomain = ref(false); const savingTask = ref(false); const savingIncome = ref(false); const savingEffort = ref(false); const savingOperation = ref(false); const savingNote = ref(false); const savingLink = ref(false); const savingAttempt = ref(false)
+const saving = ref(false); const savingDomain = ref(false); const savingTask = ref(false); const savingIncome = ref(false); const savingEffort = ref(false); const savingOperation = ref(false); const savingNote = ref(false)
 const checkingDomainId = ref<number | null>(null)
 const noteDialogVisible = ref(false); const historyVisible = ref(false); const editingNoteId = ref<number | null>(null)
 const taskDialogVisible = ref(false)
-const opportunityDialogVisible = ref(false); const attemptDialogVisible = ref(false)
-const editingOpportunity = ref<WebsiteLinkOpportunity>(); const attemptOpportunity = ref<WebsiteLinkOpportunity>()
-const opportunityEdit = reactive({ title: '', description: '', anchor_text: '', status: '待审核' as WebsiteLinkOpportunity['status'], next_run_at: '', memo: '' })
-const opportunityForm = reactive({ source_id: undefined as number | undefined, target_url: '', title: '', description: '', anchor_text: '', next_run_at: '' })
-const attemptForm = reactive({ outcome: '已完成' as '已完成' | '已提交待审核' | '被拒绝' | '来源失效' | '请求失败' | '需要人工处理', http_status: undefined as number | undefined, confirmed_public_link: false, evidence_url: '', response_summary: '', error_message: '' })
 const editingTask = ref<WebsiteTask>()
 const taskEdit = reactive({ title: '', description: '', completion_summary: '', result_url: '', due_at: '', review_delay_days: 28, review_window_days: 28 })
 const domainForm = reactive({ domain: '', registrar: '', registrar_date: '', expiry_date: '' })
@@ -225,9 +184,6 @@ const incomeForm = reactive({ income_month: '', source: '', currency: 'USD', amo
 const effortForm = reactive({ week_start: '', hours: 0 })
 const operationForm = reactive({ operation_date: '', operation_kind: 'SEO' })
 const noteForm = reactive<{ kind: 'AI提示词' | '想法说明'; content: string }>({ kind: 'AI提示词', content: '' })
-const selectedOpportunitySource = computed(() => linkSources.value.find(source => source.id === opportunityForm.source_id))
-const generatedOpportunityAddress = computed(() => selectedOpportunitySource.value?.approval_status === '已批准' && selectedOpportunitySource.value.enabled === 1 ? generateSubmissionUrl(selectedOpportunitySource.value.url_template, opportunityForm.target_url) : null)
-watch(() => attemptForm.outcome, outcome => { if (outcome !== '已完成') attemptForm.confirmed_public_link = false })
 const profileBaseline = ref('')
 let profileOriginal: typeof profile | undefined
 let profileWebsiteId: number | undefined
@@ -244,14 +200,13 @@ const loadAll = async () => {
   Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
     profileWebsiteId = props.website.id
     markProfileClean()
-    tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []; opportunities.value = []; linkSources.value = []
-    Object.assign(opportunityForm, { source_id: undefined, target_url: '', title: '', description: '', anchor_text: '', next_run_at: '' })
+    tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []
   }
   domains.value = queue.applyPendingDomains(props.website.domains || [])
   const id = props.website.id
   try {
-    const [domainRows, taskRows, incomeRows, effortRows, operationRows, noteRows, accountRows, sourceRows, opportunityRows] = await Promise.all([api.get<WebsiteDomain[]>(`/api/domains?website_id=${id}`), api.get<WebsiteTask[]>(`/api/websites/${id}/tasks`), api.get<IncomeRow[]>(`/api/websites/${id}/income`), api.get<EffortRow[]>(`/api/websites/${id}/effort`), api.get<OperationRow[]>(`/api/websites/${id}/operations`), api.get<AiNote[]>(`/api/websites/${id}/ai-notes`), api.get<Array<{ id: number; name: string }>>('/api/adsense/accounts'), getLinkSources(), api.get<WebsiteLinkOpportunity[]>(`/api/websites/${id}/link-opportunities`)])
-    if (props.website?.id === id && version === loadVersion) { domains.value = queue.applyPendingDomains(domainRows); tasks.value = taskRows; incomes.value = incomeRows; efforts.value = effortRows; operations.value = operationRows; notes.value = noteRows; adsenseAccounts.value = accountRows; linkSources.value = sourceRows; opportunities.value = opportunityRows }
+    const [domainRows, taskRows, incomeRows, effortRows, operationRows, noteRows, accountRows] = await Promise.all([api.get<WebsiteDomain[]>(`/api/domains?website_id=${id}`), api.get<WebsiteTask[]>(`/api/websites/${id}/tasks`), api.get<IncomeRow[]>(`/api/websites/${id}/income`), api.get<EffortRow[]>(`/api/websites/${id}/effort`), api.get<OperationRow[]>(`/api/websites/${id}/operations`), api.get<AiNote[]>(`/api/websites/${id}/ai-notes`), api.get<Array<{ id: number; name: string }>>('/api/adsense/accounts')])
+    if (props.website?.id === id && version === loadVersion) { domains.value = queue.applyPendingDomains(domainRows); tasks.value = taskRows; incomes.value = incomeRows; efforts.value = effortRows; operations.value = operationRows; notes.value = noteRows; adsenseAccounts.value = accountRows }
   } catch (e) { if (props.website?.id === id && version === loadVersion) error.value = e instanceof Error ? e.message : '详情加载失败' }
 }
 const saveProfile = async () => {
@@ -367,48 +322,6 @@ const removeTask = async (task: WebsiteTask) => {
   if (!props.website) return
   try { await confirmAction(`删除任务“${task.title}”？`, '删除任务', { confirmButtonText: '删除' }); await api.delete(`/api/websites/${props.website.id}/tasks/${task.id}`); await loadAll(); notifyChanged() }
   catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '任务删除失败') }
-}
-const submissionAddress = (item: WebsiteLinkOpportunity) => {
-  const source = linkSources.value.find(row => row.id === item.source_id)
-  if (item.approval_status !== '已批准' || Number(item.source_enabled) !== 1) return null
-  return item.submission_url || generateSubmissionUrl(item.url_template || source?.url_template, item.target_url)
-}
-const addOpportunity = async () => {
-  if (!props.website || savingLink.value || !opportunityForm.source_id || !opportunityForm.target_url.trim()) return
-  savingLink.value = true
-  try {
-    const source = selectedOpportunitySource.value
-    const status = source?.approval_status !== '已批准' || source.enabled !== 1 ? '待审核' : generatedOpportunityAddress.value ? '已生成提交地址' : '待处理'
-    await api.post(`/api/websites/${props.website.id}/link-opportunities`, { ...opportunityForm, source_id: opportunityForm.source_id, status, submission_url: generatedOpportunityAddress.value, title: opportunityForm.title || null, description: opportunityForm.description || null, anchor_text: opportunityForm.anchor_text || null, next_run_at: opportunityForm.next_run_at || null })
-    Object.assign(opportunityForm, { source_id: undefined, target_url: '', title: '', description: '', anchor_text: '', next_run_at: '' }); await loadAll(); notifyChanged(); ElMessage.success('外链候选已添加')
-  } catch (e) { ElMessage.error(e instanceof Error ? e.message : '外链候选添加失败') }
-  finally { savingLink.value = false }
-}
-const updateOpportunity = async (item: WebsiteLinkOpportunity, fields: Record<string, unknown>) => {
-  if (!props.website || savingLink.value) return
-  savingLink.value = true
-  try { const updated = await api.patch<WebsiteLinkOpportunity>(`/api/websites/${props.website.id}/link-opportunities/${item.id}`, fields); Object.assign(item, updated); notifyChanged() }
-  catch (e) { ElMessage.error(e instanceof Error ? e.message : '外链候选更新失败') }
-  finally { savingLink.value = false }
-}
-const openOpportunityEdit = (item: WebsiteLinkOpportunity) => { editingOpportunity.value = item; Object.assign(opportunityEdit, { title: item.title || '', description: item.description || '', anchor_text: item.anchor_text || '', status: item.status, next_run_at: item.next_run_at || '', memo: item.memo || '' }); opportunityDialogVisible.value = true }
-const saveOpportunityEdit = async () => { if (!editingOpportunity.value) return; const item = editingOpportunity.value; await updateOpportunity(item, { title: opportunityEdit.title || null, description: opportunityEdit.description || null, anchor_text: opportunityEdit.anchor_text || null, status: opportunityEdit.status, next_run_at: opportunityEdit.next_run_at || null, memo: opportunityEdit.memo || null }); opportunityDialogVisible.value = false }
-const copySubmission = async (item: WebsiteLinkOpportunity) => { const address = submissionAddress(item); if (!address) return; try { await copyText(address); ElMessage.success('提交地址已复制') } catch { ElMessage.error('提交地址复制失败，请手动打开') } }
-const attemptOutcome = (attempt: LinkAttempt) => attempt.result_status || (attempt.request_status === '失败' ? '请求失败' : attempt.request_status === '需要人工' ? '需要人工处理' : '已完成')
-const openAttempt = async (item: WebsiteLinkOpportunity) => {
-  attemptOpportunity.value = item; Object.assign(attemptForm, { outcome: '已完成', http_status: undefined, confirmed_public_link: false, evidence_url: '', response_summary: '', error_message: '' }); attempts.value = []
-  attemptDialogVisible.value = true
-  if (!props.website) return
-  try { attempts.value = await api.get<LinkAttempt[]>(`/api/websites/${props.website.id}/link-opportunities/${item.id}/attempts`) } catch (e) { ElMessage.error(e instanceof Error ? e.message : '尝试记录读取失败') }
-}
-const saveAttempt = async () => {
-  if (!props.website || !attemptOpportunity.value || savingAttempt.value) return
-  savingAttempt.value = true
-  const request_status: LinkAttempt['request_status'] = attemptForm.outcome === '请求失败' ? '失败' : attemptForm.outcome === '需要人工处理' ? '需要人工' : '已完成'
-  const result_status: LinkAttempt['result_status'] = ['已提交待审核', '被拒绝', '来源失效'].includes(attemptForm.outcome) ? attemptForm.outcome as LinkAttempt['result_status'] : null
-  try { await api.post(`/api/websites/${props.website.id}/link-opportunities/${attemptOpportunity.value.id}/attempts`, { request_status, result_status, http_status: attemptForm.http_status ?? null, confirmed_public_link: attemptForm.confirmed_public_link, evidence_url: attemptForm.evidence_url || null, response_summary: attemptForm.response_summary || null, error_message: attemptForm.error_message || null }); attemptDialogVisible.value = false; await loadAll(); notifyChanged(); ElMessage.success('外链尝试已记录') }
-  catch (e) { ElMessage.error(e instanceof Error ? e.message : '外链尝试记录失败') }
-  finally { savingAttempt.value = false }
 }
 const addOperation = async () => {
   if (!props.website || savingOperation.value) return

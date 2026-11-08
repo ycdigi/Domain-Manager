@@ -15,8 +15,38 @@ test('fresh schema is repeatable and owns operating data at website level', () =
   try {
     run(file, schema); run(file, schema)
     const tables = run(file, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
-    for (const table of ['websites', 'domains', 'website_income', 'website_effort', 'website_tasks', 'website_click_snapshots', 'website_resources', 'website_operations', 'website_ai_notes', 'adsense_accounts', 'adsense_income', 'link_sources', 'link_source_reviews', 'link_source_review_runs', 'website_link_opportunities', 'link_attempts']) assert.match(tables, new RegExp(`\\b${table}\\b`))
+    for (const table of ['websites', 'domains', 'website_income', 'website_effort', 'website_tasks', 'website_click_snapshots', 'website_resources', 'website_operations', 'website_ai_notes', 'adsense_accounts', 'adsense_income']) assert.match(tables, new RegExp(`\\b${table}\\b`))
+    for (const table of ['link_sources', 'link_source_reviews', 'link_source_review_runs', 'website_link_opportunities', 'link_attempts']) assert.doesNotMatch(tables, new RegExp(`\\b${table}\\b`))
     for (const removed of ['domain_resources', 'domain_todos', 'domain_operations', 'adsense_income_domains']) assert.doesNotMatch(tables, new RegExp(`\\b${removed}\\b`))
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})
+
+test('v1.21 removes external-link tables while preserving portfolio data', () => {
+  const migrationPath = path.join(root, 'schema-migration-v1.21.0.sql')
+  assert.equal(fs.existsSync(migrationPath), true, 'the removal migration must exist')
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'remove-link-data-')); const file = path.join(dir, 'db.sqlite')
+  try {
+    run(file, `PRAGMA foreign_keys=ON;\n${schema}`)
+    for (const version of ['1.17.0', '1.18.0', '1.19.0', '1.19.1', '1.20.0']) {
+      run(file, `PRAGMA foreign_keys=ON;\n${fs.readFileSync(path.join(root, `schema-migration-v${version}.sql`), 'utf8')}`)
+    }
+    run(file, `
+      INSERT INTO websites(name) VALUES ('Keep this website');
+      INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'keep.test','r','2026-01-01','2027-01-01','网站');
+      INSERT INTO website_income(website_id,income_month,source,currency,amount) VALUES (1,'2026-10','AdSense','USD',12);
+      INSERT INTO link_sources(name,source_url) VALUES ('Remove this source','https://source.example');
+      INSERT INTO link_source_reviews(source_id,funnel_stage,check_status) VALUES (1,'未检查','未检查');
+      INSERT INTO link_source_review_runs(id,planned_count,completed_count,status) VALUES (1,1,0,'失败');
+      INSERT INTO website_link_opportunities(website_id,source_id,target_url) VALUES (1,1,'https://keep.test');
+      INSERT INTO link_attempts(opportunity_id,method,request_status) VALUES (1,'人工','已完成');
+    `)
+    run(file, fs.readFileSync(migrationPath, 'utf8'))
+    const tables = run(file, "SELECT name FROM sqlite_master WHERE type='table';")
+    for (const table of ['link_sources', 'link_source_reviews', 'link_source_review_runs', 'website_link_opportunities', 'link_attempts']) assert.doesNotMatch(tables, new RegExp(`\\b${table}\\b`))
+    assert.equal(run(file, 'SELECT COUNT(*) FROM websites;').trim(), '1')
+    assert.equal(run(file, 'SELECT COUNT(*) FROM domains;').trim(), '1')
+    assert.equal(Number(run(file, 'SELECT amount FROM website_income;').trim()), 12)
+    assert.equal(run(file, 'PRAGMA foreign_key_check;').trim(), '')
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
 

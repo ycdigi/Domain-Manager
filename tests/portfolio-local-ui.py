@@ -38,7 +38,6 @@ today = datetime.datetime.now(ZoneInfo('Asia/Shanghai')).date()
 month = today.strftime('%Y-%m')
 monday = (today - datetime.timedelta(days=today.weekday())).isoformat()
 site_ids = []
-link_source_id = None
 errors = []
 try:
     for label, stage in [('A', '验证'), ('B', '验证'), ('C', '增长'), ('D', '待评估'), ('E', '维护')]:
@@ -56,17 +55,11 @@ try:
          'task_updates': [{'task_id': seo['id'], 'status': '已完成', 'completion_summary': '标题与内链已调整',
          'baseline': {'period_start': (today - datetime.timedelta(days=28)).isoformat(),
                       'period_end': (today - datetime.timedelta(days=1)).isoformat(), 'clicks': 100}}]}, 'POST', ai=True)
-    source = call('/api/link-sources', {'name': f'本地 AI 外链验收 {stamp}', 'source_url': f'https://link-{stamp}.example',
-                   'source_type': '工具目录'}, 'POST', 201)
-    link_source_id = source['id']
-    opportunity = call(prefix + '/link-opportunities', {'source_id': link_source_id, 'target_url': f'accept-a-{stamp}.test'}, 'POST', 201)
-    link_context = call('/api/ai/sync?website_id=' + str(site_id), ai=True)
-    assert [item['id'] for item in link_context['link_opportunities']] == [opportunity['id']]
-    updated_links = call('/api/ai/sync', {'website_id': site_id, 'link_updates': [{'opportunity_id': opportunity['id'],
-                          'title': 'AI 外链标题', 'description': '基于已确认资料', 'anchor_text': '验收工具', 'memo': '人工提交'}]}, 'POST', ai=True)
-    assert updated_links['applied']['link_opportunities'] == [opportunity['id']]
-    saved_opportunity = call(prefix + '/link-opportunities')[0]
-    assert (saved_opportunity['status'], saved_opportunity['title'], saved_opportunity['description'], saved_opportunity['anchor_text'], saved_opportunity['memo']) == ('待审核', 'AI 外链标题', '基于已确认资料', '验收工具', '人工提交')
+    ai_context = call('/api/ai/sync?website_id=' + str(site_id), ai=True)
+    assert set(ai_context) == {'website', 'tasks'}
+    call(prefix, {'gsc_connected': '未知'}, 'PATCH')
+    call('/api/ai/sync', {'website_id': site_id, 'fields': {'gsc_connected': '已开通'}, 'link_updates': []}, 'POST', 400, ai=True)
+    assert call(prefix)['gsc_connected'] == '未知'
     review = next(item for item in call(prefix + '/tasks') if item['review_of_task_id'] == seo['id'])
     assert review['due_at'] == (today + datetime.timedelta(days=28)).isoformat()
     assert review['snapshots'][0]['clicks'] == 100
@@ -170,6 +163,7 @@ try:
         assert (saved_site['next_action'], saved_site['next_action_status'], saved_site['next_action_due_date']) == ('本地表格快速更新', '已完成', '2026-12-01')
         assert saved_site['stage'] == '增长'
         page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}').click()
+        expect(page.get_by_role('heading', name='外链候选', exact=True)).to_have_count(0)
         expect(page.get_by_text('标题与内链已调整', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · USD', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · EUR', exact=True)).to_be_visible()
@@ -243,5 +237,3 @@ try:
 finally:
     for site_id in site_ids:
         call(f'/api/websites/{site_id}', method='DELETE')
-    if link_source_id is not None:
-        call(f'/api/link-sources/{link_source_id}', method='DELETE')

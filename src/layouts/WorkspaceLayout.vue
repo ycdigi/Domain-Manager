@@ -37,7 +37,7 @@ const toggleNavigation = () => { navigationCollapsed.value = !navigationCollapse
 const websites = cachedValue<Website[]>('/api/websites')
 const ownershipFilters = [{ label: '全部归属', value: 'all' }, { label: '自营网站', value: '自营网站' }, { label: '企业客户网站', value: '企业客户网站' }, { label: '未分类', value: '未分类' }]
 const platformFilters = [{ label: '全部技术栈', value: 'all' }, { label: 'Astro', value: 'Astro' }, { label: 'Next.js', value: 'Next.js' }, { label: 'WordPress', value: 'WordPress' }, { label: '其他', value: '其他' }]
-const activeManager = computed(() => ({ Domains: 'domains', Resources: 'resources', Adsense: 'adsense', Links: 'links', Data: 'data' }[String(route.name)] || ''))
+const activeManager = computed(() => ({ Domains: 'domains', Resources: 'resources', Adsense: 'adsense', Data: 'data' }[String(route.name)] || ''))
 let pendingNavigationAction: (() => void) | undefined
 const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.() }
 const runNavigationAction = (action: () => void) => { if (navigationMobileOpen.value) { pendingNavigationAction = action; navigationMobileOpen.value = false } else action() }
@@ -64,7 +64,7 @@ const selectFilter = (kind: 'ownership' | 'platform', value: string) => runNavig
   if (value === 'all') delete query[kind]; else query[kind] = value
   void router.push({ name: 'Home', query })
 })
-const navigateManager = (view: string) => runNavigationAction(() => { const name = { domains: 'Domains', resources: 'Resources', adsense: 'Adsense', links: 'Links', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
+const navigateManager = (view: string) => runNavigationAction(() => { const name = { domains: 'Domains', resources: 'Resources', adsense: 'Adsense', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
 const backup = async () => { try { await downloadJsonBackup(); ElMessage.success('JSON 备份已导出') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败') } }
 const logout = () => { void logoutWorkspace() }
 provide('openWorkspaceNavigation', () => { navigationMobileOpen.value = true })
