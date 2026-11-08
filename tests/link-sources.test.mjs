@@ -13,10 +13,12 @@ const migration = fs.readFileSync(path.join(root, 'schema-migration-v1.17.0.sql'
 const migration118 = fs.readFileSync(path.join(root, 'schema-migration-v1.18.0.sql'), 'utf8')
 const migration119 = fs.readFileSync(path.join(root, 'schema-migration-v1.19.0.sql'), 'utf8')
 const migration1191 = fs.readFileSync(path.join(root, 'schema-migration-v1.19.1.sql'), 'utf8')
+const migration120 = fs.readFileSync(path.join(root, 'schema-migration-v1.20.0.sql'), 'utf8')
 const server = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true, include: [] }, server: { middlewareMode: true }, appType: 'custom' })
 const sources = await server.ssrLoadModule('/functions/api/link-sources/index.ts')
 const sourceEdit = await server.ssrLoadModule('/functions/api/link-sources/[id]/index.ts')
 const sourceImport = await server.ssrLoadModule('/functions/api/link-sources/import/index.ts')
+const sourceReview = await server.ssrLoadModule('/functions/api/link-sources/review/index.ts')
 const opportunities = await server.ssrLoadModule('/functions/api/websites/[id]/link-opportunities/index.ts')
 const opportunityEdit = await server.ssrLoadModule('/functions/api/websites/[id]/link-opportunities/[opportunity_id]/index.ts')
 const opportunityAttempts = await server.ssrLoadModule('/functions/api/websites/[id]/link-opportunities/[opportunity_id]/attempts/index.ts')
@@ -32,7 +34,7 @@ const context = (url, body, method = 'GET', id = '1', opportunityId = '1', autho
   request: new Request(`https://example.test${url}`, { method, headers: { ...(authorization ? { Authorization: `Bearer ${authorization}` } : {}), 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) })
 })
 const call = async (handler, ctx, status = 200) => { const response = await handler(ctx); const body = await response.json(); assert.equal(response.status, status, JSON.stringify(body)); return body.data }
-beforeEach(async () => { store.init(); store.script(`PRAGMA foreign_keys=ON;\n${migration}\n${migration118}`); session = await auth.issueSessionToken('test', 'secret') })
+beforeEach(async () => { store.init(); store.script(`PRAGMA foreign_keys=ON;\n${migration}\n${migration118}\n${migration120}`); session = await auth.issueSessionToken('test', 'secret') })
 after(async () => { store.close(); await server.close() })
 
 test('v1.17 migration is repeatable and creates the link tables', () => {
@@ -42,6 +44,40 @@ test('v1.17 migration is repeatable and creates the link tables', () => {
   const tables = store.sql("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('link_sources','website_link_opportunities','link_attempts') ORDER BY name;")
   assert.deepEqual(tables.map(row => row.name), ['link_attempts', 'link_sources', 'website_link_opportunities'])
   assert.equal(store.sql("SELECT COUNT(*) AS count FROM sqlite_master WHERE type='index' AND name='uq_link_sources_source_template';")[0].count, 1)
+})
+
+test('v1.20 migration is repeatable and keeps review state separate from source approval', () => {
+  store.script(migration120)
+  store.script(migration120)
+  assert.deepEqual(store.sql("SELECT name FROM sqlite_master WHERE type='table' AND name IN ('link_source_reviews','link_source_review_runs') ORDER BY name;"), [
+    { name: 'link_source_review_runs' },
+    { name: 'link_source_reviews' }
+  ])
+  store.sql("INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example');")
+  assert.deepEqual(store.sql("SELECT funnel_stage,check_status FROM link_source_reviews WHERE source_id=1;"), [])
+})
+
+test('review results classify sources for the funnel without approving or enabling them', async () => {
+  store.sql("INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'),('Broken','https://broken.example');")
+  const result = await call(sourceReview.onRequestPost, context('/api/link-sources/review', {
+    run: { planned_count: 2, completed_count: 2, failed_count: 0, status: '已完成' },
+    results: [
+      { source_id: 1, check_status: '可访问', http_status: 200, checked_url: 'https://source.example' },
+      { source_id: 2, check_status: '404', http_status: 404, checked_url: 'https://broken.example', error_message: '页面不存在' }
+    ]
+  }, 'POST'))
+  assert.equal(result.updated, 2)
+  assert.deepEqual(store.sql('SELECT source_id,funnel_stage,check_status,http_status FROM link_source_reviews ORDER BY source_id;'), [
+    { source_id: 1, funnel_stage: '建议保留', check_status: '可访问', http_status: 200 },
+    { source_id: 2, funnel_stage: '待删除', check_status: '404', http_status: 404 }
+  ])
+  assert.deepEqual(store.sql('SELECT approval_status,enabled FROM link_sources ORDER BY id;'), [
+    { approval_status: '待审核', enabled: 0 },
+    { approval_status: '待审核', enabled: 0 }
+  ])
+  assert.deepEqual(store.sql('SELECT planned_count,completed_count,failed_count,status FROM link_source_review_runs;'), [
+    { planned_count: 2, completed_count: 2, failed_count: 0, status: '已完成' }
+  ])
 })
 
 test('v1.19 migration preserves attempts and converts direct historical outcomes', () => {
@@ -183,14 +219,18 @@ test('website deletion cascades opportunities and attempts', () => {
 })
 
 test('link source data is included in snapshot export and can be restored', async () => {
-  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'site.example','r','2026-01-01','2027-01-01','网站'); INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','被拒绝'); INSERT INTO link_attempts(opportunity_id,method,request_status,result_status,response_summary) VALUES (1,'人工','已完成','被拒绝','目录拒绝');")
+  store.sql("INSERT INTO websites(name) VALUES ('Site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'site.example','r','2026-01-01','2027-01-01','网站'); INSERT INTO link_sources(name,source_url) VALUES ('Source','https://source.example'); INSERT INTO link_source_reviews(source_id,funnel_stage,check_status,http_status) VALUES (1,'建议保留','可访问',200); INSERT INTO link_source_review_runs(id,planned_count,completed_count,status) VALUES (1,1,1,'已完成'); INSERT INTO website_link_opportunities(website_id,source_id,target_url,status) VALUES (1,1,'https://site.example','被拒绝'); INSERT INTO link_attempts(opportunity_id,method,request_status,result_status,response_summary) VALUES (1,'人工','已完成','被拒绝','目录拒绝');")
   const snapshot = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
   assert.equal(snapshot.link_sources.length, 1)
+  assert.equal(snapshot.link_source_reviews.length, 1)
+  assert.equal(snapshot.link_source_review_runs.length, 1)
   assert.equal(snapshot.website_link_opportunities.length, 1)
   assert.equal(snapshot.link_attempts.length, 1)
   store.sql('DELETE FROM websites; DELETE FROM link_sources;')
   await call(importData.onRequestPost, context('/api/domains/import', snapshot, 'POST'))
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_sources;')[0].count, 1)
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_source_reviews;')[0].count, 1)
+  assert.equal(store.sql('SELECT status FROM link_source_review_runs WHERE id=1;')[0].status, '已完成')
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_link_opportunities;')[0].count, 1)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM link_attempts;')[0].count, 1)
   assert.deepEqual(store.sql('SELECT request_status,result_status,response_summary FROM link_attempts;'), [{ request_status: '已完成', result_status: '被拒绝', response_summary: '目录拒绝' }])
@@ -221,6 +261,14 @@ test('audit script classifies, cleans and reports duplicate templates without ne
 
 test('link APIs require the normal session token', async () => {
   await call(sources.onRequestGet, context('/api/link-sources', undefined, 'GET', '1', '1', ''), 401)
+})
+
+test('source listing and review results accept the configured API token for the Mac Mini worker', async () => {
+  const apiContext = (handlerContext, url, body, method = 'GET') => ({ ...handlerContext(url, body, method, '1', '1', ''), request: new Request(`https://example.test${url}`, { method, headers: { Authorization: 'Bearer worker-token', 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), env: { ...store.db, DB: store.db, USER: 'test', PASS: 'secret', API_TOKEN: 'worker-token' } })
+  const sourceResult = await sources.onRequestGet(apiContext(context, '/api/link-sources'))
+  assert.equal(sourceResult.status, 200)
+  const reviewResult = await sourceReview.onRequestPost(apiContext(context, '/api/link-sources/review', { run: { planned_count: 0, completed_count: 0, failed_count: 0, status: '已完成' }, results: [] }, 'POST'))
+  assert.equal(reviewResult.status, 200)
 })
 
 test('manual attempts persist evidence and update the candidate status without requesting a third party', async () => {

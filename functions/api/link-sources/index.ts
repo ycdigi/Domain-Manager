@@ -1,5 +1,5 @@
 import type { Env, LinkSource } from '../../types'
-import { checkAuth } from '../../utils/auth'
+import { checkAuth, checkSessionOrApiToken } from '../../utils/auth'
 import { effectiveSourceEnabled, validateSourceInput } from '../../domain/link-sources'
 import { normalizeSourceUrl, normalizeUrlTemplate } from '../../../shared/link-sources'
 
@@ -21,14 +21,16 @@ const sourcePayload = (data: Record<string, unknown>, current?: Record<string, u
 }
 
 export const onRequestGet: PagesFunction<Env> = async context => {
-    const authError = await checkAuth(context); if (authError) return authError
+    const authError = await checkSessionOrApiToken(context); if (authError) return authError
     try {
         const params = new URL(context.request.url).searchParams
         const values: string[] = []; const where: string[] = []
         if (params.get('approval_status')) { where.push('s.approval_status=?'); values.push(params.get('approval_status')!) }
         if (params.get('source_type')) { where.push('s.source_type=?'); values.push(params.get('source_type')!) }
         if (params.get('enabled') !== null) { where.push('s.enabled=?'); values.push(params.get('enabled') === '1' ? '1' : '0') }
-        const result = await context.env.DB.prepare(`SELECT s.*, COUNT(o.id) AS opportunity_count FROM link_sources s LEFT JOIN website_link_opportunities o ON o.source_id=s.id ${where.length ? `WHERE ${where.join(' AND ')}` : ''} GROUP BY s.id ORDER BY s.approval_status, s.source_type, s.name COLLATE NOCASE`).bind(...values).all<LinkSource>()
+        if (params.get('funnel_stage')) { where.push("COALESCE(r.funnel_stage, '未检查')=?"); values.push(params.get('funnel_stage')!) }
+        if (params.get('check_status')) { where.push("COALESCE(r.check_status, '未检查')=?"); values.push(params.get('check_status')!) }
+        const result = await context.env.DB.prepare(`SELECT s.*, COUNT(o.id) AS opportunity_count, COALESCE(r.funnel_stage, '未检查') AS funnel_stage, COALESCE(r.check_status, '未检查') AS check_status, r.http_status, r.checked_url, r.error_message AS check_error_message, r.checked_at FROM link_sources s LEFT JOIN link_source_reviews r ON r.source_id=s.id LEFT JOIN website_link_opportunities o ON o.source_id=s.id ${where.length ? `WHERE ${where.join(' AND ')}` : ''} GROUP BY s.id, r.source_id ORDER BY CASE COALESCE(r.funnel_stage, '未检查') WHEN '建议保留' THEN 1 WHEN '待筛选' THEN 2 WHEN '未检查' THEN 3 WHEN '待删除' THEN 4 WHEN '已保留' THEN 5 WHEN '已排除' THEN 6 ELSE 7 END, s.approval_status, s.source_type, s.name COLLATE NOCASE`).bind(...values).all<LinkSource>()
         return json(result.results || [])
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取外链来源失败') }
 }

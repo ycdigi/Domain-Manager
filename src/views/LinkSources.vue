@@ -3,20 +3,24 @@
     <WorkspaceHeading title="外链来源" subtitle="审核来源、维护模板，再为具体网站建立候选">
       <el-button :icon="Refresh" :loading="loading" aria-label="刷新来源" title="刷新来源" @click="load(true)" />
       <el-button type="primary" :icon="Plus" @click="openCreate">新增来源</el-button>
-      <el-button :icon="Upload" :loading="importing" @click="fileInput?.click()">导入审查结果</el-button>
-      <input ref="fileInput" class="link-sources-file-input" type="file" accept=".json,application/json" @change="handleImportFile">
+      <el-button :icon="Upload" :loading="importing" @click="sourceFileInput?.click()">导入来源清单</el-button>
+      <el-button :icon="Finished" :loading="reviewImporting" @click="reviewFileInput?.click()">导入轮询结果</el-button>
+      <input ref="sourceFileInput" class="link-sources-file-input" type="file" accept=".json,application/json" @change="handleImportFile">
+      <input ref="reviewFileInput" class="link-sources-file-input" type="file" accept=".json,application/json" @change="handleReviewImportFile">
     </WorkspaceHeading>
 
     <div v-if="error" class="page-error" role="alert"><span>{{ error }}</span><el-button @click="load(true)">重试</el-button></div>
-    <section class="link-source-summary" aria-label="来源统计">
-      <button v-for="item in summary" :key="item.label" type="button" class="link-source-summary-item" :class="{ 'is-active': approvalFilter === item.value }" @click="approvalFilter = item.value"><strong>{{ item.count }}</strong><span>{{ item.label }}</span></button>
+    <section class="link-source-summary" aria-label="来源漏斗">
+      <button v-for="item in summary" :key="item.label" type="button" class="link-source-summary-item" :class="{ 'is-active': funnelFilter === item.value }" @click="funnelFilter = item.value"><strong>{{ item.count }}</strong><span>{{ item.label }}</span></button>
     </section>
+    <p v-if="reviewRun" class="link-source-run-status">最近轮询：{{ reviewRun.status }} · 完成 {{ reviewRun.completed_count }}/{{ reviewRun.planned_count }} · 失败 {{ reviewRun.failed_count }}</p>
 
     <section class="page-panel link-source-panel">
       <div class="link-source-toolbar">
         <el-input v-model="search" :prefix-icon="Search" clearable placeholder="搜索名称、来源 URL、标签" aria-label="搜索外链来源" />
         <el-select v-model="typeFilter" clearable placeholder="全部类型" aria-label="来源类型筛选"><el-option v-for="type in linkSourceTypes" :key="type" :label="type" :value="type" /></el-select>
         <el-select v-model="modeFilter" clearable placeholder="全部处理模式" aria-label="处理模式筛选"><el-option v-for="mode in linkSubmissionModes" :key="mode" :label="mode" :value="mode" /></el-select>
+        <el-select v-model="approvalFilter" clearable placeholder="全部审核状态" aria-label="审核状态筛选"><el-option v-for="status in linkSourceApprovalStatuses" :key="status" :label="status" :value="status" /></el-select>
       </div>
       <el-table v-loading="loading" :data="filteredSources" row-key="id" border stripe>
         <el-table-column label="来源" min-width="250" fixed="left">
@@ -26,6 +30,7 @@
         <el-table-column label="国家 / 语言" width="130"><template #default="scope">{{ [scope.row.country, scope.row.language].filter(Boolean).join(' · ') || '未记录' }}</template></el-table-column>
         <el-table-column prop="submission_mode" label="处理模式" width="112" />
         <el-table-column label="审核状态" width="126"><template #default="scope"><el-select size="small" :model-value="scope.row.approval_status" :disabled="savingIds.has(scope.row.id)" @change="value => changeApproval(scope.row, value)"><el-option v-for="status in linkSourceApprovalStatuses" :key="status" :label="status" :value="status" /></el-select></template></el-table-column>
+        <el-table-column label="轮询结果" width="150"><template #default="scope"><div class="link-source-review-result"><strong>{{ scope.row.funnel_stage || '未检查' }}</strong><small>{{ scope.row.check_status || '未检查' }}<template v-if="scope.row.http_status"> · {{ scope.row.http_status }}</template></small></div></template></el-table-column>
         <el-table-column label="启用" width="82"><template #default="scope"><el-switch :model-value="scope.row.enabled === 1" :disabled="scope.row.approval_status !== '已批准' || savingIds.has(scope.row.id)" @change="value => changeEnabled(scope.row, Boolean(value))" /></template></el-table-column>
         <el-table-column prop="opportunity_count" label="候选" width="72" align="right" />
         <el-table-column label="审查标记" min-width="180"><template #default="scope"><span class="link-source-flags">{{ scope.row.audit_flags || '无' }}</span></template></el-table-column>
@@ -58,28 +63,29 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, EditPen, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
+import { Delete, EditPen, Finished, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
-import { getLinkSources, createLinkSource, updateLinkSource, deleteLinkSource, importLinkSources, linkSourceApprovalStatuses, linkSourceTypes, linkSubmissionModes, type LinkSource, type LinkSourceApprovalStatus, type LinkSourceType, type LinkSubmissionMode } from '../api/link-sources'
+import { getLinkSources, createLinkSource, updateLinkSource, deleteLinkSource, importLinkSources, getLinkSourceReview, importLinkSourceReview, linkSourceApprovalStatuses, linkSourceTypes, linkSubmissionModes, type LinkSource, type LinkSourceApprovalStatus, type LinkSourceFunnelStage, type LinkSourceReviewRun, type LinkSourceType, type LinkSubmissionMode } from '../api/link-sources'
 
 type SourceForm = { name: string; source_url: string; source_type: LinkSourceType; country: string; language: string; topic_tags: string; url_template: string; submission_mode: LinkSubmissionMode; approval_status: LinkSourceApprovalStatus; memo: string }
-const sources = ref<LinkSource[]>([])
-const loading = ref(false); const importing = ref(false); const saving = ref(false); const error = ref('')
-const search = ref(''); const typeFilter = ref<LinkSourceType>(); const modeFilter = ref<LinkSubmissionMode>(); const approvalFilter = ref<'all' | LinkSourceApprovalStatus>('all')
-const dialogVisible = ref(false); const editingId = ref<number>(); const fileInput = ref<HTMLInputElement>()
+const sources = ref<LinkSource[]>([]); const reviewRun = ref<LinkSourceReviewRun | null>(null)
+const loading = ref(false); const importing = ref(false); const reviewImporting = ref(false); const saving = ref(false); const error = ref('')
+const search = ref(''); const typeFilter = ref<LinkSourceType>(); const modeFilter = ref<LinkSubmissionMode>(); const approvalFilter = ref<LinkSourceApprovalStatus>(); const funnelFilter = ref<'all' | LinkSourceFunnelStage>('all')
+const dialogVisible = ref(false); const editingId = ref<number>(); const sourceFileInput = ref<HTMLInputElement>(); const reviewFileInput = ref<HTMLInputElement>()
 const savingIds = reactive(new Set<number>())
 const form = reactive<SourceForm>({ name: '', source_url: '', source_type: '无法判断', country: '', language: '', topic_tags: '', url_template: '', submission_mode: '仅观察', approval_status: '待审核', memo: '' })
 
-const load = async (force = false) => { loading.value = true; error.value = ''; try { sources.value = await getLinkSources(force) } catch (e) { error.value = e instanceof Error ? e.message : '来源加载失败' } finally { loading.value = false } }
+const load = async (force = false) => { loading.value = true; error.value = ''; try { const [sourceRows, review] = await Promise.all([getLinkSources(force), getLinkSourceReview()]); sources.value = sourceRows; reviewRun.value = review.run } catch (e) { error.value = e instanceof Error ? e.message : '来源加载失败' } finally { loading.value = false } }
 const filteredSources = computed(() => sources.value.filter(source => {
-  if (approvalFilter.value !== 'all' && source.approval_status !== approvalFilter.value) return false
+  if (funnelFilter.value !== 'all' && (source.funnel_stage || '未检查') !== funnelFilter.value) return false
+  if (approvalFilter.value && source.approval_status !== approvalFilter.value) return false
   if (typeFilter.value && source.source_type !== typeFilter.value) return false
   if (modeFilter.value && source.submission_mode !== modeFilter.value) return false
   const query = search.value.trim().toLowerCase()
   return !query || `${source.name} ${source.source_url} ${source.topic_tags || ''} ${source.country || ''} ${source.language || ''}`.toLowerCase().includes(query)
 }))
-const summary = computed(() => [{ label: '全部', value: 'all' as const, count: sources.value.length }, ...linkSourceApprovalStatuses.map(status => ({ label: status, value: status, count: sources.value.filter(source => source.approval_status === status).length }))])
+const summary = computed(() => [{ label: '全部', value: 'all' as const, count: sources.value.length }, ...(['未检查', '建议保留', '待删除'] as LinkSourceFunnelStage[]).map(stage => ({ label: stage, value: stage, count: sources.value.filter(source => (source.funnel_stage || '未检查') === stage).length }))])
 const resetForm = () => Object.assign(form, { name: '', source_url: '', source_type: '无法判断', country: '', language: '', topic_tags: '', url_template: '', submission_mode: '仅观察', approval_status: '待审核', memo: '' })
 const openCreate = () => { editingId.value = undefined; resetForm(); dialogVisible.value = true }
 const openEdit = (source: LinkSource) => { editingId.value = source.id; Object.assign(form, { name: source.name, source_url: source.source_url, source_type: source.source_type, country: source.country || '', language: source.language || '', topic_tags: source.topic_tags || '', url_template: source.url_template || '', submission_mode: source.submission_mode, approval_status: source.approval_status, memo: source.memo || '' }); dialogVisible.value = true }
@@ -115,6 +121,20 @@ const handleImportFile = async (event: Event) => {
     await load(true)
   } catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '来源导入失败') }
   finally { importing.value = false }
+}
+const handleReviewImportFile = async (event: Event) => {
+  const input = event.target as HTMLInputElement; const file = input.files?.[0]; input.value = ''
+  if (!file || reviewImporting.value) return
+  reviewImporting.value = true
+  try {
+    const parsed = JSON.parse(await file.text()) as { run?: Record<string, unknown>; results?: Array<Record<string, unknown>> }
+    if (!Array.isArray(parsed.results)) throw new Error('文件中没有 results 数组')
+    await confirmAction(`准备更新 ${parsed.results.length} 条来源轮询结果。结果只用于来源漏斗筛选，不会自动批准或提交外链。`, '导入轮询结果', { confirmButtonText: '导入结果' })
+    const result = await importLinkSourceReview(parsed)
+    await load(true)
+    ElMessage.success(`轮询结果已更新：${result.updated} 条`)
+  } catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '轮询结果导入失败') }
+  finally { reviewImporting.value = false }
 }
 watch(dialogVisible, value => { if (!value) editingId.value = undefined })
 void load()

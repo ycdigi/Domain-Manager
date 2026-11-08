@@ -15,7 +15,7 @@ test('fresh schema is repeatable and owns operating data at website level', () =
   try {
     run(file, schema); run(file, schema)
     const tables = run(file, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
-    for (const table of ['websites', 'domains', 'website_income', 'website_effort', 'website_tasks', 'website_click_snapshots', 'website_resources', 'website_operations', 'website_ai_notes', 'adsense_accounts', 'adsense_income', 'link_sources', 'website_link_opportunities', 'link_attempts']) assert.match(tables, new RegExp(`\\b${table}\\b`))
+    for (const table of ['websites', 'domains', 'website_income', 'website_effort', 'website_tasks', 'website_click_snapshots', 'website_resources', 'website_operations', 'website_ai_notes', 'adsense_accounts', 'adsense_income', 'link_sources', 'link_source_reviews', 'link_source_review_runs', 'website_link_opportunities', 'link_attempts']) assert.match(tables, new RegExp(`\\b${table}\\b`))
     for (const removed of ['domain_resources', 'domain_todos', 'domain_operations', 'adsense_income_domains']) assert.doesNotMatch(tables, new RegExp(`\\b${removed}\\b`))
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })

@@ -5,12 +5,16 @@ export const linkSourceTypes = ['搜索页', 'SEO 查询页', '工具目录', '�
 export const linkSubmissionModes = ['人工提交', '允许自动处理', '仅观察'] as const
 export const linkSourceApprovalStatuses = ['待审核', '已批准', '已暂停', '已拒绝', '已失效'] as const
 export const linkOpportunityStatuses = ['待审核', '待处理', '已生成提交地址', '请求已完成', '已提交待审核', '已确认公开链接', '被拒绝', '来源失效', '请求失败', '需要人工处理', '已暂停'] as const
+export const linkSourceFunnelStages = ['未检查', '待筛选', '建议保留', '已保留', '待删除', '已排除'] as const
+export const linkSourceCheckStatuses = ['未检查', '可访问', '重定向', '404', '受阻', '超时', '错误', '需要人工验证'] as const
 export const linkOpportunityManualStatuses = ['待审核', '待处理', '已生成提交地址', '已暂停'] as const
 
 export type LinkSourceType = typeof linkSourceTypes[number]
 export type LinkSubmissionMode = typeof linkSubmissionModes[number]
 export type LinkSourceApprovalStatus = typeof linkSourceApprovalStatuses[number]
 export type LinkOpportunityStatus = typeof linkOpportunityStatuses[number]
+export type LinkSourceFunnelStage = typeof linkSourceFunnelStages[number]
+export type LinkSourceCheckStatus = typeof linkSourceCheckStatuses[number]
 
 export interface LinkSource {
   id: number
@@ -28,6 +32,23 @@ export interface LinkSource {
   last_checked_at?: string | null
   memo?: string | null
   opportunity_count?: number
+  funnel_stage?: LinkSourceFunnelStage
+  check_status?: LinkSourceCheckStatus
+  http_status?: number | null
+  checked_url?: string | null
+  check_error_message?: string | null
+  checked_at?: string | null
+}
+
+export interface LinkSourceReviewRun {
+  id: number
+  planned_count: number
+  completed_count: number
+  failed_count: number
+  status: '未运行' | '运行中' | '已完成' | '部分完成' | '失败'
+  started_at?: string | null
+  completed_at?: string | null
+  updated_at?: string
 }
 
 export interface WebsiteLinkOpportunity {
@@ -75,3 +96,5 @@ export const createLinkSource = async (body: Record<string, unknown>) => { const
 export const updateLinkSource = async (id: number, body: Record<string, unknown>) => { const result = await api.patch<LinkSource>(`/api/link-sources/${id}`, body); invalidateData('/api/link-sources'); return result }
 export const deleteLinkSource = async (id: number) => { const result = await api.delete(`/api/link-sources/${id}`); invalidateData('/api/link-sources'); return result }
 export const importLinkSources = async (rows: Array<Record<string, unknown>>) => { const result = await api.post<{ total: number; created: number; created_ids: number[]; skipped: Array<{ index: number; error: string }> }>('/api/link-sources/import', { rows }); invalidateData('/api/link-sources'); return result }
+export const getLinkSourceReview = () => api.get<{ run: LinkSourceReviewRun | null; counts: Array<{ funnel_stage: LinkSourceFunnelStage; count: number }> }>('/api/link-sources/review')
+export const importLinkSourceReview = async (body: Record<string, unknown>) => { const result = await api.post<{ planned: number; updated: number; skipped: number; run: LinkSourceReviewRun }>('/api/link-sources/review', body); invalidateData('/api/link-sources'); return result }

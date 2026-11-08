@@ -2,11 +2,17 @@ export const linkSourceTypes = ['搜索页', 'SEO 查询页', '工具目录', '�
 export const linkSubmissionModes = ['人工提交', '允许自动处理', '仅观察'] as const
 export const linkSourceApprovalStatuses = ['待审核', '已批准', '已暂停', '已拒绝', '已失效'] as const
 export const linkOpportunityStatuses = ['待审核', '待处理', '已生成提交地址', '请求已完成', '已提交待审核', '已确认公开链接', '被拒绝', '来源失效', '请求失败', '需要人工处理', '已暂停'] as const
+export const linkSourceFunnelStages = ['未检查', '待筛选', '建议保留', '已保留', '待删除', '已排除'] as const
+export const linkSourceCheckStatuses = ['未检查', '可访问', '重定向', '404', '受阻', '超时', '错误', '需要人工验证'] as const
 
 export type LinkSourceType = typeof linkSourceTypes[number]
 export type LinkSubmissionMode = typeof linkSubmissionModes[number]
 export type LinkSourceApprovalStatus = typeof linkSourceApprovalStatuses[number]
 export type LinkOpportunityStatus = typeof linkOpportunityStatuses[number]
+export type LinkSourceFunnelStage = typeof linkSourceFunnelStages[number]
+export type LinkSourceCheckStatus = typeof linkSourceCheckStatuses[number]
+
+export const funnelStageFromCheckStatus = (status: LinkSourceCheckStatus): LinkSourceFunnelStage => status === '可访问' || status === '重定向' ? '建议保留' : status === '未检查' ? '未检查' : '待删除'
 
 const decodeHtmlEntities = (value: string) => value.replace(/&amp;/gi, '&').replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
 const normalizeProtocol = (value: string) => /^https?:\/\//i.test(value) ? value : `https://${value}`

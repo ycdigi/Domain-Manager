@@ -139,6 +139,8 @@ export interface WebsiteResourceLink {
 export type LinkSourceType = '搜索页' | 'SEO 查询页' | '工具目录' | '行业资源页' | '社区页面' | '可能的提交页' | '无法判断'
 export type LinkSubmissionMode = '人工提交' | '允许自动处理' | '仅观察'
 export type LinkSourceApprovalStatus = '待审核' | '已批准' | '已暂停' | '已拒绝' | '已失效'
+export type LinkSourceFunnelStage = '未检查' | '待筛选' | '建议保留' | '已保留' | '待删除' | '已排除'
+export type LinkSourceCheckStatus = '未检查' | '可访问' | '重定向' | '404' | '受阻' | '超时' | '错误' | '需要人工验证'
 export type LinkOpportunityStatus = '待审核' | '待处理' | '已生成提交地址' | '请求已完成' | '已提交待审核' | '已确认公开链接' | '被拒绝' | '来源失效' | '请求失败' | '需要人工处理' | '已暂停'
 
 export interface LinkSource {
@@ -159,6 +161,23 @@ export interface LinkSource {
     created_at?: string
     updated_at?: string
     opportunity_count?: number
+    funnel_stage?: LinkSourceFunnelStage
+    check_status?: LinkSourceCheckStatus
+    http_status?: number | null
+    checked_url?: string | null
+    check_error_message?: string | null
+    checked_at?: string | null
+}
+
+export interface LinkSourceReviewRun {
+    id: number
+    planned_count: number
+    completed_count: number
+    failed_count: number
+    status: '未运行' | '运行中' | '已完成' | '部分完成' | '失败'
+    started_at?: string | null
+    completed_at?: string | null
+    updated_at?: string
 }
 
 export interface WebsiteLinkOpportunity {

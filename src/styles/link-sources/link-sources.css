@@ -1,16 +1,19 @@
 .link-sources-file-input { display:none; }
-.link-source-summary { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:var(--space-xs); margin-bottom:var(--space-md); }
+.link-source-summary { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:var(--space-xs); margin-bottom:var(--space-xs); }
 .link-source-summary-item { display:grid; gap:var(--space-3xs); padding:var(--space-sm); border:1px solid var(--color-rule); border-radius:var(--radius-control); background:var(--color-paper); color:var(--color-ink-2); text-align:left; cursor:pointer; }
 .link-source-summary-item strong { color:var(--color-ink); font-size:20px; line-height:1; font-variant-numeric:tabular-nums; }
 .link-source-summary-item span { color:var(--color-muted); font-size:var(--text-xs); }
 .link-source-summary-item:hover, .link-source-summary-item.is-active { border-color:var(--color-accent); background:var(--color-accent-paper); color:var(--color-link); }
 .link-source-summary-item.is-active strong { color:var(--color-link); }
+.link-source-run-status { margin:0 0 var(--space-md); color:var(--color-muted); font-size:var(--text-xs); }
 .link-source-panel { padding:var(--space-sm); }
 .link-source-toolbar { display:grid; grid-template-columns:minmax(240px,1.5fr) 160px 160px; gap:var(--space-xs); margin-bottom:var(--space-sm); }
 .link-source-identity { display:grid; min-width:0; gap:var(--space-3xs); }
 .link-source-identity strong, .link-source-identity a, .link-source-identity small { overflow-wrap:anywhere; }
 .link-source-identity a { color:var(--color-link); font-size:var(--text-xs); }
 .link-source-identity small, .link-source-flags { color:var(--color-muted); font-size:var(--text-xs); overflow-wrap:anywhere; }
+.link-source-review-result { display:grid; gap:var(--space-3xs); }
+.link-source-review-result small { color:var(--color-muted); font-size:var(--text-xs); }
 .link-source-actions { display:flex; align-items:center; justify-content:flex-end; gap:var(--space-2xs); }
 .link-source-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 var(--space-md); }
 .link-source-form-grid .el-input, .link-source-form-grid .el-select { width:100%; }

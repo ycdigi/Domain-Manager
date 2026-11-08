@@ -44,10 +44,10 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
                 for (const row of input[table]) if (!row || !websites.some(site => site.id === row.website_id)) errors.push({ domain: table, error: '记录必须关联备份中的网站' })
             }
-            for (const table of ['link_sources', 'link_attempts']) {
+            for (const table of ['link_sources', 'link_source_reviews', 'link_source_review_runs', 'link_attempts']) {
                 if (input[table] !== undefined && !Array.isArray(input[table])) errors.push({ domain: table, error: '记录必须为数组' })
             }
-            for (const [table, field, parent] of [['website_click_snapshots', 'task_id', 'website_tasks'], ['website_ai_note_versions', 'note_id', 'website_ai_notes'], ['adsense_income', 'adsense_account_id', 'adsense_accounts'], ['website_resources', 'resource_id', 'provider_resources'], ['website_link_opportunities', 'source_id', 'link_sources'], ['link_attempts', 'opportunity_id', 'website_link_opportunities']] as const) {
+            for (const [table, field, parent] of [['website_click_snapshots', 'task_id', 'website_tasks'], ['website_ai_note_versions', 'note_id', 'website_ai_notes'], ['adsense_income', 'adsense_account_id', 'adsense_accounts'], ['website_resources', 'resource_id', 'provider_resources'], ['website_link_opportunities', 'source_id', 'link_sources'], ['link_source_reviews', 'source_id', 'link_sources'], ['link_attempts', 'opportunity_id', 'website_link_opportunities']] as const) {
                 if (input[table] === undefined) continue
                 if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
                 for (const row of input[table]) if (!row || !Array.isArray(input[parent]) || !input[parent].some((item: Row) => item.id === row[field])) errors.push({ domain: table, error: `关联的 ${parent} 记录不在备份中` })
@@ -345,6 +345,13 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     ? db.prepare('UPDATE link_sources SET name=?,source_url=?,source_type=?,country=?,language=?,topic_tags=?,url_template=?,submission_mode=?,approval_status=?,enabled=?,audit_flags=?,last_checked_at=?,memo=?,updated_at=CURRENT_TIMESTAMP WHERE id=?').bind(...values, id)
                     : db.prepare('INSERT INTO link_sources (id,name,source_url,source_type,country,language,topic_tags,url_template,submission_mode,approval_status,enabled,audit_flags,last_checked_at,memo) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)').bind(id, ...values))
                 linkSourceMap.set(Number(oldSource.id), id)
+            }
+            for (const oldReview of input.link_source_reviews || []) {
+                const sourceId = linkSourceMap.get(Number(oldReview.source_id)); if (!sourceId) continue
+                write(db.prepare(`INSERT INTO link_source_reviews (source_id,funnel_stage,check_status,http_status,checked_url,error_message,checked_at,created_at,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(source_id) DO UPDATE SET funnel_stage=excluded.funnel_stage,check_status=excluded.check_status,http_status=excluded.http_status,checked_url=excluded.checked_url,error_message=excluded.error_message,checked_at=excluded.checked_at,updated_at=excluded.updated_at`).bind(sourceId, oldReview.funnel_stage || '未检查', oldReview.check_status || '未检查', oldReview.http_status ?? null, oldReview.checked_url || null, oldReview.error_message || null, oldReview.checked_at || null, oldReview.created_at || null, oldReview.updated_at || null))
+            }
+            for (const oldRun of input.link_source_review_runs || []) {
+                write(db.prepare(`INSERT INTO link_source_review_runs (id,planned_count,completed_count,failed_count,status,started_at,completed_at,updated_at) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET planned_count=excluded.planned_count,completed_count=excluded.completed_count,failed_count=excluded.failed_count,status=excluded.status,started_at=excluded.started_at,completed_at=excluded.completed_at,updated_at=excluded.updated_at`).bind(1, oldRun.planned_count || 0, oldRun.completed_count || 0, oldRun.failed_count || 0, oldRun.status || '未运行', oldRun.started_at || null, oldRun.completed_at || null, oldRun.updated_at || null))
             }
             for (const link of input.website_resources || []) {
                 const websiteId = siteMap.get(Number(link.website_id)); const resourceId = resourceMap.get(Number(link.resource_id)); if (!websiteId || !resourceId) continue

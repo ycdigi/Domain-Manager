@@ -74,3 +74,9 @@ export const checkApiToken = async (context: EventContext<Env, any, any>) => {
     }
     return null
 }
+
+export const checkSessionOrApiToken = async (context: EventContext<Env, any, any>) => {
+    const sessionError = await checkAuth(context)
+    if (!sessionError) return null
+    return checkApiToken(context)
+}
