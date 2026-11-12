@@ -7,6 +7,8 @@
 .monitor-table { width: 100%; border-collapse: collapse; text-align: left; font-size: 13px; }
 .monitor-table th, .monitor-table td { padding: 14px 12px; border-bottom: 1px solid var(--el-border-color-lighter); }
 .monitor-table th { color: var(--el-text-color-secondary); font-weight: 500; white-space: nowrap; }
+.monitor-table .monitor-page-title { min-width: 200px; max-width: 320px; }
+.monitor-page-title, .monitor-page-title .cell { white-space: normal; overflow-wrap: anywhere; }
 .monitor-table small, .monitor-incident small { display: block; margin-top: 6px; color: var(--el-text-color-secondary); }
 .monitor-actions { flex-wrap: wrap; }
 .monitor-actions .el-button + .el-button { margin-left: 0; }

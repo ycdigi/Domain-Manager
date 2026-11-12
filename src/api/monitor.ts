@@ -6,13 +6,13 @@ export type MonitorStatus = 'healthy' | 'pending' | 'failure' | 'review' | 'inco
 export interface Monitor {
   website_id: number; website_name: string; domain: string | null; domain_id: number | null
   enabled: boolean; effective_enabled: boolean; status: MonitorStatus; reason: string | null
-  http_status: number | null; response_ms: number | null; final_url: string | null
+  http_status: number | null; response_ms: number | null; final_url: string | null; title: string | null
   checked_at: string | null; next_check_at: string | null
   allowed_redirect_hosts: string[]; consecutive_failures: number
 }
 export interface Check {
   id: number; website_id: number; domain: string; checked_at: string; outcome: string; reason: string | null
-  http_status: number | null; response_ms: number | null; final_url: string | null
+  http_status: number | null; response_ms: number | null; final_url: string | null; title: string | null
 }
 export interface Incident {
   id: number; website_id: number; website_name?: string; domain: string; reason: string

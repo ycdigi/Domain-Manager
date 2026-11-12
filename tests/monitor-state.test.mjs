@@ -187,3 +187,13 @@ test('automatic leasing skips a website already rescheduled by a completed manua
   assert.equal(fetched,false)
   assert.equal(store.sql('SELECT COUNT(*) AS n FROM website_monitor_incidents')[0].n,0)
 })
+
+test('a fetched page title is saved in current state and retained in its check history',async()=>{
+  const m=await load()
+  await m.checkOne(store.db,1,{now,checker:async()=>({...healthy,title:'Expired domain | Registrar parking',content_complete:false})})
+  const detail=await m.getMonitorDetail(store.db,1)
+  assert.equal(detail.monitor.title,'Expired domain | Registrar parking')
+  assert.equal(detail.history[0].title,'Expired domain | Registrar parking')
+  assert.equal(detail.monitor.baseline_title,null)
+  assert.equal(detail.monitor.status,'healthy')
+})
