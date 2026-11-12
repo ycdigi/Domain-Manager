@@ -37,3 +37,10 @@ test('marking an incident read preserves its open fault state',async()=>{
  const data=(await (await (await module('/functions/api/monitor/index.ts')).onRequestGet(ctx())).json()).data
  assert.equal(data.unread_count,0);assert.equal(data.monitors[0].status,'failure');assert.equal(data.incidents[0].resolved_at,null)
 })
+
+test('legacy content checks are shown as awaiting a lightweight recheck',async()=>{
+ store.sql("UPDATE website_monitors SET status='incomplete',reason='content_extraction_limit',http_status=200,checked_at='2026-11-12T00:00:00.000Z'")
+ const response=await (await module('/functions/api/monitor/index.ts')).onRequestGet(ctx())
+ const item=(await response.json()).data.monitors[0]
+ assert.equal(item.status,'unchecked');assert.equal(item.reason,null)
+})

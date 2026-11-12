@@ -21,7 +21,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
 
 - 域名管理：添加、编辑、删除、导入、导出域名信息
 - 状态检查：手动检查域名在线状态
-- 网站监控：Cloudflare Worker 每站十二小时巡检、静态内容规则和站内告警，部署见 [网站监控说明](docs/website-monitoring.md)
+- 网站监控：Cloudflare Worker 每站十二小时检查 HTTP 响应头与跳转，提供站内告警，部署见 [网站监控说明](docs/website-monitoring.md)
 - 多注册商支持：支持多个域名注册商的信息记录
 - 响应式设计：支持移动端和桌面端访问
 - 安全认证：基于用户名密码的访问控制
@@ -214,7 +214,7 @@ npm run db:verify:remote
 
 域名状态检查结果会使用浏览器本地队列，最多保留 200 项，每批最多 25 项；断网或 D1 临时失败时会保留待同步状态。AdSense 月收入仍按账号和月份记录，逐站经营收入独立按月份、来源和币种保存；历史逐站 AdSense 美元明细已迁入网站收入，不再从账号总额自动拆分。首页“导出”会生成包含网站、域名、任务、点击快照、收入、投入、AdSense、资源关联和 AI 记录的多工作表 Excel，不包含密码、API Token、Provider Token、凭据密文或加密密钥。
 
-生产环境可用仓库内的 `.github/workflows/domain-status-check.yml` 每 6 小时检查一次各网站主域名。启用前在 GitHub 仓库设置变量 `DOMAIN_MANAGER_URL`（生产台账地址）和 Secret `DOMAIN_MANAGER_API_TOKEN`（与 Pages 的 `API_TOKEN` 相同）；工作流只检查主域名并回写在线/离线及检查日期，不创建任务、不修改经营数据。GitHub Actions 的定时任务可能因平台负载延迟，不能作为秒级监控或故障告警系统。
+生产网站监控由 Cloudflare Worker 每分钟检查一个到期网站，每站约十二小时一次；优先 HEAD，仅在 405 / 501 时回退 GET，取得响应头后取消正文。连续两次失败（间隔五分钟）记录事件，检查历史保留三十天。配置只有自动监控开关与允许跳转主机名。检查HTTP状态和跳转，不判断网站内容是否被篡改；“响应正常”不表示网站安全。旧正文/标题字段仅为历史和备份兼容保留。部署与验证见 [网站监控说明](docs/website-monitoring.md)。旧 `.github/workflows/domain-status-check.yml` 仅保留手动运行，不再承担自动巡检。
 
 AdSense 月收入字段口径：账号和月份用于唯一定位一条月度记录；`amount_usd` 是必须填写的账号总额；`amount_cny` 和 `transfer_date` 允许为空。网站收入单独按网站、月份、来源和币种保存，不与账号收入合并、不跨币种换算，也不计算利润。
 

@@ -6,13 +6,13 @@ export type MonitorStatus = 'healthy' | 'pending' | 'failure' | 'review' | 'inco
 export interface Monitor {
   website_id: number; website_name: string; domain: string | null; domain_id: number | null
   enabled: boolean; effective_enabled: boolean; status: MonitorStatus; reason: string | null
-  http_status: number | null; response_ms: number | null; final_url: string | null; title: string | null
-  baseline_title: string | null; checked_at: string | null; next_check_at: string | null
-  required_text: string[]; forbidden_text: string[]; allowed_redirect_hosts: string[]; consecutive_failures: number
+  http_status: number | null; response_ms: number | null; final_url: string | null
+  checked_at: string | null; next_check_at: string | null
+  allowed_redirect_hosts: string[]; consecutive_failures: number
 }
 export interface Check {
   id: number; website_id: number; domain: string; checked_at: string; outcome: string; reason: string | null
-  http_status: number | null; response_ms: number | null; final_url: string | null; title: string | null; content_complete: boolean
+  http_status: number | null; response_ms: number | null; final_url: string | null
 }
 export interface Incident {
   id: number; website_id: number; website_name?: string; domain: string; reason: string
@@ -23,7 +23,7 @@ export interface MonitorOverview {
   runner: { last_started_at: string | null; last_completed_at: string | null; last_error: string | null } | null
 }
 export interface MonitorDetail { monitor: Monitor; history: Check[]; incidents: Incident[] }
-export type MonitorConfig = Pick<Monitor, 'enabled' | 'required_text' | 'forbidden_text' | 'allowed_redirect_hosts' | 'baseline_title'>
+export type MonitorConfig = Pick<Monitor, 'enabled' | 'allowed_redirect_hosts'>
 export const monitorOverview = computed(() => cachedValue<MonitorOverview>('/api/monitor').value)
 export const getMonitorOverview = (force = false) => cachedGet<MonitorOverview>('/api/monitor', force)
 export const getWebsiteMonitor = (id: number, force = false) => cachedGet<MonitorDetail>(`/api/websites/${id}/monitor`, force)
@@ -48,8 +48,8 @@ export const readIncident = async (id: number) => {
   await api.post(`/api/monitor/incidents/${id}/read`)
   await changed(websiteId)
 }
-export const monitorLabels: Record<MonitorStatus, string> = { healthy: '正常', pending: '待确认', failure: '异常', review: '待复核', incomplete: '内容检查未完成', unchecked: '未检查', disabled: '已停用' }
-export const monitorTone = (status: string): 'success' | 'danger' | 'warning' | 'info' => status === 'healthy' ? 'success' : status === 'failure' ? 'danger' : ['pending', 'review', 'incomplete'].includes(status) ? 'warning' : 'info'
+export const monitorLabels: Record<MonitorStatus, string> = { healthy: '响应正常', pending: '待确认', failure: '异常', review: '旧检查/待重新检查', incomplete: '旧检查/待重新检查', unchecked: '未检查', disabled: '已停用' }
+export const monitorTone = (status: string): 'success' | 'danger' | 'warning' | 'info' => status === 'healthy' ? 'success' : status === 'failure' ? 'danger' : status === 'pending' ? 'warning' : 'info'
 export const monitorError = (error: unknown) => error instanceof ApiError && error.status === 409 ? '正在检查，请稍后重试' : error instanceof Error ? error.message : '监控请求失败，请重试'
 export const monitorTime = (value: string | null) => value ? new Intl.DateTimeFormat('zh-CN', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(new Date(value.endsWith('Z') || /[+-]\d\d:\d\d$/.test(value) ? value : value.replace(' ', 'T') + 'Z')) : '—'
 
@@ -58,17 +58,20 @@ const reasonLabels: Record<string, string> = {
   redirect_location_missing: '跳转缺少目标地址', redirect_location_invalid: '跳转目标地址无效',
   https_downgrade: '跳转降级为 HTTP', unsafe_redirect_host_or_url: '跳转网址或主机不安全',
   cross_domain_redirect: '跳转到未允许的域名', redirect_loop: '循环跳转', redirect_limit: '跳转次数过多',
-  http_error: 'HTTP 请求异常', unsupported_content_type: '内容类型不支持', body_size_limit: '页面内容超过大小限制',
-  content_extraction_limit: '页面内容过于复杂，内容检查未完成',
-  html_extraction_limit: '页面内容过于复杂，内容检查未完成',
-  forbidden_text_found: '发现禁止包含的文本', required_text_missing: '缺少必须包含的文本', title_changed: '标题发生变化',
-  healthy: '检查正常', timeout: '请求超时', request_aborted: '请求已中止', body_read_error: '页面内容读取失败', network_error: '网络连接异常'
+  http_error: 'HTTP 请求异常', unsupported_content_type: '旧版内容检查', body_size_limit: '旧版内容检查',
+  content_extraction_limit: '旧版内容检查', html_extraction_limit: '旧版内容检查',
+  forbidden_text_found: '旧版内容检查', required_text_missing: '旧版内容检查', title_changed: '旧版内容检查',
+  healthy: '响应正常', timeout: '请求超时', request_aborted: '请求已中止', body_read_error: '旧版内容检查', network_error: '网络连接异常'
 }
 export const monitorReason = (reason: string | null, httpStatus?: number | null) => {
   if (!reason) return '—'
   if (reason === 'http_error' && (httpStatus === 403 || httpStatus === 429)) return `访问受限（HTTP ${httpStatus}）`
   return (reasonLabels[reason] || reason) + (reason === 'http_error' && httpStatus != null ? `（HTTP ${httpStatus}）` : '')
 }
+
+export const monitorCurrentReason = (monitor: Monitor) =>
+  ['review', 'incomplete'].includes(monitor.status) || (monitor.reason && reasonLabels[monitor.reason] === '旧版内容检查')
+    ? '' : monitorReason(monitor.reason, monitor.http_status)
 
 export const monitorNextCheck = (monitor: Monitor) => {
   if (!monitor.effective_enabled) return '—'

@@ -1,4 +1,4 @@
-"""Monitor browser contract tests; run with Vite on MONITOR_UI_URL (default :5174)."""
+"""HTTP headers monitor browser contract tests; run with Vite on MONITOR_UI_URL (default :5174)."""
 import base64
 import json
 import os
@@ -13,7 +13,7 @@ incident = dict(id=1, website_id=1, website_name='Monitor site', domain='example
     opened_at='2026-11-12T01:00:00Z', last_seen_at='2026-11-12T01:00:00Z', resolved_at=None, read_at=None)
 site = dict(id=1, name='Monitor site', stage='维护', lifecycle='active', ownership='自营网站', platform='Astro',
     industry='资讯站', next_action_status='待做', domains=[], adsense_connected='未知', gsc_connected='未知')
-state = dict(lease=True, fail=False, empty=False, overview_reads=0, sample_complete=True, sample_present=True)
+state = dict(lease=True, fail=False, empty=False, overview_reads=0, sample_complete=False, sample_present=True)
 patches = []
 errors = []
 with sync_playwright() as p:
@@ -47,7 +47,10 @@ with sync_playwright() as p:
             if method == 'POST' and state['lease']:
                 state['lease'] = False
                 code = 409
-            history = [dict(id=1, website_id=1, domain='previous.example.test', checked_at='2026-11-11T01:00:00Z', outcome='failure', reason='http_error', http_status=429, response_ms=120, final_url='https://example.test/', title='Latest title', content_complete=True)]
+            elif method == 'POST':
+                monitor.update(status='healthy', reason='healthy', title=None)
+            history = [dict(id=1, website_id=1, domain='previous.example.test', checked_at='2026-11-11T01:00:00Z', outcome='failure', reason='http_error', http_status=429, response_ms=120, final_url='https://example.test/', title='Latest title', content_complete=True),
+                dict(id=3, website_id=1, domain='example.test', checked_at='2026-11-10T01:00:00Z', outcome='incomplete', reason='content_extraction_limit', http_status=200, response_ms=100, final_url='https://example.test/', title=None, content_complete=False)]
             if state['sample_present']:
                 history.insert(0, dict(id=2, website_id=1, domain=monitor['domain'], checked_at=monitor['checked_at'],
                     outcome=monitor['status'], reason=monitor['reason'], http_status=monitor['http_status'],
@@ -62,8 +65,10 @@ with sync_playwright() as p:
     expect(page.get_by_role('heading', name='网站监控', exact=True)).to_be_visible()
     expect(page.get_by_text('超过 10 分钟未完成巡检')).to_be_visible()
     row = page.locator('[data-monitor-site="1"]')
-    expect(row).to_contain_text('待复核')
-    expect(row).to_contain_text('标题发生变化')
+    expect(page.get_by_text('HTTP可用性与跳转', exact=True)).to_be_visible()
+    expect(row).to_contain_text('旧检查/待重新检查')
+    expect(row).not_to_contain_text('旧版内容检查')
+    expect(row).not_to_contain_text('内容检查未完成')
     expect(row).to_contain_text('2026/11/12 21:00:00')
     page.get_by_placeholder('搜索网站或域名').fill('missing')
     expect(row).to_have_count(0)
@@ -74,7 +79,7 @@ with sync_playwright() as p:
     row.locator('.el-switch').click()
     expect(row.get_by_role('switch')).to_be_checked()
     page.locator('.monitor-filters .el-select').click()
-    page.get_by_role('option', name='正常', exact=True).click()
+    page.get_by_role('option', name='响应正常', exact=True).click()
     expect(row).to_have_count(0)
     page.locator('.monitor-filters .el-select').click()
     page.get_by_role('option', name='全部状态', exact=True).click()
@@ -82,83 +87,63 @@ with sync_playwright() as p:
     expect(row).to_contain_text('正在检查，请稍后重试')
     row.get_by_role('button', name='立即检查').click()
     expect(row.get_by_role('button', name='立即检查')).to_be_enabled()
+    expect(row).to_contain_text('响应正常')
     page.get_by_role('button', name='标为已读').click()
     expect(page.locator('.monitor-unread')).to_have_count(0)
     row.get_by_role('button', name='详情').click()
     panel = page.locator('.website-monitor-panel')
-    expect(panel.locator('dd').filter(has_text='Latest title')).to_be_visible()
     expect(panel).to_contain_text('2026/11/12 09:00:00')
     expect(panel).to_contain_text('访问受限（HTTP 429）')
     expect(panel).to_contain_text('previous.example.test')
-    expect(panel).to_contain_text('不执行 JavaScript')
-    expect(panel).to_contain_text('标题发生变化')
-    panel.get_by_label('必须包含的文本').fill(' first \n\nsecond ')
+    expect(panel).to_contain_text('检查HTTP状态和跳转，不判断网站内容是否被篡改')
+    expect(panel).to_contain_text('旧版内容检查')
+    expect(panel).not_to_contain_text('内容检查未完成')
+    for label in ['必须包含的文本', '禁止包含的文本']:
+        expect(panel.get_by_label(label)).to_have_count(0)
+    expect(panel.get_by_role('button', name='保存最新标题为基线')).to_have_count(0)
+    for label in ['内容', '标题']:
+        expect(panel.locator('thead th').filter(has=page.get_by_text(label, exact=True))).to_have_count(0)
+    expect(panel).not_to_contain_text('最新标题')
+    expect(panel).not_to_contain_text('标题基线')
+    for label in ['HTTP', '原因', '最终地址']:
+        expect(panel.locator('thead th').filter(has=page.get_by_text(label, exact=True))).to_be_visible()
+    # A healthy HEAD response has no body/title, yet remains a normal HTTP result.
+    expect(panel.locator('.monitor-actions').first).to_contain_text('响应正常')
+    hosts = panel.get_by_label('允许跳转的主机名')
+    hosts.fill(' cdn.example.test \n\nwww.example.test ')
+    panel.locator('.monitor-config .el-switch').click()
     panel.get_by_role('button', name='保存监控配置').click()
     expect(panel.get_by_role('button', name='保存监控配置')).to_be_disabled()
-    assert patches[-1]['required_text'] == ['first', 'second']
-    panel.get_by_role('button', name='保存最新标题为基线').click()
-    expect(panel).to_contain_text('标题基线：Latest title')
-    assert patches[-1] == dict(baseline_title='Latest title')
-    # A complete title_changed sample with no title can acknowledge its removal.
-    confirm_title = panel.get_by_role('button', name='保存最新标题为基线')
-    def refresh_monitor():
-        panel.get_by_role('button', name='刷新监控').click()
+    assert patches[-1] == dict(enabled=False, allowed_redirect_hosts=['cdn.example.test', 'www.example.test'])
+    panel.locator('.monitor-config .el-switch').click()
+    panel.get_by_role('button', name='保存监控配置').click()
+    expect(panel.get_by_role('button', name='保存监控配置')).to_be_disabled()
+    assert patches[-1] == dict(enabled=True, allowed_redirect_hosts=['cdn.example.test', 'www.example.test'])
+    for legacy_status, reason in [('review', 'title_changed'), ('incomplete', 'content_extraction_limit'), ('incomplete', 'html_extraction_limit')]:
+        monitor.update(status=legacy_status, reason=reason)
+        with page.expect_response(lambda response: response.url.endswith('/api/websites/1/monitor') and response.request.method == 'GET'):
+            panel.get_by_role('button', name='刷新监控').click()
         expect(panel.get_by_role('button', name='刷新监控')).to_be_enabled()
-    expect(confirm_title).to_be_disabled()
-    monitor.update(title=None, baseline_title='Old title', status='review', reason='title_changed')
-    refresh_monitor()
-    expect(confirm_title).to_be_enabled()
-    confirm_title.click()
-    expect(panel).to_contain_text('标题基线：无标题（已确认）')
-    assert patches[-1] == dict(baseline_title='')
-    expect(confirm_title).to_be_disabled()
-    monitor['baseline_title'] = None
-    refresh_monitor()
-    expect(panel).to_contain_text('标题基线：未设置')
-    expect(confirm_title).to_be_enabled()
-    monitor.update(title='New title', baseline_title='Old title')
-    for status in ['incomplete', 'unchecked', 'failure', 'pending', 'disabled']:
-        monitor['status'] = status
-        refresh_monitor()
-        expect(confirm_title).to_be_disabled()
-    state['sample_complete'] = False
-    for reason in ['content_extraction_limit', 'html_extraction_limit']:
-        monitor.update(status='incomplete', reason=reason)
-        refresh_monitor()
-        expect(panel).to_contain_text('页面内容过于复杂，内容检查未完成')
-        expect(panel).not_to_contain_text(reason)
-    monitor.update(status='review', reason='title_changed')
-    state['sample_complete'] = False
-    refresh_monitor()
-    expect(confirm_title).to_be_disabled()
-    state['sample_complete'] = True
-    state['sample_present'] = False
-    refresh_monitor()
-    expect(confirm_title).to_be_disabled()
-    state['sample_present'] = True
-    state['sample_title'] = None  # A title unknown in history cannot confirm the monitor's title.
-    refresh_monitor()
-    expect(confirm_title).to_be_disabled()
-    del state['sample_title']
-    monitor.update(status='healthy', reason='healthy', title=None, baseline_title='')
-    refresh_monitor()
-    expect(panel).to_contain_text('标题基线：无标题（已确认）')
-    expect(confirm_title).to_be_disabled()
-    monitor.update(title='New title', baseline_title='Old title')
-    refresh_monitor()
-    expect(confirm_title).to_be_enabled()
-    panel.get_by_label('禁止包含的文本').fill('unsaved')
+        expect(panel.locator('.monitor-actions').first).to_contain_text('旧检查/待重新检查')
+        expect(panel.locator('.monitor-actions').first).not_to_contain_text('旧版内容检查')
+        expect(panel).not_to_contain_text('内容检查未完成')
+    hosts.fill('unsaved.example.test')
     page.get_by_role('button', name='Close this dialog').click()
     expect(page.get_by_text('尚有未保存的修改，是否放弃？')).to_be_visible()
     page.get_by_role('button', name='继续编辑', exact=True).click()
     expect(page.locator('.el-message-box')).to_have_count(0)
-    expect(panel.get_by_label('禁止包含的文本')).to_have_value('unsaved')
+    expect(hosts).to_have_value('unsaved.example.test')
     page.go_back()
     expect(page.get_by_text('尚有未保存的修改，是否放弃？')).to_be_visible()
     page.get_by_role('button', name='继续编辑', exact=True).click()
     expect(page.locator('.el-message-box')).to_have_count(0)
     panel.get_by_role('button', name='保存监控配置').click()
     expect(panel.get_by_role('button', name='保存监控配置')).to_be_disabled()
+    page.get_by_role('button', name='Close this dialog').click()
+    expect(panel).to_have_count(0)
+    row.get_by_role('button', name='详情').click()
+    expect(hosts).to_have_value('unsaved.example.test')
+    expect(panel.get_by_label('自动监控', exact=True)).to_be_checked()
     page.get_by_role('button', name='Close this dialog').click()
     expect(panel).to_have_count(0)
     page.get_by_role('button', name='全部归属', exact=True).first.click()

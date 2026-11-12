@@ -15,7 +15,9 @@ export class MonitorError extends Error {
 const isoAfter = (now: string, ms: number) => new Date(Date.parse(now) + ms).toISOString()
 const effective = (row: JoinedMonitor) => Boolean(row.enabled && row.domain && row.lifecycle === 'active' && row.stage !== '暂停')
 export const presentMonitor = (row: JoinedMonitor) => ({
-    ...row, enabled: Boolean(row.enabled), effective_enabled: effective(row), status: effective(row) ? row.status : 'disabled',
+    ...row, enabled: Boolean(row.enabled), effective_enabled: effective(row),
+    status: effective(row) ? ['review', 'incomplete'].includes(row.status) ? 'unchecked' : row.status : 'disabled',
+    reason: ['review', 'incomplete'].includes(row.status) ? null : row.reason,
     required_text: JSON.parse(row.required_text), forbidden_text: JSON.parse(row.forbidden_text), allowed_redirect_hosts: JSON.parse(row.allowed_redirect_hosts),
     lease_token: undefined, lease_until: undefined, config_version: undefined, lifecycle: undefined, stage: undefined
 })
@@ -77,7 +79,7 @@ export const checkOne = async (db: D1Database, id: number, options: Options = {}
 }
 const checkClaimed = async (db: D1Database, leased: MonitorState, options: Options & { now: string }, token: string, runnerToken?: string) => {
     try {
-        const input = { domain: leased.domain!, required_text: JSON.parse(leased.required_text), forbidden_text: JSON.parse(leased.forbidden_text), allowed_redirect_hosts: JSON.parse(leased.allowed_redirect_hosts), baseline_title: leased.baseline_title }
+        const input = { domain: leased.domain!, allowed_redirect_hosts: JSON.parse(leased.allowed_redirect_hosts) }
         const result = await (options.checker || checkWebsite)(input)
         await saveResult(db, leased, result, options.now, token, Boolean(options.automatic), runnerToken)
         return result
