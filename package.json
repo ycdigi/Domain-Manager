@@ -47,10 +47,15 @@
     "db:local": "wrangler d1 execute domains-db --local --file=./schema.sql --yes",
     "deploy": "npm run build && wrangler pages deploy dist --branch main",
     "deploy:full": "npm run build && npm run db:execute && wrangler pages deploy dist --branch main",
-    "dev:local": "npm run db:local && npm run pages:dev"
+    "dev:local": "npm run db:local && npm run pages:dev",
+    "test:monitor": "node --test tests/monitor*.test.mjs",
+    "deploy:monitor": "wrangler deploy --config wrangler.monitor.jsonc --env production",
+    "db:migrate:v1.22.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.22.0.sql --yes",
+    "typecheck:monitor": "tsc --project tsconfig.monitor.json"
   },
   "dependencies": {
     "element-plus": "^2.9.7",
+    "entities": "^4.5.0",
     "vue": "^3.5.13",
     "vue-router": "^4.5.0",
     "xlsx": "^0.18.5"
@@ -61,6 +66,8 @@
     "@types/node": "^22.14.0",
     "@vitejs/plugin-vue": "^5.2.1",
     "@vue/tsconfig": "^0.7.0",
+    "esbuild": "0.25.2",
+    "miniflare": "4.20250405.1",
     "typescript": "~5.7.2",
     "vite": "^6.2.0",
     "vue-tsc": "^2.2.4",

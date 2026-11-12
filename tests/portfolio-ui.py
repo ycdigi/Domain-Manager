@@ -67,7 +67,22 @@ with sync_playwright() as p:
     def route_api(route):
         request = route.request
         url = request.url.split("?")[0]
-        if url.endswith("/api/websites") and request.method == "GET":
+        if url.endswith("/api/monitor") or ("/api/websites/" in url and url.endswith("/monitor")):
+            def monitor_fixture(site):
+                domain = next((domain for domain in site["domains"] if domain.get("is_primary")), None)
+                return dict(website_id=site["id"], website_name=site["name"], domain=domain["domain"] if domain else None,
+                    domain_id=domain["id"] if domain else None, enabled=True,
+                    effective_enabled=site["lifecycle"] == "active" and site["stage"] != "暂停" and domain is not None,
+                    status="unchecked", reason=None, http_status=None, response_ms=None, final_url=None, title=None,
+                    baseline_title=None, checked_at=None, next_check_at=None, required_text=[], forbidden_text=[],
+                    allowed_redirect_hosts=[], consecutive_failures=0)
+            if url.endswith("/api/monitor"):
+                data = dict(monitors=[monitor_fixture(site) for site in sites], incidents=[], runner=None, unread_count=0)
+            else:
+                website_id = int(url.split("/api/websites/")[1].split("/")[0])
+                data = dict(monitor=monitor_fixture(next(site for site in sites if site["id"] == website_id)), history=[], incidents=[])
+            route.fulfill(json={"status": 200, "message": "成功", "data": data})
+        elif url.endswith("/api/websites") and request.method == "GET":
             if mode["value"] == "loading":
                 pending_reads.append(route)
             elif mode["value"] == "error":
@@ -176,8 +191,8 @@ with sync_playwright() as p:
     page.route("http://127.0.0.1:5173/api/**", route_api)
     page.goto("http://127.0.0.1:5173/home")
     page.wait_for_load_state("networkidle")
-    build_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
-    alpha_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Alpha build"))
+    build_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
+    alpha_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Alpha build"))
     assert "is-expired" in (build_row.get_attribute("class") or "")
     assert "is-expiring-soon" in (alpha_row.get_attribute("class") or "")
     expect(page.get_by_role("heading", name="网站组合", exact=True)).to_be_visible()
@@ -189,11 +204,21 @@ with sync_playwright() as p:
     page.locator('.portfolio-stage-tabs [data-filter="all"]').click()
     expect(page.locator(".portfolio-table thead").first).to_contain_text("网站归属")
     expect(page.locator(".portfolio-table thead").first).to_contain_text("服务商 / 资源")
-    assess_row = page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Assess one"))
+    assess_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Assess one"))
     expect(assess_row.locator('.portfolio-money-cell')).to_contain_text('USD 574.00')
     expect(assess_row.locator('.portfolio-money-cell')).not_to_contain_text('CNY 3440.00')
-    paused_row = page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Pause one"))
+    paused_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Pause one"))
     expect(paused_row.locator('.el-select:has(input[aria-label="技术栈：Pause one"])')).to_contain_text('Custom CMS')
+    expect(page.locator(".portfolio-table")).to_have_count(1)
+    expect(page.locator(".portfolio-stage-heading")).to_have_count(0)
+    search = page.get_by_role("textbox", name="搜索网站", exact=True)
+    search.fill("assess")
+    expect(page.locator(".portfolio-table")).to_have_count(1)
+    expect(page.locator(".portfolio-row")).to_have_count(1)
+    expect(page.get_by_text("此阶段暂无网站。", exact=True)).to_have_count(0)
+    search.fill("no-match")
+    expect(page.get_by_text("没有符合筛选条件的网站。", exact=True)).to_be_visible()
+    search.fill("")
     page.screenshot(path="/tmp/domain-manager-portfolio-table.png")
     expect(page.get_by_text("验证", exact=True).first).to_be_visible()
     tabs = page.locator(".portfolio-stage-tabs")
@@ -212,21 +237,21 @@ with sync_playwright() as p:
     navigation.get_by_role("button", name="全部技术栈", exact=True).click()
     navigation.get_by_role("button", name="全部归属", exact=True).click()
 
-    verify_table = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-table')
+    verify_table = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table')
     verify_table.get_by_role("button", name="按网站 / 主域名升序排序", exact=True).click()
-    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Alpha build", "Build one"]
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Alpha build", "Assess one", "Build one", "Grow one", "Maintain one", "Pause one"]
     verify_table.get_by_role("button", name="按网站 / 主域名降序排序", exact=True).click()
-    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Build one", "Alpha build"]
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Pause one", "Maintain one", "Grow one", "Build one", "Assess one", "Alpha build"]
     verify_table.get_by_role("button", name="恢复默认排序：网站 / 主域名", exact=True).click()
-    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Build one", "Alpha build"]
-    page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="按阶段升序排序", exact=True).click()
-    page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="按阶段降序排序", exact=True).click()
-    assert page.locator(".portfolio-stage-heading h2").all_text_contents() == ["暂停", "维护", "增长", "验证", "待评估"]
-    page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table').get_by_role("button", name="恢复默认排序：阶段", exact=True).click()
-    assert page.locator(".portfolio-stage-heading h2").all_text_contents() == ["待评估", "验证", "增长", "维护", "暂停"]
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Assess one", "Build one", "Alpha build", "Grow one", "Maintain one", "Pause one"]
+    page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table').get_by_role("button", name="按阶段升序排序", exact=True).click()
+    page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table').get_by_role("button", name="按阶段降序排序", exact=True).click()
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Pause one", "Maintain one", "Grow one", "Build one", "Alpha build", "Assess one"]
+    page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table').get_by_role("button", name="恢复默认排序：阶段", exact=True).click()
+    assert verify_table.locator("tbody .portfolio-site-name").all_text_contents() == ["Assess one", "Build one", "Alpha build", "Grow one", "Maintain one", "Pause one"]
     tabs = page.locator(".portfolio-stage-tabs")
     tabs.locator('[data-filter="all"]').click()
-    alpha_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Alpha build"))
+    alpha_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Alpha build"))
     click_select(alpha_row, "服务商 / 资源：Alpha build")
     with page.expect_response(lambda response: response.url.endswith("/api/resources/links") and response.request.method == "POST") as failed_resource_add:
         page.get_by_role("option", name="Build Site", exact=True).click()
@@ -234,11 +259,12 @@ with sync_playwright() as p:
     assert resource_links == [dict(id=1, website_id=6, resource_id=2, role="代码仓库", is_primary=0)]
     assert resource_deletions == [], "old resources must remain until new associations succeed"
     expect(alpha_row.locator('.el-select:has(input[aria-label="服务商 / 资源：Alpha build"])')).to_contain_text("Source Repo")
-    build_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
+    build_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
     build_row.get_by_role("button", name="编辑日点击：Build one").click()
     click_editor = page.locator('.portfolio-click-editor:visible')
     click_editor.get_by_role("spinbutton", name="精确日点击").fill("24")
     click_editor.locator('input[aria-label="点击统计日期"]').fill("2026-11-08")
+    click_editor.locator('input[aria-label="点击统计日期"]').press("Enter")
     with page.expect_response(lambda response: response.url.endswith("/api/websites/1") and response.request.method == "PATCH") as clicks_response:
         click_editor.get_by_role("button", name="保存", exact=True).click()
     assert json.loads(clicks_response.value.request.post_data) == {"daily_clicks": 24, "daily_clicks_range": None, "clicks_updated_date": "2026-11-08"}
@@ -258,7 +284,7 @@ with sync_playwright() as p:
         click_select(build_row, "网站阶段：Build one")
         page.get_by_role("option", name="增长", exact=True).last.click()
     assert json.loads(stage_response.value.request.post_data) == {"stage": "增长"}
-    build_row = page.locator('.portfolio-stage[aria-label="增长"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
+    build_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Build one"))
     build_row.get_by_role("button", name="编辑下一步：Build one").click()
     next_action = page.get_by_role("textbox", name="下一步行动")
     next_action.fill("发布专题页并检查点击变化")
@@ -288,14 +314,14 @@ with sync_playwright() as p:
     tabs.locator('[data-filter="待评估"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("潜力说明")
     expect(page.locator(".portfolio-table thead")).not_to_contain_text("本月收入")
-    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-table'))
+    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table'))
     tabs.locator('[data-filter="验证"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("验证下一步")
     expect(page.locator(".portfolio-table thead")).to_contain_text("任务 / 复查")
-    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="验证"] .portfolio-table'))
+    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table'))
     tabs.locator('[data-filter="增长"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("最近每周投入")
-    growth_table = page.locator('.portfolio-stage[aria-label="增长"] .portfolio-table')
+    growth_table = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table')
     assert_sortable_columns(growth_table)
     grow_row = growth_table.locator('.portfolio-row').filter(has=page.get_by_role("button", name="查看网站：Grow one"))
     expect(grow_row.locator('.portfolio-money-cell')).to_contain_text('USD 20.00')
@@ -309,10 +335,10 @@ with sync_playwright() as p:
     assert growth_table.locator('tbody .portfolio-site-name').all_text_contents() == ['Build one', 'Grow one']
     tabs.locator('[data-filter="维护"]').click()
     expect(page.locator(".portfolio-table thead")).to_contain_text("域名状态 / 检测时间")
-    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="维护"] .portfolio-table'))
+    assert_sortable_columns(page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table'))
     tabs.locator('[data-filter="暂停"]').click()
-    expect(page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-table thead')).to_contain_text('潜力 / 暂停原因')
-    paused_table = page.locator('.portfolio-stage[aria-label="暂停"] .portfolio-table')
+    expect(page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table thead')).to_contain_text('潜力 / 暂停原因')
+    paused_table = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-table')
     assert_sortable_columns(paused_table)
     tabs.locator('[data-filter="all"]').click()
     tabs.locator('[data-filter="stopped"]').click()
@@ -334,9 +360,9 @@ with sync_playwright() as p:
     expect(page.get_by_text("2026-10 · AdSense · CNY · 账号收入", exact=True)).to_be_visible()
     expect(page.locator(".portfolio-table thead").first).to_contain_text("操作")
     page.locator('.website-detail-drawer .el-drawer__close-btn').click()
-    assess_header_checkbox = page.locator('.portfolio-stage[aria-label="待评估"] .portfolio-header-with-selection .el-checkbox[aria-label="选择全部待评估网站"]')
+    assess_header_checkbox = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-header-with-selection .el-checkbox[aria-label="选择全部当前网站"]')
     assess_header_checkbox.click()
-    expect(page.get_by_role("region", name="批量操作")).to_contain_text("已选 1 个网站")
+    expect(page.get_by_role("region", name="批量操作")).to_contain_text("已选 6 个网站")
     assess_header_checkbox.click()
     expect(page.get_by_role("region", name="批量操作")).to_have_count(0)
     assess_checkbox = page.locator('.el-checkbox[aria-label="选择网站：Assess one"]')

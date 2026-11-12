@@ -2,8 +2,7 @@ name: Check website availability
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: '17 */6 * * *'
+  # Automatic checks are owned by the Cloudflare monitoring Worker.
 
 permissions:
   contents: read

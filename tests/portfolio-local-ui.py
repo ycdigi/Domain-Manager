@@ -116,7 +116,7 @@ try:
         page.locator('.website-detail-drawer .el-drawer__close-btn').click()
         expect(page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}')).to_be_visible()
         expect(page.get_by_role('button', name=f'查看详情：验收网站 B {stamp}')).to_be_visible()
-        site_row = page.locator('.portfolio-stage[aria-label="验证"] .portfolio-row').filter(has=page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}'))
+        site_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}'))
         with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as platform_response:
             site_row.locator('.el-select:has(input[aria-label="技术栈：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
             page.get_by_role('option', name='Astro', exact=True).last.click()

@@ -1,5 +1,5 @@
 <template>
-  <el-drawer v-model="visible" class="website-detail-drawer" :size="drawerSize" :title="website?.name || '网站详情'" destroy-on-close>
+  <el-drawer v-model="visible" class="website-detail-drawer" :size="drawerSize" :title="website?.name || '网站详情'" :before-close="beforeClose" destroy-on-close>
     <template v-if="website">
       <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="loadAll">重试</el-button></div>
       <section class="portfolio-detail-section">
@@ -31,6 +31,8 @@
           <el-form-item label="下一步状态"><el-select v-model="profile.next_action_status"><el-option label="待做" value="待做" /><el-option label="处理中" value="处理中" /><el-option label="已完成" value="已完成" /></el-select></el-form-item>
         </div>
       </section>
+
+      <WebsiteMonitorPanel v-if="visible" :key="website.id" ref="monitorPanel" :website-id="website.id" />
 
       <section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>域名</h2><span>{{ domains.length }} 个</span></div>
@@ -134,6 +136,7 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import WebsiteMonitorPanel from './WebsiteMonitorPanel.vue'
 import { Delete } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
@@ -189,7 +192,13 @@ let profileOriginal: typeof profile | undefined
 let profileWebsiteId: number | undefined
 let loadVersion = 0
 const profileDirty = computed(() => Boolean(props.visible && profileBaseline.value && JSON.stringify(profile) !== profileBaseline.value))
-useUnsavedChanges(profileDirty)
+const { canDiscard: canDiscardProfile } = useUnsavedChanges(profileDirty)
+const monitorPanel = ref<InstanceType<typeof WebsiteMonitorPanel>>()
+const beforeClose = async (done: () => void) => {
+  if (!(await canDiscardProfile()) || (monitorPanel.value && !(await monitorPanel.value.canClose()))) return
+  profileBaseline.value = JSON.stringify(profile)
+  done()
+}
 const markProfileClean = () => { profileOriginal = JSON.parse(JSON.stringify(profile)); profileBaseline.value = JSON.stringify(profile) }
 const notifyChanged = () => { invalidateData('/api/websites'); emit('changed') }
 const loadAll = async () => {

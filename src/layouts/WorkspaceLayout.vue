@@ -1,8 +1,8 @@
 <template>
   <div class="workspace-shell" :class="{ 'navigation-collapsed': navigationCollapsed }">
-    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :ownership-filters="ownershipFilters" :platform-filters="platformFilters" :counts="sidebarCounts" :active-ownership="activeOwnership" :active-platform="activePlatform" :active-manager="activeManager" :collapsed="navigationCollapsed" @select-filter="selectFilter" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
+    <aside class="workspace-navigation" aria-label="网站导航"><WorkspaceNavigation :monitor-unread="monitorOverview?.unread_count" :ownership-filters="ownershipFilters" :platform-filters="platformFilters" :counts="sidebarCounts" :active-ownership="activeOwnership" :active-platform="activePlatform" :active-manager="activeManager" :collapsed="navigationCollapsed" @select-filter="selectFilter" @manage="navigateManager" @collapse="toggleNavigation" @backup="backup" @logout="logout" /></aside>
     <el-drawer v-model="navigationMobileOpen" class="workspace-navigation-drawer" title="网站导航" direction="ltr" size="256px" :with-header="false" @closed="runPendingNavigationAction">
-      <WorkspaceNavigation :ownership-filters="ownershipFilters" :platform-filters="platformFilters" :counts="sidebarCounts" :active-ownership="activeOwnership" :active-platform="activePlatform" :active-manager="activeManager" mobile @select-filter="selectFilter" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
+      <WorkspaceNavigation :monitor-unread="monitorOverview?.unread_count" :ownership-filters="ownershipFilters" :platform-filters="platformFilters" :counts="sidebarCounts" :active-ownership="activeOwnership" :active-platform="activePlatform" :active-manager="activeManager" mobile @select-filter="selectFilter" @manage="navigateManager" @close="navigationMobileOpen = false" @backup="runNavigationAction(backup)" @logout="runNavigationAction(logout)" />
     </el-drawer>
     <main class="workspace-content">
       <section v-if="queue.pending.value.length || queue.syncing.value" class="sync-status" aria-label="同步状态" aria-live="polite">
@@ -27,6 +27,8 @@ import { getWriteQueue } from '../utils/writeQueue'
 import { logoutWorkspace } from '../router'
 import type { Website } from '../api/websites'
 import '../styles/workspace/workspace.css'
+import '../styles/monitor.css'
+import { monitorOverview, getMonitorOverview } from '../api/monitor'
 const route = useRoute(); const router = useRouter()
 const queue = getWriteQueue(); const showSyncDetails = ref(false)
 const syncNow = async () => { try { const result = await queue.retryFailed(); if (result.synced) ElMessage.success('所有任务已同步'); else ElMessage.warning('部分任务仍待同步，请查看详情') } catch { ElMessage.error('同步未完成，请重试') } }
@@ -37,7 +39,7 @@ const toggleNavigation = () => { navigationCollapsed.value = !navigationCollapse
 const websites = cachedValue<Website[]>('/api/websites')
 const ownershipFilters = [{ label: '全部归属', value: 'all' }, { label: '自营网站', value: '自营网站' }, { label: '企业客户网站', value: '企业客户网站' }, { label: '未分类', value: '未分类' }]
 const platformFilters = [{ label: '全部技术栈', value: 'all' }, { label: 'Astro', value: 'Astro' }, { label: 'Next.js', value: 'Next.js' }, { label: 'WordPress', value: 'WordPress' }, { label: '其他', value: '其他' }]
-const activeManager = computed(() => ({ Domains: 'domains', Resources: 'resources', Adsense: 'adsense', Data: 'data' }[String(route.name)] || ''))
+const activeManager = computed(() => ({ Monitor: 'monitor', Domains: 'domains', Resources: 'resources', Adsense: 'adsense', Data: 'data' }[String(route.name)] || ''))
 let pendingNavigationAction: (() => void) | undefined
 const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.() }
 const runNavigationAction = (action: () => void) => { if (navigationMobileOpen.value) { pendingNavigationAction = action; navigationMobileOpen.value = false } else action() }
@@ -64,7 +66,7 @@ const selectFilter = (kind: 'ownership' | 'platform', value: string) => runNavig
   if (value === 'all') delete query[kind]; else query[kind] = value
   void router.push({ name: 'Home', query })
 })
-const navigateManager = (view: string) => runNavigationAction(() => { const name = { domains: 'Domains', resources: 'Resources', adsense: 'Adsense', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
+const navigateManager = (view: string) => runNavigationAction(() => { const name = { monitor: 'Monitor', domains: 'Domains', resources: 'Resources', adsense: 'Adsense', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
 const backup = async () => { try { await downloadJsonBackup(); ElMessage.success('JSON 备份已导出') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败') } }
 const logout = () => { void logoutWorkspace() }
 provide('openWorkspaceNavigation', () => { navigationMobileOpen.value = true })
@@ -72,5 +74,10 @@ provide('navigationMobileOpen', navigationMobileOpen)
 const media = window.matchMedia('(min-width: 1024px)')
 const closeMobileNavigation = () => { if (media.matches) navigationMobileOpen.value = false }
 onMounted(() => { media.addEventListener('change', closeMobileNavigation); void cachedGet('/api/websites').catch(() => {}) })
-onUnmounted(() => media.removeEventListener('change', closeMobileNavigation))
+const refreshMonitor = () => { void getMonitorOverview(true).catch(() => {}) }
+let monitorTimer: ReturnType<typeof setInterval>
+watch(websites, refreshMonitor)
+watch(() => route.fullPath, refreshMonitor)
+onMounted(() => { refreshMonitor(); monitorTimer = setInterval(refreshMonitor, 60000) })
+onUnmounted(() => { clearInterval(monitorTimer); media.removeEventListener('change', closeMobileNavigation) })
 </script>

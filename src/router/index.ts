@@ -24,6 +24,7 @@ const router = createRouter({
             meta: { requiresAuth: true },
             children: [
                 { path: 'home', name: 'Home', component: () => import('../views/Home.vue') },
+                { path: 'monitor', name: 'Monitor', component: () => import('../views/Monitor.vue') },
                 { path: 'domains', name: 'Domains', component: () => import('../views/Domains.vue') },
                 { path: 'resources', name: 'Resources', component: () => import('../views/Resources.vue') },
                 { path: 'adsense', name: 'Adsense', component: () => import('../views/Adsense.vue') },

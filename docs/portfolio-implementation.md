@@ -29,7 +29,7 @@
 ## 在线状态检查
 
 - 日点击可直接在表格单元格内编辑精确值或区间，并必须保存统计日期；状态、阶段、资源和详情入口继续沿用表格内操作。
-- `.github/workflows/domain-status-check.yml` 使用 `scripts/check-domain-status.mjs` 定期检查主域名，并通过 API Token 保护的 `/api/monitor/status` 批量写回在线状态和检查日期。它是低频台账同步，不承担秒级监控、告警或任务创建。
+- 网站监控改由独立 Cloudflare Worker 每分钟分批调度、每站默认十二小时检查，配置与结果集成在站内。GitHub workflow 仅保留手动运行，旧 `/api/monitor/status` 继续兼容。部署及告警规则见 `docs/website-monitoring.md`。
 
 ## API 和数据
 

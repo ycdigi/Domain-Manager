@@ -2,6 +2,7 @@ import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 import { validateWebsiteFields } from '../../domain/website-validation'
+import { validateMonitorPatch } from '../../domain/monitor'
 import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
@@ -9,12 +10,74 @@ const websiteColumns = ['name', 'stage', 'lifecycle', 'ownership', 'industry', '
 const domainColumns = ['domain', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'domain_role', 'is_primary', 'status', 'memo', 'last_status_check_at', 'computer_name']
 type Row = Record<string, any>
 
+const monitoringTables = ['website_monitors', 'website_monitor_checks', 'website_monitor_incidents'] as const
+const positiveId = (value: unknown) => Number.isSafeInteger(value) && Number(value) > 0
+const timestamp = (value: unknown) => typeof value === 'string' && value.length <= 40 && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value))
+const text = (value: unknown, limit: number) => typeof value === 'string' && value.length <= limit
+const optionalText = (value: unknown, limit: number) => value == null || text(value, limit)
+const nonnegative = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value >= 0
+
+// Backups contain raw DB JSON strings; API-style arrays are accepted explicitly too.
+const monitorRules = (value: unknown) => typeof value === 'string' ? JSON.parse(value) : value
+const validateMonitoring = (input: Row, websites: Row[], domains: Row[]) => {
+    const errors: Array<{ domain: string; error: string }> = []
+    const siteIds = new Set(websites.map(site => site.id))
+    for (const table of monitoringTables) {
+        const rows = input[table]
+        if (rows === undefined) continue
+        const limit = table === 'website_monitors' ? 500 : 50000
+        if (!Array.isArray(rows) || rows.length > limit) {
+            errors.push({ domain: table, error: `记录必须为数组且最多 ${limit} 条` }); continue
+        }
+        const ids = new Set<number>(); const openSites = new Set<number>()
+        for (const row of rows) {
+            let valid = row && typeof row === 'object' && !Array.isArray(row) && positiveId(row.website_id) && siteIds.has(row.website_id)
+            if (valid) {
+                const id = table === 'website_monitors' ? row.website_id : row.id
+                valid = positiveId(id) && !ids.has(id); ids.add(id)
+                if (table === 'website_monitors') {
+                    try {
+                        const enabled = row.enabled === undefined ? 1 : row.enabled
+                        const config = { enabled: enabled === 1 ? true : enabled === 0 ? false : enabled,
+                            required_text: monitorRules(row.required_text === undefined ? '[]' : row.required_text), forbidden_text: monitorRules(row.forbidden_text === undefined ? '[]' : row.forbidden_text),
+                            allowed_redirect_hosts: monitorRules(row.allowed_redirect_hosts === undefined ? '[]' : row.allowed_redirect_hosts), baseline_title: row.baseline_title ?? null }
+                        valid = valid && !validateMonitorPatch(config)
+                    } catch { valid = false }
+                    valid = valid && (row.domain_id == null ? row.domain == null : positiveId(row.domain_id) && text(row.domain, 253) && domains.some(domain => domain.id === row.domain_id && domain.website_id === row.website_id))
+                    valid = valid && (row.status === undefined || ['healthy', 'pending', 'failure', 'review', 'incomplete', 'unchecked'].includes(row.status))
+                    valid = valid && optionalText(row.reason, 1000) && optionalText(row.final_url, 8192) && optionalText(row.title, 1000)
+                    valid = valid && (row.checked_at == null || timestamp(row.checked_at))
+                    for (const key of ['consecutive_failures', 'config_version']) valid = valid && (row[key] === undefined || Number.isSafeInteger(row[key]) && row[key] >= 0)
+                } else {
+                    valid = valid && text(row.domain, 253) && Boolean(row.domain) && text(row.reason, 1000)
+                    if (table === 'website_monitor_checks') {
+                        valid = valid && timestamp(row.checked_at) && ['healthy', 'failure', 'review', 'incomplete'].includes(row.outcome)
+                        valid = valid && nonnegative(row.response_ms) && text(row.final_url, 8192) && optionalText(row.title, 1000) && [0, 1, false, true].includes(row.content_complete)
+                    } else {
+                        valid = valid && timestamp(row.opened_at) && timestamp(row.last_seen_at)
+                        valid = valid && (row.resolved_at == null || timestamp(row.resolved_at)) && (row.read_at == null || timestamp(row.read_at))
+                        valid = valid && Date.parse(row.last_seen_at) >= Date.parse(row.opened_at)
+                        valid = valid && (row.resolved_at == null || Date.parse(row.resolved_at) >= Date.parse(row.opened_at))
+                        if (row.resolved_at == null) { valid = valid && !openSites.has(row.website_id); openSites.add(row.website_id) }
+                    }
+                }
+                if (table !== 'website_monitor_incidents') {
+                    valid = valid && (row.http_status == null || Number.isInteger(row.http_status) && row.http_status >= 100 && row.http_status <= 599)
+                    valid = valid && (row.response_ms == null && table === 'website_monitors' || nonnegative(row.response_ms))
+                }
+            }
+            if (!valid) errors.push({ domain: table, error: '监控记录的配置、状态或关联无效' })
+        }
+    }
+    return errors
+}
+
 const parseInput = async (request: Request) => {
     const type = request.headers.get('content-type') || ''
     if (type.includes('application/json')) return request.json()
     if (!type.includes('multipart/form-data')) throw new Error('不支持的内容类型')
     const file = (await request.formData()).get('file')
-    if (!(file instanceof File) || file.size > 2_000_000) throw new Error('导入文件不能超过 2 MB')
+    if (!(file instanceof File) || file.size > 20 * 1024 * 1024) throw new Error('导入文件不能超过 20 MiB（20 × 1024 × 1024 字节）')
     return JSON.parse(await file.text())
 }
 
@@ -37,6 +100,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (validation) errors.push({ domain: key || '未知', error: validation })
         }
         if (!legacy) {
+            errors.push(...validateMonitoring(input, websites, domains))
             for (const table of ['website_income', 'website_effort', 'website_tasks', 'website_operations', 'website_ai_notes', 'website_resources']) {
                 if (input[table] === undefined) continue
                 if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
@@ -121,6 +185,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     websiteId = createdSite?.id || null
                 }
                 if (!websiteId) continue
+                siteMap.set(websiteId, websiteId)
                 if (existing) {
                     await db.prepare(`UPDATE domains SET website_id=?, registrar=?, registrar_link=?, registrar_date=?, expiry_date=?, service_type=?, status=?, memo=?, computer_name=? WHERE id=?`)
                         .bind(websiteId, old.registrar || '', old.registrar_link || null, old.registrar_date || '', old.expiry_date || '', old.service_type || '网站', old.status || '在线', old.memo || null, old.computer_name || null, existing.id).run()
@@ -135,6 +200,11 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     if (inserted) await db.prepare('INSERT INTO website_ai_note_versions (note_id, kind, content, version_no) VALUES (?, ?, ?, 1)').bind(inserted.id, note.kind, note.content).run()
                 }
             }
+            const restoreTime = new Date().toISOString()
+            await db.batch([
+                ...Array.from(siteMap.values(), websiteId => db.prepare('UPDATE website_monitors SET lease_token=NULL,lease_until=NULL,next_check_at=?,config_version=config_version+1 WHERE website_id=?').bind(restoreTime, websiteId)),
+                db.prepare('UPDATE monitor_runner SET lease_token=NULL,lease_until=NULL WHERE id=1')
+            ])
         } else {
             const statements: D1PreparedStatement[] = []
             const write = (statement: D1PreparedStatement) => { statements.push(statement) }
@@ -267,6 +337,54 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 if (link.is_primary) write(db.prepare('UPDATE website_resources SET is_primary=0 WHERE website_id=?').bind(websiteId))
                 write(db.prepare('INSERT INTO website_resources (website_id, resource_id, role, is_primary, memo) VALUES (?, ?, ?, ?, ?) ON CONFLICT(website_id, resource_id, role) DO UPDATE SET is_primary=excluded.is_primary, memo=excluded.memo').bind(websiteId, resourceId, link.role, link.is_primary || 0, link.memo || null))
             }
+            const restoreTime = new Date().toISOString()
+            for (const row of input.website_monitors || []) {
+                const websiteId = siteMap.get(row.website_id)!
+                const snapshotDomain = domains.find(domain => domain.id === row.domain_id)
+                const matchesPrimary = snapshotDomain?.is_primary !== 0 && snapshotDomain && row.domain != null
+                    && normalizeDomain(snapshotDomain.domain) === normalizeDomain(row.domain)
+                const columns = ['website_id', 'domain_id', 'domain', 'enabled', 'required_text', 'forbidden_text', 'allowed_redirect_hosts', 'baseline_title', 'status', 'reason', 'http_status', 'response_ms', 'final_url', 'title', 'checked_at', 'next_check_at', 'consecutive_failures', 'config_version', 'lease_token', 'lease_until']
+                const values = [websiteId, Number(row.enabled ?? 1), ...['required_text', 'forbidden_text', 'allowed_redirect_hosts'].map(key => JSON.stringify(monitorRules(row[key] ?? '[]'))),
+                    matchesPrimary ? row.baseline_title ?? null : null, matchesPrimary ? row.status ?? 'unchecked' : 'unchecked',
+                    ...['reason', 'http_status', 'response_ms', 'final_url', 'title', 'checked_at'].map(key => matchesPrimary ? row[key] ?? null : null),
+                    restoreTime, matchesPrimary ? row.consecutive_failures ?? 0 : 0, row.config_version ?? 0]
+                // Resolve the actual primary ID after the planned domain inserts/updates execute.
+                write(db.prepare(`INSERT INTO website_monitors (${columns.join(',')})
+                    SELECT ?,d.id,d.domain,${values.slice(1).map(() => '?').join(',')},NULL,NULL
+                    FROM websites w LEFT JOIN domains d ON d.website_id=w.id AND d.is_primary=1 WHERE w.id=?
+                    ON CONFLICT(website_id) DO UPDATE SET ${columns.slice(1).map(key => `${key}=excluded.${key}`).join(',')}`)
+                    .bind(...values, websiteId))
+            }
+            // Each supplied history collection replaces that collection for the restored websites.
+            // IDs are local identities: no other table references checks or incidents.
+            for (const table of ['website_monitor_checks', 'website_monitor_incidents'] as const) {
+                if (input[table] === undefined) continue
+                write(db.prepare(`DELETE FROM ${table} WHERE website_id IN (SELECT value FROM json_each(?))`).bind(JSON.stringify([...siteMap.values()])))
+                const columns = table === 'website_monitor_checks'
+                    ? ['website_id', 'domain', 'checked_at', 'outcome', 'reason', 'http_status', 'response_ms', 'final_url', 'title', 'content_complete']
+                    : ['website_id', 'domain', 'reason', 'opened_at', 'last_seen_at', 'resolved_at', 'read_at']
+                // Only trusted table/column names enter SQL; row values stay in JSON bindings.
+                const insertSql = `INSERT INTO ${table} (${columns.join(',')}) SELECT ${columns.map((_, index) => `json_extract(value, '$[${index}]')`).join(',')} FROM json_each(?)`
+                const encoder = new TextEncoder()
+                let chunk: string[] = []; let chunkBytes = 2 // JSON array brackets
+                const flush = () => {
+                    if (!chunk.length) return
+                    write(db.prepare(insertSql).bind(`[${chunk.join(',')}]`))
+                    chunk = []; chunkBytes = 2
+                }
+                for (const row of input[table]) {
+                    const values = columns.map(key => key === 'website_id' ? siteMap.get(row.website_id)! : key === 'content_complete' ? Number(row[key]) : row[key] ?? null)
+                    const serialized = JSON.stringify(values)
+                    const rowBytes = encoder.encode(serialized).byteLength
+                    if (chunkBytes + rowBytes + (chunk.length ? 1 : 0) > 512 * 1024) flush()
+                    chunkBytes += rowBytes + (chunk.length ? 1 : 0)
+                    chunk.push(serialized)
+                }
+                flush()
+            }
+            for (const websiteId of siteMap.values()) write(db.prepare('UPDATE website_monitors SET lease_token=NULL,lease_until=NULL,next_check_at=?,config_version=config_version+1 WHERE website_id=?').bind(restoreTime, websiteId))
+            // The runner belongs to this environment. Never import backup heartbeat/error fields.
+            write(db.prepare('UPDATE monitor_runner SET lease_token=NULL,lease_until=NULL WHERE id=1'))
             if (statements.length) await db.batch(statements)
         }
         return json({ total: domains.length, created: legacy ? created : websites.length, updated, success: domains.length, failed: 0, errors: [] }, 200, '导入完成')

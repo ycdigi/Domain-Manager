@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "domain-manager-monitor-preview",
+  "main": "workers/monitor.ts",
+  "compatibility_date": "2024-01-01",
+  "workers_dev": false,
+  "vars": { "MONITOR_ENABLED": "false" },
+  "triggers": { "crons": [] },
+  "env": {
+    "production": {
+      "name": "domain-manager-monitor",
+      "vars": { "MONITOR_ENABLED": "true" },
+      "d1_databases": [{ "binding": "DB", "database_name": "domains-db", "database_id": "92f8fb6b-9bde-4c9c-a3df-446834e00d8e" }],
+      "triggers": { "crons": ["* * * * *"] }
+    },
+    "preview": {
+      "name": "domain-manager-monitor-preview",
+      "vars": { "MONITOR_ENABLED": "false" },
+      "d1_databases": [{ "binding": "DB", "database_name": "domains-db-preview", "database_id": "REPLACE_WITH_PREVIEW_DATABASE_ID" }],
+      "triggers": { "crons": [] }
+    }
+  }
+}

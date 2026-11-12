@@ -19,6 +19,7 @@
       </div>
       <div class="workspace-nav-group">
         <p v-if="!collapsed" class="workspace-nav-label">管理</p>
+        <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'monitor' }" aria-label="网站监控" :title="`网站监控 · ${monitorUnread || 0} 条未读`" @click="emit('manage', 'monitor')"><el-icon><Monitor /></el-icon><span v-if="!collapsed" class="workspace-nav-text">网站监控</span><span v-if="monitorUnread" class="monitor-unread" :aria-label="`${monitorUnread} 条未读事件`">{{ monitorUnread }}</span></button>
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'domains' }" aria-label="域名资产" @click="emit('manage', 'domains')"><el-icon><Connection /></el-icon><span v-if="!collapsed" class="workspace-nav-text">域名资产</span></button>
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'resources' }" aria-label="资源管理" @click="emit('manage', 'resources')"><el-icon><FolderOpened /></el-icon><span v-if="!collapsed" class="workspace-nav-text">资源管理</span></button>
         <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'adsense' }" aria-label="AdSense 管理" @click="emit('manage', 'adsense')"><el-icon><Coin /></el-icon><span v-if="!collapsed" class="workspace-nav-text">AdSense 管理</span></button>
@@ -38,8 +39,8 @@
 import { ref, onMounted, onUnmounted } from 'vue'
 import type { DropdownInstance } from 'element-plus'
 import { Close, Coin, Connection, Cpu, Document, Download, Expand, Fold, FolderOpened, Grid, House, Lightning, Monitor, MoreFilled, OfficeBuilding, QuestionFilled } from '@element-plus/icons-vue'
-defineProps<{ ownershipFilters: Array<{ label: string; value: string }>; platformFilters: Array<{ label: string; value: string }>; counts: { ownership: Record<string, number>; platform: Record<string, number> }; activeOwnership: string; activePlatform: string; activeManager: string; collapsed?: boolean; mobile?: boolean }>()
-const emit = defineEmits<{ selectFilter: [kind: 'ownership' | 'platform', value: string]; manage: [value: 'domains' | 'resources' | 'adsense' | 'data']; collapse: []; close: []; backup: []; logout: [] }>()
+defineProps<{ ownershipFilters: Array<{ label: string; value: string }>; platformFilters: Array<{ label: string; value: string }>; counts: { ownership: Record<string, number>; platform: Record<string, number> }; activeOwnership: string; activePlatform: string; activeManager: string; monitorUnread?: number; collapsed?: boolean; mobile?: boolean }>()
+const emit = defineEmits<{ selectFilter: [kind: 'ownership' | 'platform', value: string]; manage: [value: 'monitor' | 'domains' | 'resources' | 'adsense' | 'data']; collapse: []; close: []; backup: []; logout: [] }>()
 const ownershipIcon = (value: string) => ({ all: Grid, '自营网站': House, '企业客户网站': OfficeBuilding, '未分类': QuestionFilled })[value] || Grid
 const platformIcon = (value: string) => ({ all: Grid, Astro: Lightning, 'Next.js': Connection, WordPress: Document, '其他': Cpu })[value] || Monitor
 const moreMenu = ref<DropdownInstance>()
