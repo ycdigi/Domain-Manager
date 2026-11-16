@@ -1,9 +1,8 @@
 .monitor-page > .el-alert, .monitor-page > .page-panel { margin-bottom: var(--space-lg); }
-.monitor-meta { margin: var(--space-sm) 0; color: var(--color-muted); font-size: var(--text-xs); }
 .monitor-filters, .monitor-actions { display: flex; align-items: center; gap: var(--space-sm); }
-.monitor-filters { margin: var(--space-lg) 0; flex-wrap: wrap; }
-.monitor-filters > .el-input { max-width: 320px; }
-.monitor-filters > .el-select { width: 180px; }
+.monitor-filters { flex: 0 1 auto; margin: 0; flex-wrap: nowrap; }
+.monitor-filters > .el-input { width: 320px; max-width: 32vw; }
+.monitor-filters > .el-select { flex: 0 0 180px; width: 180px; }
 .monitor-table-scroll { overflow-x: auto; }
 .monitor-table { width: 100%; min-width: 1040px; border-collapse: collapse; text-align: left; font-size: var(--text-sm); }
 .monitor-table th, .monitor-table td { padding: var(--space-sm) var(--space-sm); border-bottom: 1px solid var(--el-border-color-lighter); vertical-align: middle; }
@@ -27,3 +26,5 @@
 /* Compact monitor status is intentionally smaller than surrounding table text. */
 .portfolio-identity .portfolio-monitor-status { grid-column: 3 / -1; justify-self: start; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11px; color: var(--color-accent); }
 @media (max-width: 600px) { .monitor-facts { grid-template-columns: 1fr; } .monitor-table { min-width: 780px; } }
+@media (max-width: 1023px) { .monitor-filters { flex-wrap: wrap; } .monitor-filters > .el-input { width: 320px; max-width: 100%; } }
+@media (max-width: 760px) { .monitor-page .workspace-heading .monitor-filters { display: none; } }

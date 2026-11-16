@@ -78,7 +78,8 @@ with sync_playwright() as p:
     row = page.locator('[data-monitor-site="1"]')
     expect(page.locator('.monitor-table thead th').nth(1)).to_have_text('页面标题')
     expect(row.locator('td').nth(1)).to_have_text('Latest title')
-    expect(page.get_by_text('异常优先，定时检查可访问性', exact=True)).to_be_visible()
+    expect(page.locator('.workspace-heading .monitor-filters')).to_be_visible()
+    expect(page.get_by_text('上次巡检 2026/11/12 09:00:00 · 上海时间', exact=True)).to_be_visible()
     expect(row).to_contain_text('旧检查/待重新检查')
     expect(row).not_to_contain_text('旧版内容检查')
     expect(row).not_to_contain_text('内容检查未完成')
@@ -217,6 +218,8 @@ with sync_playwright() as p:
     state['empty'] = True
     page.get_by_role('button', name='重试', exact=True).click()
     expect(page.get_by_text('暂无网站监控')).to_be_visible()
+    page.set_viewport_size({'width': 390, 'height': 844})
+    expect(page.locator('.monitor-filters')).to_be_hidden()
     assert not errors, errors
     browser.close()
 print('Monitor UI passed')
