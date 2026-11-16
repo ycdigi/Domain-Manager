@@ -9,7 +9,7 @@
         <table class="monitor-table"><thead><tr><th>网站 / 域名</th><th>页面标题</th><th>状态</th><th>HTTP / 耗时</th><th>最近检查</th><th>下次检查</th><th>操作</th></tr></thead><tbody><tr v-for="monitor in filtered" :key="monitor.website_id" :data-monitor-site="monitor.website_id"><td><strong>{{ monitor.website_name }}</strong><small>{{ monitor.domain || '未绑定主域名' }}</small></td><td class="monitor-page-title">{{ monitor.title || '未获取到标题' }}</td><td><el-tag :type="monitorTone(monitor.status)">{{ monitorLabels[monitor.status] }}</el-tag><small v-if="monitorCurrentReason(monitor)">{{ monitorCurrentReason(monitor) }}</small></td><td>{{ monitor.http_status ?? '—' }} / {{ monitor.response_ms ?? '—' }} ms</td><td>{{ monitorTime(monitor.checked_at) }}</td><td>{{ monitorNextCheck(monitor) }}</td><td><div class="monitor-actions"><el-switch :model-value="monitor.enabled" :disabled="busy.has(monitor.website_id)" :aria-label="`自动监控：${monitor.website_name}`" @change="value => toggle(monitor.website_id, Boolean(value))" /><el-button :loading="busy.has(monitor.website_id)" @click="check(monitor.website_id)">立即检查</el-button><el-button @click="openSite(monitor.website_id)">详情</el-button></div><p v-if="rowErrors[monitor.website_id]" role="alert" class="monitor-row-error">{{ rowErrors[monitor.website_id] }}</p></td></tr></tbody></table>
         <el-empty v-if="!filtered.length" :description="overview.monitors.length ? '没有匹配的网站' : '暂无网站监控'" />
       </div>
-      <section class="page-panel"><h2>事件 · 未读 {{ overview.unread_count }}</h2><el-checkbox v-model="unreadOnly">仅看未读</el-checkbox><p v-if="!incidents.length" class="page-muted">暂无事件</p><article v-for="incident in incidents" :key="incident.id" class="monitor-incident"><div><button class="page-link" @click="openSite(incident.website_id)">{{ incident.website_name || incident.domain }}</button> · {{ monitorReason(incident.reason) }}<small>{{ monitorTime(incident.opened_at) }} · 最近出现 {{ monitorTime(incident.last_seen_at) }} · {{ incident.resolved_at ? `已恢复 ${monitorTime(incident.resolved_at)}` : '未恢复' }}</small><p v-if="incidentErrors[incident.id]" role="alert">{{ incidentErrors[incident.id] }}</p></div><el-button v-if="!incident.read_at" :loading="reading.has(incident.id)" @click="markRead(incident.id)">标为已读</el-button></article></section>
+
     </template>
     <div v-else-if="loading" v-loading="true" class="page-panel" aria-label="加载监控" style="min-height: 160px" />
     <div v-if="detailError" class="page-error" role="alert">{{ detailError }}<el-button @click="loadSites(true)">重试</el-button></div>
@@ -23,10 +23,10 @@ import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import { cachedValue } from '../utils/workspaceCache'
 import { getWebsites, type Website } from '../api/websites'
-import { monitorOverview as overview, getMonitorOverview, checkMonitor, updateMonitor, readIncident, monitorLabels, monitorReason, monitorCurrentReason, monitorTone, monitorTime, monitorNextCheck, monitorError } from '../api/monitor'
+import { monitorOverview as overview, getMonitorOverview, checkMonitor, updateMonitor, monitorLabels, monitorCurrentReason, monitorTone, monitorTime, monitorNextCheck, monitorError } from '../api/monitor'
 import '../styles/monitor.css'
 const route = useRoute(); const router = useRouter()
-const loading = ref(false); const error = ref(''); const detailError = ref(''); const search = ref(''); const status = ref(''); const unreadOnly = ref(true)
+const loading = ref(false); const error = ref(''); const detailError = ref(''); const search = ref(''); const status = ref('')
 const now = ref(Date.now()); let clock: ReturnType<typeof setInterval>
 const sites = cachedValue<Website[]>('/api/websites')
 const selected = computed(() => sites.value?.find(site => site.id === Number(route.query.site)))
@@ -39,8 +39,7 @@ const filtered = computed(() => (overview.value?.monitors || []).filter(item => 
   const checkedOrder = (Date.parse(b.checked_at || '') || 0) - (Date.parse(a.checked_at || '') || 0)
   return checkedOrder || a.website_name.localeCompare(b.website_name, 'zh-CN')
 }))
-const incidents = computed(() => (overview.value?.incidents || []).filter(item => !unreadOnly.value || !item.read_at))
-const busy = reactive(new Set<number>()); const rowErrors = reactive<Record<number, string>>({}); const reading = reactive(new Set<number>()); const incidentErrors = reactive<Record<number, string>>({})
+const busy = reactive(new Set<number>()); const rowErrors = reactive<Record<number, string>>({})
 const load = async (force = false) => { loading.value = true; error.value = ''; try { await getMonitorOverview(force); now.value = Date.now() } catch (e) { error.value = monitorError(e) } finally { loading.value = false } }
 const loadSites = async (force = false) => { detailError.value = ''; try { await getWebsites(force) } catch (e) { detailError.value = monitorError(e) } }
 const refreshSites = () => { void loadSites(true); void load(true) }
@@ -49,7 +48,6 @@ const closeSite = (visible: boolean) => { if (!visible) { const query = { ...rou
 const mutate = async (id: number, action: () => Promise<unknown>) => { if (busy.has(id)) return; busy.add(id); rowErrors[id] = ''; try { await action() } catch (e) { rowErrors[id] = monitorError(e) } finally { busy.delete(id) } }
 const check = (id: number) => mutate(id, () => checkMonitor(id))
 const toggle = (id: number, enabled: boolean) => mutate(id, () => updateMonitor(id, { enabled }))
-const markRead = async (id: number) => { if (reading.has(id)) return; reading.add(id); incidentErrors[id] = ''; try { await readIncident(id) } catch (e) { incidentErrors[id] = monitorError(e) } finally { reading.delete(id) } }
 onMounted(() => { void load(); void loadSites(); clock = setInterval(() => { now.value = Date.now() }, 60000) })
 onUnmounted(() => clearInterval(clock))
 </script>

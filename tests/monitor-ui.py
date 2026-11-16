@@ -102,8 +102,7 @@ with sync_playwright() as p:
     row.get_by_role('button', name='立即检查').click()
     expect(row.get_by_role('button', name='立即检查')).to_be_enabled()
     expect(row).to_contain_text('响应正常')
-    page.get_by_role('button', name='标为已读').click()
-    expect(page.locator('.monitor-unread')).to_have_count(0)
+    expect(page.get_by_text('事件 · 未读 1', exact=True)).to_have_count(0)
     row.get_by_role('button', name='详情').click()
     panel = page.locator('.website-monitor-panel')
     expect(panel).to_contain_text('2026/11/12 09:00:00')
@@ -127,6 +126,8 @@ with sync_playwright() as p:
     for label in ['HTTP', '原因', '最终地址']:
         expect(panel.locator('thead th').filter(has=page.get_by_text(label, exact=True))).to_be_visible()
     expect(panel.locator('.monitor-actions').first).to_contain_text('响应正常')
+    panel.get_by_role('button', name='标为已读').click()
+    expect(panel.get_by_role('button', name='标为已读')).to_have_count(0)
     # Titles are plain text in the list, current detail and history, even when they look like HTML.
     unsafe_title = '<script>window.__monitorTitleExecuted = true</script><img src=x onerror="window.__monitorTitleExecuted = true">'
     long_title = 'Long page title ' + 'x' * 980
