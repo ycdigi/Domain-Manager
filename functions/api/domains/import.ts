@@ -4,9 +4,10 @@ import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 import { validateWebsiteFields } from '../../domain/website-validation'
 import { validateMonitorPatch } from '../../domain/monitor'
 import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
+import { validateBatchFields, validateScenarioFields } from '../../domain/batches'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const websiteColumns = ['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override']
+const websiteColumns = ['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count']
 const domainColumns = ['domain', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'domain_role', 'is_primary', 'status', 'memo', 'last_status_check_at', 'computer_name']
 type Row = Record<string, any>
 
@@ -74,17 +75,23 @@ const validateMonitoring = (input: Row, websites: Row[], domains: Row[]) => {
 
 const parseInput = async (request: Request) => {
     const type = request.headers.get('content-type') || ''
-    if (type.includes('application/json')) return request.json()
+    if (type.includes('application/json')) return { input: await request.json(), batchId: null as number | null }
     if (!type.includes('multipart/form-data')) throw new Error('不支持的内容类型')
-    const file = (await request.formData()).get('file')
+    const form = await request.formData()
+    const file = form.get('file')
     if (!(file instanceof File) || file.size > 20 * 1024 * 1024) throw new Error('导入文件不能超过 20 MiB（20 × 1024 × 1024 字节）')
-    return JSON.parse(await file.text())
+    const rawBatchId = form.get('batch_id')
+    const batchId = rawBatchId == null || rawBatchId === '' ? null : Number(rawBatchId)
+    if (batchId != null && (!Number.isSafeInteger(batchId) || batchId <= 0)) throw new Error('导入批次编号无效')
+    return { input: JSON.parse(await file.text()), batchId }
 }
 
 export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
-        const input = await parseInput(context.request) as Row
+        const parsed = await parseInput(context.request) as { input: Row | Row[]; batchId: number | null }
+        const input = parsed.input as Row
+        const importBatchId = parsed.batchId
         const legacy = Array.isArray(input)
         const websites: Row[] = legacy ? [] : input?.websites
         const domains: Row[] = legacy ? input : input?.domains
@@ -123,7 +130,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             for (const site of websites) {
                 const name = String(site.name || '未知网站')
                 if (typeof site.name !== 'string' || !site.name.trim()) errors.push({ domain: name, error: '网站名称必填' })
-                const validation = validateWebsiteFields({ ...site, industry: normalizeWebsiteIndustry(site.industry) })
+                const validation = validateWebsiteFields({ ...site, industry: normalizeWebsiteIndustry(site.industry) }) || validateScenarioFields(site)
                 if (validation) errors.push({ domain: name, error: validation })
                 if (!domains.some(domain => Number(domain.website_id) === Number(site.id))) errors.push({ domain: name, error: '网站至少需要一个关联域名' })
                 if (site.adsense_account_id != null) {
@@ -134,6 +141,20 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             }
             for (const task of Array.isArray(input.website_tasks) ? input.website_tasks : []) {
                 if (task.review_of_task_id != null && !(input.website_tasks || []).some((parent: Row) => parent.id === task.review_of_task_id && parent.website_id === task.website_id && parent.task_type === 'SEO')) errors.push({ domain: task.title || '复查任务', error: 'SEO 复查必须关联同一网站的 SEO 任务' })
+            }
+            for (const table of ['website_batches', 'website_batch_members', 'website_batch_reviews']) {
+                if (input[table] === undefined) continue
+                if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
+            }
+            for (const batch of Array.isArray(input.website_batches) ? input.website_batches : []) {
+                const validation = validateBatchFields(batch)
+                if (validation) errors.push({ domain: batch.name || '批次', error: validation })
+            }
+            for (const member of Array.isArray(input.website_batch_members) ? input.website_batch_members : []) {
+                if (!member || !input.website_batches?.some((batch: Row) => Number(batch.id) === Number(member.batch_id)) || !websites.some(site => Number(site.id) === Number(member.website_id))) errors.push({ domain: 'website_batch_members', error: '批次成员必须关联备份中的批次和网站' })
+            }
+            for (const review of Array.isArray(input.website_batch_reviews) ? input.website_batch_reviews : []) {
+                if (!review || !input.website_batches?.some((batch: Row) => Number(batch.id) === Number(review.batch_id))) errors.push({ domain: 'website_batch_reviews', error: '复盘必须关联备份中的批次' })
             }
         } else {
             for (const domain of domains) {
@@ -156,6 +177,8 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     content_stats_updated_date: domain.content_stats_updated_date || null
                 })
                 if (validation) errors.push({ domain: String(domain.domain || '未知'), error: validation })
+                const scenarioValidation = validateScenarioFields(domain)
+                if (scenarioValidation) errors.push({ domain: String(domain.domain || '未知'), error: scenarioValidation })
                 if (domain.adsense_account_id != null && !await context.env.DB.prepare('SELECT id FROM adsense_accounts WHERE id=?').bind(domain.adsense_account_id).first()) errors.push({ domain: String(domain.domain || '未知'), error: '关联的 AdSense 账号不存在' })
             }
         }
@@ -166,11 +189,13 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (new URL(context.request.url).searchParams.get('dry_run') === '1') return json({ total: domains.length, created: legacy ? created : websites.length, updated, success: 0, failed: 0, errors: [] }, 200, '预览完成，尚未写入')
 
         const db = context.env.DB
+        if (importBatchId != null && !await db.prepare('SELECT id FROM website_batches WHERE id=?').bind(importBatchId).first()) return json(null, 404, '导入批次不存在')
         const siteMap = new Map<number, number>()
         const noteMap = new Map<number, number>()
         const taskMap = new Map<number, number>()
         const accountMap = new Map<number, number>()
         const resourceMap = new Map<number, number>()
+        const batchMap = new Map<number, number>()
 
         if (legacy) {
             for (const old of domains) {
@@ -237,6 +262,24 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     siteId = oldId
                 }
                 if (siteId) siteMap.set(oldId, siteId)
+            }
+            for (const batch of input.website_batches || []) {
+                const oldId = Number(batch.id)
+                const existing = await db.prepare('SELECT id FROM website_batches WHERE id=?').bind(oldId).first<{ id: number }>()
+                const batchId = existing?.id || (Number.isInteger(oldId) && oldId > 0 ? oldId : await allocateId('website_batches'))
+                const columns = ['name', 'source', 'goal', 'hypothesis', 'status', 'review_conclusion', 'next_action', 'review_requested_at', 'reviewed_at', 'archived_at', 'created_at', 'updated_at']
+                const values = columns.map(key => batch[key] ?? null)
+                if (existing) write(db.prepare(`UPDATE website_batches SET ${columns.map(key => `${key}=?`).join(',')} WHERE id=?`).bind(...values, batchId))
+                else write(db.prepare(`INSERT INTO website_batches (id,${columns.join(',')}) VALUES (?,${columns.map(() => '?').join(',')})`).bind(batchId, ...values))
+                batchMap.set(oldId, batchId)
+            }
+            for (const member of input.website_batch_members || []) {
+                const batchId = batchMap.get(Number(member.batch_id)); const websiteId = siteMap.get(Number(member.website_id)); if (!batchId || !websiteId) continue
+                write(db.prepare(`INSERT INTO website_batch_members (batch_id,website_id,joined_at,member_note,membership_status,removed_at,removed_reason) VALUES (?,?,?,?,?,?,?) ON CONFLICT(batch_id,website_id,membership_status) DO UPDATE SET joined_at=excluded.joined_at,member_note=excluded.member_note,removed_at=excluded.removed_at,removed_reason=excluded.removed_reason`).bind(batchId, websiteId, member.joined_at || new Date().toISOString(), member.member_note || null, member.membership_status || 'active', member.removed_at || null, member.removed_reason || null))
+            }
+            for (const review of input.website_batch_reviews || []) {
+                const batchId = batchMap.get(Number(review.batch_id)); if (!batchId) continue
+                write(db.prepare(`INSERT INTO website_batch_reviews (batch_id,reviewed_at,member_count,scenario_counts,stage_counts,content_totals,conclusion,next_action) VALUES (?,?,?,?,?,?,?,?)`).bind(batchId, review.reviewed_at || new Date().toISOString(), review.member_count || 0, typeof review.scenario_counts === 'string' ? review.scenario_counts : JSON.stringify(review.scenario_counts || {}), typeof review.stage_counts === 'string' ? review.stage_counts : JSON.stringify(review.stage_counts || {}), typeof review.content_totals === 'string' ? review.content_totals : JSON.stringify(review.content_totals || {}), review.conclusion || null, review.next_action || null))
             }
             for (const websiteId of siteMap.values()) write(db.prepare('UPDATE domains SET is_primary=0 WHERE website_id=?').bind(websiteId))
             for (const old of domains) {
@@ -386,6 +429,10 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             // The runner belongs to this environment. Never import backup heartbeat/error fields.
             write(db.prepare('UPDATE monitor_runner SET lease_token=NULL,lease_until=NULL WHERE id=1'))
             if (statements.length) await db.batch(statements)
+        }
+        if (importBatchId != null) {
+            const members = [...new Set(siteMap.values())].map(websiteId => db.prepare(`INSERT INTO website_batch_members (batch_id,website_id,membership_status) VALUES (?,?,'active') ON CONFLICT(batch_id,website_id,membership_status) DO NOTHING`).bind(importBatchId, websiteId))
+            if (members.length) await db.batch(members)
         }
         return json({ total: domains.length, created: legacy ? created : websites.length, updated, success: domains.length, failed: 0, errors: [] }, 200, '导入完成')
     } catch (error) { return json(null, error instanceof SyntaxError ? 400 : 500, error instanceof SyntaxError ? 'JSON 格式无效，未导入数据' : error instanceof Error ? error.message : '导入失败；请检查文件并重试') }

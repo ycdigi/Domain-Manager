@@ -126,6 +126,7 @@ AI 同步接口的可直接复制提示词见 [`AI-SYNC-PROMPT.md`](./AI-SYNC-PR
    - 网站详情 Todo 使用独立表保存标题和可选描述；已有数据库执行一次 `schema-migration-v1.14.0.sql`
    - 网站与域名拆分、收入/投入历史、网站任务及 SEO 复查闭环；先备份并在本地验证旧库，再执行一次 `schema-migration-v1.15.0.sql`
    - 移除外链来源、候选和轮询数据；先备份已有数据库，再执行一次 `schema-migration-v1.21.0.sql`
+   - 网站监控表升级到 v1.22.0 后，批次、经营场景和复盘快照使用 v1.23.0；已有数据库先备份，再执行一次 `schema-migration-v1.23.0.sql`
 
 ### D1 命令行管理
 
@@ -173,6 +174,8 @@ npm run db:migrate:v1.13.0
 npm run db:migrate:v1.14.0
 npm run db:migrate:v1.15.0
 npm run db:migrate:v1.20.0
+npm run db:migrate:v1.22.0
+npm run db:migrate:v1.23.0
 npm run db:verify:remote
 ```
 

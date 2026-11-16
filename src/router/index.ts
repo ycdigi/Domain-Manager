@@ -24,6 +24,9 @@ const router = createRouter({
             meta: { requiresAuth: true },
             children: [
                 { path: 'home', name: 'Home', component: () => import('../views/Home.vue') },
+                { path: 'work', name: 'WorkQueue', component: () => import('../views/WorkQueue.vue') },
+                { path: 'batches', name: 'Batches', component: () => import('../views/Batches.vue') },
+                { path: 'batches/:id', name: 'BatchDetail', component: () => import('../views/BatchDetail.vue') },
                 { path: 'monitor', name: 'Monitor', component: () => import('../views/Monitor.vue') },
                 { path: 'domains', name: 'Domains', component: () => import('../views/Domains.vue') },
                 { path: 'resources', name: 'Resources', component: () => import('../views/Resources.vue') },

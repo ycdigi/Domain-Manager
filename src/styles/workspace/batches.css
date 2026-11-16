@@ -1,0 +1,25 @@
+.work-queue-summary { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-sm); margin-bottom:var(--space-md); }
+.work-queue-summary-card { display:flex; flex-direction:column; gap:var(--space-2xs); padding:var(--space-md); border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); }
+.work-queue-summary-card strong { font-size:var(--text-xl); color:var(--color-brand); }
+.work-queue-summary-card span { color:var(--color-muted); font-size:var(--text-sm); }
+.work-queue-group { margin-bottom:var(--space-md); }
+.batch-list-title { font-weight:var(--weight-semibold); }
+.batch-overview-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:var(--space-sm); margin-bottom:var(--space-md); }
+.batch-overview-grid article { display:flex; flex-direction:column; gap:var(--space-2xs); padding:var(--space-md); border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); }
+.batch-overview-grid span, .batch-review-summary { color:var(--color-muted); font-size:var(--text-sm); }
+.batch-overview-grid strong { font-size:var(--text-xl); }
+.batch-form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 var(--space-md); }
+.batch-form-full { grid-column:1/-1; }
+.batch-members-list { margin:0; padding:0; list-style:none; }
+.batch-members-list li { display:flex; align-items:center; gap:var(--space-sm); padding:var(--space-sm) 0; border-bottom:1px solid var(--color-rule); }
+.batch-members-list li.is-removed { opacity:.65; }
+.batch-member-main { flex:1; min-width:0; }
+.batch-member-main small { display:block; color:var(--color-muted); }
+.batch-add-members { display:grid; grid-template-columns:1.2fr 1fr auto; gap:var(--space-xs); margin-top:var(--space-md); }
+.batch-review-summary { display:flex; flex-wrap:wrap; gap:var(--space-md); }
+@media(max-width:760px) {
+ .work-queue-summary { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .batch-overview-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+ .batch-form-grid, .batch-add-members { grid-template-columns:1fr; }
+ .batch-form-full { grid-column:auto; }
+}

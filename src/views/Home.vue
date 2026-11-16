@@ -42,6 +42,8 @@
                       <button v-if="monitorsBySite.has(site.id)" type="button" class="portfolio-monitor-status" :aria-label="`查看监控：${site.name}`" @click="openSite(site)">监控 · {{ monitorLabels[monitorsBySite.get(site.id)!.status] }}</button>
                       <small v-if="site.domains.length > 1" class="portfolio-domain-count">{{ site.domains.length }} 个域名</small>
                     </div>
+                    <div v-else-if="column.key === 'scenario'" class="portfolio-number-cell"><strong>{{ scenarioLabel(site) }}</strong><small>{{ site.scenario_note || '场景待确认' }}</small></div>
+                    <div v-else-if="column.key === 'content_scale'" class="portfolio-number-cell"><strong>{{ contentScale(site) }}</strong><small>{{ site.content_stats_updated_date || '未记录统计日期' }}</small></div>
                     <el-select v-else-if="column.key === 'platform'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.platform" :aria-label="`技术栈：${site.name}`" @change="value => savePlatform(site, value)"><el-option v-for="item in platforms" :key="item" :value="item" :label="item === '其他' && site.platform === '其他' ? platformLabel(site) : item" /></el-select>
                     <el-select v-else-if="column.key === 'ownership'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.ownership" :aria-label="`网站归属：${site.name}`" @change="value => saveSite(site, { ownership: value })"><el-option v-for="item in ownershipOptions" :key="item" :value="item" :label="item" /></el-select>
                     <el-select v-else-if="column.key === 'industry'" size="small" :disabled="savingSiteIds.has(site.id)" :model-value="site.industry || '其他'" :aria-label="`网站类型：${site.name}`" @change="value => saveSite(site, { industry: value })"><el-option v-for="item in industryOptions" :key="item" :value="item" :label="item" /></el-select>
@@ -107,6 +109,7 @@
       <el-form label-position="top" @submit.prevent="createSite">
         <el-form-item label="网站名称" required><el-input v-model="newSite.name" maxlength="200" /></el-form-item>
         <el-form-item label="主域名" required><el-input v-model="newSite.domain" placeholder="example.com" /></el-form-item>
+        <el-form-item label="加入批次（可选）"><el-select v-model="newSite.batchId" clearable placeholder="不加入批次"><el-option v-for="batch in availableBatches" :key="batch.id" :label="`${batch.name} · ${batch.status}`" :value="batch.id" /></el-select></el-form-item>
         <div class="portfolio-domain-form-grid">
           <el-form-item label="注册商" required><el-input v-model="newSite.registrar" /></el-form-item>
           <el-form-item label="服务类型" required><el-input v-model="newSite.service_type" /></el-form-item>
@@ -130,6 +133,7 @@ import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { bulkUpdateWebsites, createWebsite, deleteWebsite, getWebsites, updateWebsite, type Website, type WebsiteStage } from '../api/websites'
+import { addBatchMembers, getBatches, type Batch } from '../api/batches'
 import type { ProviderResource, ProviderType } from '../../functions/types'
 import { api } from '../utils/request'
 import { monitorOverview, monitorLabels } from '../api/monitor'
@@ -144,7 +148,7 @@ const industryOptions = ['计算器', '资讯站', '其他'] as const
 const platforms = ['WordPress', 'Astro', 'Next.js', '其他'] as const
 const serviceStates = ['未知', '已开通', '未开通'] as const
 const nextActionStatuses: Website['next_action_status'][] = ['待做', '处理中', '已完成']
-type PortfolioColumnKey = 'identity' | 'platform' | 'ownership' | 'industry' | 'clicks' | 'adsense' | 'gsc' | 'income' | 'effort' | 'resources' | 'expiry' | 'computer' | 'next_action' | 'tasks' | 'potential' | 'domain_status' | 'stage' | 'actions'
+type PortfolioColumnKey = 'identity' | 'scenario' | 'content_scale' | 'platform' | 'ownership' | 'industry' | 'clicks' | 'adsense' | 'gsc' | 'income' | 'effort' | 'resources' | 'expiry' | 'computer' | 'next_action' | 'tasks' | 'potential' | 'domain_status' | 'stage' | 'actions'
 type PortfolioColumn = { key: PortfolioColumnKey; label: string; width: number; class?: string; sortable?: boolean }
 type ResourceLinkRow = { id: number; website_id: number; resource_id: number; role: string }
 type NextActionDraft = { text: string; status: Website['next_action_status']; dueDate: string }
@@ -175,7 +179,8 @@ const activePortfolio = computed(() => view.value === 'stopped' ? 'stopped' : ro
 const createVisible = ref(false)
 const detailVisible = computed({ get: () => Boolean(route.name === 'Home' && route.query.site && selected.value), set: value => { if (!value && route.query.site) { const query = { ...route.query }; delete query.site; void router.replace({ query }) } } })
 const selected = ref<Website>()
-const newSite = reactive({ name: '', domain: '', registrar: '', service_type: '网站', registrar_date: '', expiry_date: '' })
+const newSite = reactive({ name: '', domain: '', registrar: '', service_type: '网站', registrar_date: '', expiry_date: '', batchId: undefined as number | undefined })
+const availableBatches = ref<Batch[]>([])
 const computerNames = computed(() => sortComputerNames(websites.value.flatMap(site => site.domains.map(domain => domain.computer_name))))
 const matchesSearch = (site: Website) => {
   if (route.query.adsense_account && String(site.adsense_account_id) !== String(route.query.adsense_account)) return false
@@ -209,12 +214,16 @@ const expiryUrgency = (site: Website) => {
   return days < 0 ? 'is-expired' : days <= 30 ? 'is-expiring-soon' : ''
 }
 const platformLabel = (site: Website) => site.platform === '其他' ? site.platform_other || '其他' : site.platform
+const scenarioLabel = (site: Website) => site.operating_scenario || '未设置场景'
+const contentScale = (site: Website) => site.operating_scenario === 'Astro 内容站' ? `页面 ${site.page_count ?? '未记录'}` : site.operating_scenario === 'WordPress 计算器站' ? `计算器 ${site.wp_calculator_count ?? '—'} · 文章 ${site.wp_article_count ?? '—'}` : site.operating_scenario === 'WordPress 资讯站' ? `文章 ${site.wp_article_count ?? '未记录'}` : '未记录'
 const isNewSite = (site: Website) => site.is_new_site ?? isWebsiteNew(site.new_site_override, primaryDomain(site)?.registrar_date, localDate())
 const activeScenario = computed(() => stages.includes(route.query.stage as WebsiteStage) ? String(route.query.stage) : 'all')
 const portfolioColumns: Record<string, PortfolioColumn[]> = {
   all: [
     { key: 'identity', label: '网站 / 主域名', width: 205, class: 'portfolio-site-column' },
     { key: 'platform', label: '技术栈', width: 88 },
+    { key: 'scenario', label: '经营场景', width: 138 },
+    { key: 'content_scale', label: '内容规模', width: 138 },
     { key: 'ownership', label: '网站归属', width: 112 },
     { key: 'industry', label: '类型', width: 86 },
     { key: 'clicks', label: '日点击', width: 100 },
@@ -276,6 +285,8 @@ const sortValue = (site: Website, key: PortfolioColumnKey): string | number => {
   switch (key) {
     case 'identity': return site.name
     case 'platform': return platformLabel(site)
+    case 'scenario': return site.operating_scenario || ''
+    case 'content_scale': return contentScale(site)
     case 'ownership': return site.ownership
     case 'industry': return site.industry || ''
     case 'clicks': return site.daily_clicks ?? ({ under10: 0, '10to29': 10, '30to49': 30, '50to99': 50, over100: 100 } as Record<string, number>)[site.daily_clicks_range || ''] ?? -1
@@ -488,8 +499,9 @@ const createSite = async () => {
   if (saving.value) return
   saving.value = true
   try {
-    await createWebsite({ name: newSite.name, stage: '待评估', domain: { domain: newSite.domain, registrar: newSite.registrar, registrar_date: newSite.registrar_date, expiry_date: newSite.expiry_date, service_type: newSite.service_type } })
-    createVisible.value = false; Object.assign(newSite, { name: '', domain: '', registrar: '', service_type: '网站', registrar_date: '', expiry_date: '' }); await load(true); ElMessage.success('网站已创建')
+    const created = await createWebsite({ name: newSite.name, stage: '待评估', domain: { domain: newSite.domain, registrar: newSite.registrar, registrar_date: newSite.registrar_date, expiry_date: newSite.expiry_date, service_type: newSite.service_type } })
+    if (newSite.batchId) await addBatchMembers(newSite.batchId, [created.website.id])
+    createVisible.value = false; Object.assign(newSite, { name: '', domain: '', registrar: '', service_type: '网站', registrar_date: '', expiry_date: '', batchId: undefined }); await load(true); ElMessage.success('网站已创建')
   } catch (e) { ElMessage.error(e instanceof Error ? e.message : '网站创建失败') }
   finally { saving.value = false }
 }
@@ -503,5 +515,5 @@ watch(activePortfolio, (value, previous) => {
   sortKey.value = ''; sortDirection.value = 'asc'
   if ((value === 'stopped') !== (previous === 'stopped')) clearSelection()
 })
-onActivated(() => { void load(true) })
+onActivated(() => { void load(true); void getBatches(true).then(value => { availableBatches.value = value }).catch(() => {}) })
 </script>

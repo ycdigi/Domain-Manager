@@ -23,3 +23,7 @@
   .nav-toggle { width:var(--touch-target); height:var(--touch-target); }
   .workspace-nav-item { min-height:var(--touch-target); }
 }
+
+.workspace-nav-primary { gap:var(--space-2xs); padding-bottom:var(--space-xs); border-bottom:1px solid var(--color-rule); }
+.workspace-nav-batch { padding-left:calc(var(--space-sm) + 8px); font-size:var(--text-xs); }
+.nav-compact .workspace-nav-batch { padding-left:0; }

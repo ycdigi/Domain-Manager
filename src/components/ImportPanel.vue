@@ -1,6 +1,7 @@
 <template>
     <section class="page-panel">
         <div class="panel-heading"><h2>导入网站组合备份</h2></div>
+        <div class="import-batch-options"><el-select v-model="batchId" clearable placeholder="导入后加入批次（可选）" aria-label="导入后加入批次"><el-option v-for="batch in availableBatches" :key="batch.id" :label="`${batch.name} · ${batch.status}`" :value="batch.id" /></el-select><el-input v-model="newBatchName" maxlength="200" placeholder="或新建批次名称（可选）" aria-label="新建批次名称" /></div>
         <div class="import-container" :aria-busy="loading">
             <el-upload class="upload-area" drag action="#" :auto-upload="false" :show-file-list="true" :limit="1"
                 :disabled="loading" accept=".json" :on-change="handleFileChange" :on-exceed="handleExceed" :on-remove="clearFile" :file-list="fileList">
@@ -64,7 +65,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { invalidateData } from '../utils/workspaceCache'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { ElMessage } from 'element-plus'
@@ -72,6 +73,7 @@ import { confirmAction } from '../utils/feedback'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile, UploadProps } from 'element-plus'
 import { api } from '../utils/request'
+import { createBatch, getBatches, type Batch } from '../api/batches'
 
 // 定义导入结果类型
 interface ImportError {
@@ -95,6 +97,9 @@ const loading = ref(false)
 const fileList = ref<UploadUserFile[]>([])
 const selectedFile = ref<File | null>(null)
 const importResult = ref<ImportResult | null>(null)
+const availableBatches = ref<Batch[]>([])
+const batchId = ref<number>()
+const newBatchName = ref('')
 
 const dirty = computed(() => Boolean(selectedFile.value) && !imported.value)
 useUnsavedChanges(dirty)
@@ -125,9 +130,12 @@ const clearFile = () => {
     importResult.value = null
 }
 
+onMounted(async () => { try { availableBatches.value = await getBatches() } catch { /* import remains usable without batch options */ } })
+
 const sendImport = async (dryRun: boolean) => {
     const formData = new FormData()
     formData.append('file', selectedFile.value!)
+    if (batchId.value) formData.append('batch_id', String(batchId.value))
     const result = await api.upload<ImportResult>(`/api/domains/import${dryRun ? '?dry_run=1' : ''}`, formData)
     importResult.value = result
     return result
@@ -151,11 +159,15 @@ const handleImport = async () => {
         }
         const preview = importResult.value!
         await confirmAction(`本次备份涉及 ${preview.total} 个域名及相关网站记录。确认导入？`, '导入预览', { confirmButtonText: '确认导入' })
+        if (!batchId.value && newBatchName.value.trim()) {
+            const created = await createBatch({ name: newBatchName.value.trim(), source: '网站组合导入' })
+            batchId.value = created.id
+        }
         const result = await sendImport(false)
         imported.value = true
         previewReady.value = false
         if (result.success > 0) {
-            invalidateData('/api/websites', '/api/domains', '/api/resources', '/api/adsense/accounts', '/api/adsense/income', '/api/dashboard/summary')
+            invalidateData('/api/websites', '/api/domains', '/api/resources', '/api/adsense/accounts', '/api/adsense/income', '/api/dashboard/summary', '/api/batches', '/api/work-queue')
             emit('success')
         }
     } catch (error: unknown) {

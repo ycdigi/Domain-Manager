@@ -12,6 +12,10 @@
           <el-form-item label="网站归属"><el-select v-model="profile.ownership"><el-option v-for="item in ownerships" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item label="技术栈"><el-select v-model="profile.platform"><el-option v-for="item in platforms" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item label="网站类型"><el-select v-model="profile.industry" clearable placeholder="未设置"><el-option v-for="item in industries" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+          <el-form-item label="经营场景"><el-select v-model="profile.operating_scenario" clearable filterable allow-create default-first-option placeholder="未设置场景"><el-option v-for="item in scenarios" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+          <el-form-item v-if="profile.operating_scenario === 'Astro 内容站'" label="页面数量"><el-input-number v-model="profile.page_count" :min="0" :precision="0" :controls="false" /></el-form-item>
+          <el-form-item v-if="profile.operating_scenario === 'Astro 内容站'" label="内容统计日期"><el-date-picker v-model="profile.content_stats_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
+          <el-form-item v-if="profile.operating_scenario" label="场景说明"><el-input v-model="profile.scenario_note" maxlength="500" /></el-form-item>
           <el-form-item v-if="profile.platform === '其他'" label="其他技术栈"><el-input v-model="profile.platform_other" maxlength="100" /></el-form-item>
           <el-form-item label="AdSense"><el-select v-model="profile.adsense_connected"><el-option v-for="item in serviceStates" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item v-if="profile.adsense_connected === '已开通' || profile.adsense_account_id" label="AdSense 账号"><el-select v-model="profile.adsense_account_id" clearable placeholder="请选择账号"><el-option v-for="account in adsenseAccounts" :key="account.id" :label="account.name" :value="account.id" /></el-select></el-form-item>
@@ -161,9 +165,10 @@ const stages = ['待评估', '验证', '增长', '维护', '暂停']
 const ownerships = ['未分类', '自营网站', '企业客户网站']
 const platforms = ['WordPress', 'Astro', 'Next.js', '其他']
 const industries = ['计算器', '资讯站', '其他']
+const scenarios = ['Astro 内容站', 'WordPress 计算器站', 'WordPress 资讯站', '通用网站']
 const serviceStates = ['未知', '已开通', '未开通']
 const taskTypes: WebsiteTaskType[] = ['SEO', '内容', '技术', '其他']
-const profile = reactive<{ name: string; stage: string; new_site_mode: 'auto' | 'new' | 'regular'; lifecycle: string; ownership: string; platform: string; platform_other: string; industry: string; adsense_connected: string; adsense_account_id?: number; adsense_opened_date: string; gsc_connected: string; daily_clicks?: number; daily_clicks_range: string; clicks_updated_date: string; wp_calculator_count?: number; wp_article_count?: number; content_stats_updated_date: string; potential: string; next_action: string; next_action_due_date: string; next_action_status: string }>({ name: '', stage: '待评估', new_site_mode: 'auto', lifecycle: 'active', ownership: '自营网站', platform: '其他', platform_other: '', industry: '', adsense_connected: '未知', adsense_account_id: undefined, adsense_opened_date: '', gsc_connected: '未知', daily_clicks: undefined, daily_clicks_range: '', clicks_updated_date: '', wp_calculator_count: undefined, wp_article_count: undefined, content_stats_updated_date: '', potential: '', next_action: '', next_action_due_date: '', next_action_status: '待做' })
+const profile = reactive<{ name: string; stage: string; new_site_mode: 'auto' | 'new' | 'regular'; lifecycle: string; ownership: string; platform: string; platform_other: string; industry: string; operating_scenario: string; scenario_note: string; page_count?: number; adsense_connected: string; adsense_account_id?: number; adsense_opened_date: string; gsc_connected: string; daily_clicks?: number; daily_clicks_range: string; clicks_updated_date: string; wp_calculator_count?: number; wp_article_count?: number; content_stats_updated_date: string; potential: string; next_action: string; next_action_due_date: string; next_action_status: string }>({ name: '', stage: '待评估', new_site_mode: 'auto', lifecycle: 'active', ownership: '自营网站', platform: '其他', platform_other: '', industry: '', operating_scenario: '', scenario_note: '', page_count: undefined, adsense_connected: '未知', adsense_account_id: undefined, adsense_opened_date: '', gsc_connected: '未知', daily_clicks: undefined, daily_clicks_range: '', clicks_updated_date: '', wp_calculator_count: undefined, wp_article_count: undefined, content_stats_updated_date: '', potential: '', next_action: '', next_action_due_date: '', next_action_status: '待做' })
 const adsenseAccounts = ref<Array<{ id: number; name: string }>>([])
 const domains = ref<WebsiteDomain[]>([])
 const tasks = ref<WebsiteTask[]>([])
@@ -206,7 +211,7 @@ const loadAll = async () => {
   const version = ++loadVersion
   error.value = ''
   if (profileWebsiteId !== props.website.id) {
-  Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
+  Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', operating_scenario: props.website.operating_scenario || '', scenario_note: props.website.scenario_note || '', page_count: props.website.page_count ?? undefined, adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
     profileWebsiteId = props.website.id
     markProfileClean()
     tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []
@@ -232,6 +237,9 @@ const saveProfile = async () => {
     addIfChanged('lifecycle', profile.lifecycle, original.lifecycle)
     addIfChanged('ownership', profile.ownership, original.ownership)
     addIfChanged('industry', profile.industry || null, original.industry || null)
+    addIfChanged('operating_scenario', profile.operating_scenario || null, original.operating_scenario || null)
+    addIfChanged('scenario_note', profile.scenario_note || null, original.scenario_note || null)
+    addIfChanged('page_count', profile.page_count ?? null, original.page_count ?? null)
     addIfChanged('gsc_connected', profile.gsc_connected, original.gsc_connected)
     addIfChanged('potential', profile.potential || null, original.potential || null)
     addIfChanged('next_action', profile.next_action || null, original.next_action || null)
@@ -260,11 +268,11 @@ const saveProfile = async () => {
 
     const nextWpStats = profile.platform === 'WordPress' ? {
       wp_calculator_count: profile.wp_calculator_count ?? null,
-      wp_article_count: profile.wp_article_count ?? null,
-      content_stats_updated_date: profile.content_stats_updated_date || null
-    } : { wp_calculator_count: null, wp_article_count: null, content_stats_updated_date: null }
-    const wpChanged = profile.platform !== original.platform || nextWpStats.wp_calculator_count !== (original.wp_calculator_count ?? null) || nextWpStats.wp_article_count !== (original.wp_article_count ?? null) || nextWpStats.content_stats_updated_date !== (original.content_stats_updated_date || null)
-    if (wpChanged) Object.assign(patch, nextWpStats)
+      wp_article_count: profile.wp_article_count ?? null
+    } : { wp_calculator_count: null, wp_article_count: null }
+    const nextContentStatsDate = profile.platform === 'WordPress' || profile.operating_scenario === 'Astro 内容站' ? profile.content_stats_updated_date || null : null
+    const contentStatsChanged = nextWpStats.wp_calculator_count !== (original.wp_calculator_count ?? null) || nextWpStats.wp_article_count !== (original.wp_article_count ?? null) || nextContentStatsDate !== (original.content_stats_updated_date || null)
+    if (contentStatsChanged) Object.assign(patch, { ...nextWpStats, content_stats_updated_date: nextContentStatsDate })
     if (!Object.keys(patch).length) return
     await api.patch(`/api/websites/${props.website.id}`, patch)
     if (Object.prototype.hasOwnProperty.call(patch, 'adsense_account_id')) {

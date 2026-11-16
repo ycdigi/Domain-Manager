@@ -13,7 +13,7 @@ const choices: Record<string, Array<string | number>> = {
     new_site_override: [0, 1]
 }
 const dates = ['adsense_opened_date', 'seo_last_date', 'clicks_updated_date', 'content_stats_updated_date', 'next_action_due_date']
-const counts = ['daily_clicks', 'wp_calculator_count', 'wp_article_count', 'priority_order']
+const counts = ['daily_clicks', 'wp_calculator_count', 'wp_article_count', 'page_count', 'priority_order']
 
 export const isUnchangedLegacyIndustry = (value: unknown, current: unknown) =>
     typeof current === 'string' && !isWebsiteIndustry(current) && value === normalizeWebsiteIndustry(current)

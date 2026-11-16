@@ -106,6 +106,7 @@ Before applying the resource-binding upgrade, check for duplicate primary links 
 Before deploying this version, back up an existing database and apply `schema-migration-v1.13.0.sql` once to remove the retired Telegram notification configuration and website notification fields.
 
 Website detail Todos use a separate table for titles and optional descriptions. Apply `schema-migration-v1.14.0.sql` once to an existing database.
+Website batches, operating scenarios, and review snapshots require `schema-migration-v1.23.0.sql` after the monitoring migration. Back up an existing database and run it once.
 
 > `DB` must be a D1 database binding, not a Text variable under Variables and secrets. The binding name must be exactly `DB`; redeploy the Pages project after changing bindings or table structure.
 

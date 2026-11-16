@@ -1,5 +1,6 @@
 import { api } from '../utils/request'
 import { cachedGet, invalidateData } from '../utils/workspaceCache'
+import type { OperatingScenario } from './batches'
 
 export type WebsiteStage = '待评估' | '验证' | '增长' | '维护' | '暂停'
 export type WebsiteTaskType = 'SEO' | '内容' | '技术' | '其他' | 'SEO复查'
@@ -31,6 +32,9 @@ export interface Website {
   industry: '计算器' | '资讯站' | '其他' | null
   platform: 'WordPress' | 'Astro' | 'Next.js' | '其他'
   platform_other?: string | null
+  operating_scenario?: OperatingScenario | null
+  scenario_note?: string | null
+  page_count?: number | null
   adsense_account_id?: number | null
   adsense_connected: '未知' | '已开通' | '未开通'
   adsense_opened_date?: string | null

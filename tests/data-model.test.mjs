@@ -94,3 +94,20 @@ test('cleanup audit and workspace routes point at the portfolio implementation',
   assert.match(home, /portfolio-stage/)
   assert.match(home, /WebsiteDetailDrawer/)
 })
+
+test('v1.23 adds operating scenarios and website batch history to an existing portfolio', () => {
+  const migrationPath = path.join(root, 'schema-migration-v1.23.0.sql')
+  const legacySchema = schema.replace('    operating_scenario TEXT,\n    scenario_note TEXT,\n    page_count INTEGER CHECK (page_count IS NULL OR page_count >= 0),\n', '').split('\n\nCREATE TABLE IF NOT EXISTS website_batches')[0]
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-batches-migration-')); const file = path.join(dir, 'db.sqlite')
+  try {
+    run(file, `PRAGMA foreign_keys=ON;\n${legacySchema}`)
+    run(file, `PRAGMA foreign_keys=ON;\n${fs.readFileSync(migrationPath, 'utf8')}`)
+    const tables = run(file, "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name;")
+    for (const table of ['website_batches', 'website_batch_members', 'website_batch_reviews']) assert.match(tables, new RegExp(`\\b${table}\\b`))
+    const columns = run(file, 'PRAGMA table_info(websites);')
+    for (const column of ['operating_scenario', 'scenario_note', 'page_count']) assert.match(columns, new RegExp(`\\b${column}\\b`))
+    run(file, "INSERT INTO websites(name) VALUES ('Batch site'); INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES (1,'batch.test','r','2026-01-01','2027-01-01','网站'); INSERT INTO website_batches(name) VALUES ('Migration batch'); INSERT INTO website_batch_members(batch_id,website_id,member_note) VALUES (1,1,'kept');")
+    assert.equal(run(file, 'SELECT member_note FROM website_batch_members;').trim(), 'kept')
+    assert.equal(run(file, 'PRAGMA foreign_key_check;').trim(), '')
+  } finally { fs.rmSync(dir, { recursive: true, force: true }) }
+})

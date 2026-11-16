@@ -5,9 +5,10 @@ import { validateWebsiteFields } from '../../domain/website-validation'
 import { websiteIncomeRowsCte } from '../../domain/website-income'
 import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
 import { isWebsiteNew } from '../../../shared/website-newness'
+import { validateScenarioFields } from '../../domain/batches'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override'])
+const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count'])
 
 const validSiteFields = (fields: Record<string, unknown>) => {
     return validateWebsiteFields(fields)
@@ -103,7 +104,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const body = await context.request.json() as Record<string, unknown>
         const domain = body.domain as Record<string, unknown> | undefined
         const fields = Object.fromEntries(Object.entries(body).filter(([key]) => siteFields.has(key)))
-        const fieldError = validSiteFields(fields)
+        const fieldError = validSiteFields(fields) || validateScenarioFields(fields)
         if (fieldError) return json(null, 400, fieldError)
         if (!domain || typeof domain !== 'object') return json(null, 400, '新建网站必须同时提供一个域名')
         const domainError = validateDomain({ ...domain, status: domain.status || '在线' } as never)

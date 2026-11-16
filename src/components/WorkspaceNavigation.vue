@@ -5,6 +5,11 @@
       <button type="button" class="nav-toggle" :aria-label="mobile ? '关闭导航' : collapsed ? '展开导航' : '收起导航'" @click="mobile ? emit('close') : emit('collapse')"><el-icon><Close v-if="mobile" /><Expand v-else-if="collapsed" /><Fold v-else /></el-icon></button>
     </div>
     <nav class="workspace-nav-groups" aria-label="工作区导航">
+      <div class="workspace-nav-group workspace-nav-primary">
+        <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'work' }" aria-label="待处理" :title="`待处理 · ${queueCounts.total || 0} 项`" @click="emit('manage', 'work')"><el-icon><List /></el-icon><span v-if="!collapsed" class="workspace-nav-text">待处理</span><span v-if="queueCounts.total" class="monitor-unread" :aria-label="`${queueCounts.total} 项待处理`">{{ queueCounts.total }}</span></button>
+        <button type="button" class="workspace-nav-item" :class="{ 'is-active': activeManager === 'batches' }" aria-label="网站批次" title="网站批次" @click="emit('manage', 'batches')"><el-icon><Collection /></el-icon><span v-if="!collapsed" class="workspace-nav-text">网站批次</span><span v-if="!collapsed" class="workspace-nav-count">{{ batches.filter(batch => batch.status !== '已归档').length }}</span></button>
+        <button v-for="batch in recentBatches" :key="batch.id" type="button" class="workspace-nav-item workspace-nav-batch" :class="{ 'is-active': activeBatch === batch.id }" :aria-label="`批次：${batch.name}`" :title="`${batch.name} · ${batch.member_count || 0} 个网站`" @click="emit('openBatch', batch.id)"><el-icon aria-hidden="true"><CollectionTag /></el-icon><span v-if="!collapsed" class="workspace-nav-text">{{ batch.name }}</span><span v-if="!collapsed" class="workspace-nav-count">{{ batch.member_count || 0 }}</span></button>
+      </div>
       <div class="workspace-nav-group">
         <p v-if="!collapsed" class="workspace-nav-label">网站归属</p>
         <button v-for="filter in ownershipFilters" :key="filter.value" type="button" class="workspace-nav-item" :class="{ 'is-active': activeOwnership === filter.value }" :aria-pressed="activeOwnership === filter.value" :aria-label="filter.label" :title="`${filter.label} · ${counts.ownership[filter.value] || 0} 个网站`" @click="emit('selectFilter', 'ownership', filter.value)">
@@ -36,11 +41,15 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { computed, ref, onMounted, onUnmounted } from 'vue'
 import type { DropdownInstance } from 'element-plus'
-import { Close, Coin, Connection, Cpu, Document, Download, Expand, Fold, FolderOpened, Grid, House, Lightning, Monitor, MoreFilled, OfficeBuilding, QuestionFilled } from '@element-plus/icons-vue'
-defineProps<{ ownershipFilters: Array<{ label: string; value: string }>; platformFilters: Array<{ label: string; value: string }>; counts: { ownership: Record<string, number>; platform: Record<string, number> }; activeOwnership: string; activePlatform: string; activeManager: string; monitorUnread?: number; collapsed?: boolean; mobile?: boolean }>()
-const emit = defineEmits<{ selectFilter: [kind: 'ownership' | 'platform', value: string]; manage: [value: 'monitor' | 'domains' | 'resources' | 'adsense' | 'data']; collapse: []; close: []; backup: []; logout: [] }>()
+import { Close, Coin, Collection, CollectionTag, Connection, Cpu, Document, Download, Expand, Fold, FolderOpened, Grid, House, Lightning, List, Monitor, MoreFilled, OfficeBuilding, QuestionFilled } from '@element-plus/icons-vue'
+import type { Batch } from '../api/batches'
+const props = defineProps<{ ownershipFilters: Array<{ label: string; value: string }>; platformFilters: Array<{ label: string; value: string }>; counts: { ownership: Record<string, number>; platform: Record<string, number> }; activeOwnership: string; activePlatform: string; activeManager: string; activeBatch?: number; monitorUnread?: number; queueCounts?: { total: number }; batches?: Batch[]; collapsed?: boolean; mobile?: boolean }>()
+const batches = computed(() => props.batches || [])
+const queueCounts = computed(() => props.queueCounts || { total: 0 })
+const recentBatches = computed(() => batches.value.filter(batch => batch.status !== '已归档').slice(0, 3))
+const emit = defineEmits<{ selectFilter: [kind: 'ownership' | 'platform', value: string]; manage: [value: 'work' | 'batches' | 'monitor' | 'domains' | 'resources' | 'adsense' | 'data']; openBatch: [id: number]; collapse: []; close: []; backup: []; logout: [] }>()
 const ownershipIcon = (value: string) => ({ all: Grid, '自营网站': House, '企业客户网站': OfficeBuilding, '未分类': QuestionFilled })[value] || Grid
 const platformIcon = (value: string) => ({ all: Grid, Astro: Lightning, 'Next.js': Connection, WordPress: Document, '其他': Cpu })[value] || Monitor
 const moreMenu = ref<DropdownInstance>()

@@ -3,10 +3,11 @@ import { checkApiToken } from '../../../utils/auth'
 import { isValidDate, normalizeDomain, todayShanghaiDate } from '../../../utils/domain-validation'
 import { addDays, ensureSeoReview, insertSnapshot, validateWindow } from '../../../domain/website-tasks'
 import { isUnchangedLegacyIndustry, validateWebsiteFields } from '../../../domain/website-validation'
+import { validateScenarioFields } from '../../../domain/batches'
 import { normalizeWebsiteIndustry } from '../../../../shared/website-classification'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const siteFields = new Set(['name', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential'])
+const siteFields = new Set(['name', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'operating_scenario', 'scenario_note', 'page_count', 'potential'])
 const conclusions = ['提升', '持平', '下降', '数据不足']
 const statuses = ['待做', '处理中', '已完成']
 
@@ -55,7 +56,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (!website) return json(null, 404, '网站不存在')
         const fields = body.fields || {}
         if (typeof fields !== 'object' || Array.isArray(fields) || Object.keys(fields).some(key => !siteFields.has(key))) return json(null, 400, 'fields 必须是受支持字段组成的对象')
-        const fieldError = validateWebsiteFields(fields, website)
+        const fieldError = validateWebsiteFields(fields, website) || validateScenarioFields(fields, website)
         if (fieldError) return json(null, 400, fieldError)
         if (fields.adsense_account_id != null && (!Number.isInteger(fields.adsense_account_id) || !await db.prepare('SELECT id FROM adsense_accounts WHERE id=?').bind(fields.adsense_account_id).first())) return json(null, 400, 'AdSense 账号不存在')
         if (body.task_updates !== undefined && (!Array.isArray(body.task_updates) || body.task_updates.length > 50)) return json(null, 400, 'task_updates 最多支持 50 项')
