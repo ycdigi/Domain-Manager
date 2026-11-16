@@ -12,8 +12,7 @@
     <template v-if="batch">
 
 
-      <section class="page-panel">
-        <div class="panel-heading"><h2>批次成员</h2></div>
+      <section class="batch-member-section">
 
         <div class="batch-member-toolbar">
           <div class="batch-member-selection"><el-checkbox :model-value="allFilteredSelected" :indeterminate="someFilteredSelected" :disabled="!filteredActiveMembers.length" aria-label="选择当前筛选成员" @change="toggleFiltered(Boolean($event))" /><span>当前筛选 {{ filteredActiveMembers.length }} 个，已选 {{ selectedIds.size }} 个</span></div>
