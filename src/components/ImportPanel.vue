@@ -1,7 +1,7 @@
 <template>
     <section class="page-panel">
         <div class="panel-heading"><h2>导入网站组合备份</h2></div>
-        <div class="import-batch-options"><el-select v-model="batchId" clearable placeholder="导入后加入批次（可选）" aria-label="导入后加入批次"><el-option v-for="batch in availableBatches" :key="batch.id" :label="`${batch.name} · ${batch.status}`" :value="batch.id" /></el-select><el-input v-model="newBatchName" maxlength="200" placeholder="或新建批次名称（可选）" aria-label="新建批次名称" /></div>
+        <div class="import-batch-options"><div class="import-batch-selection"><span v-if="selectedBatchLabel">导入批次：{{ selectedBatchLabel }}</span><span v-else class="page-muted">导入后不加入批次</span><el-button size="small" @click="batchPickerVisible = true">选择批次</el-button></div><el-button v-if="batchId || newBatchName" text size="small" @click="clearBatchSelection">清除批次</el-button></div>
         <div class="import-container" :aria-busy="loading">
             <el-upload class="upload-area" drag action="#" :auto-upload="false" :show-file-list="true" :limit="1"
                 :disabled="loading" accept=".json" :on-change="handleFileChange" :on-exceed="handleExceed" :on-remove="clearFile" :file-list="fileList">
@@ -53,6 +53,8 @@
             </div>
         </div>
 
+        <BatchAssignmentDialog v-model="batchPickerVisible" mode="import" :websites="[]" :batches="availableBatches" @submit="selectImportBatch" />
+
         <div class="import-footer">
             <span class="dialog-footer">
                 <el-button :disabled="loading" @click="clearFile">清除文件</el-button>
@@ -73,7 +75,8 @@ import { confirmAction } from '../utils/feedback'
 import { UploadFilled } from '@element-plus/icons-vue'
 import type { UploadUserFile, UploadProps } from 'element-plus'
 import { api } from '../utils/request'
-import { createBatch, getBatches, type Batch } from '../api/batches'
+import { createBatch, getBatches, type Batch, type BatchAssignmentPayload } from '../api/batches'
+import BatchAssignmentDialog from './BatchAssignmentDialog.vue'
 
 // 定义导入结果类型
 interface ImportError {
@@ -100,6 +103,8 @@ const importResult = ref<ImportResult | null>(null)
 const availableBatches = ref<Batch[]>([])
 const batchId = ref<number>()
 const newBatchName = ref('')
+const batchPickerVisible = ref(false)
+const selectedBatchLabel = computed(() => batchId.value ? availableBatches.value.find(batch => batch.id === batchId.value)?.name || '已有批次' : newBatchName.value ? `${newBatchName.value}（新建）` : '')
 
 const dirty = computed(() => Boolean(selectedFile.value) && !imported.value)
 useUnsavedChanges(dirty)
@@ -131,6 +136,13 @@ const clearFile = () => {
 }
 
 onMounted(async () => { try { availableBatches.value = await getBatches() } catch { /* import remains usable without batch options */ } })
+
+const clearBatchSelection = () => { batchId.value = undefined; newBatchName.value = '' }
+const selectImportBatch = (payload: BatchAssignmentPayload) => {
+    batchId.value = payload.batchId
+    newBatchName.value = payload.batch?.name || ''
+    batchPickerVisible.value = false
+}
 
 const sendImport = async (dryRun: boolean) => {
     const formData = new FormData()

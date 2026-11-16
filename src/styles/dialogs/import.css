@@ -29,5 +29,6 @@
 :deep(.el-collapse-item__header) { color: var(--color-ink); font: inherit; white-space: normal; line-height: 1.5; }
 @media (max-width: 600px) { .selected-file { align-items: flex-start; } }
 .import-footer { margin-top:var(--space-md); }
-.import-batch-options { display:grid; grid-template-columns:1fr 1fr; gap:var(--space-xs); margin-bottom:var(--space-md); }
-@media(max-width:760px) { .import-batch-options { grid-template-columns:1fr; } }
+.import-batch-options { display:flex; align-items:center; justify-content:space-between; gap:var(--space-xs); margin-bottom:var(--space-md); }
+.import-batch-selection { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-xs); min-width:0; color:var(--color-ink-2); font-size:var(--text-sm); }
+@media(max-width:760px) { .import-batch-options { align-items:flex-start; } .import-batch-selection { align-items:flex-start; } }

@@ -8,6 +8,7 @@ const sites = await server.ssrLoadModule('/functions/api/websites/index.ts')
 const batchList = await server.ssrLoadModule('/functions/api/batches/index.ts')
 const batchDetail = await server.ssrLoadModule('/functions/api/batches/[id].ts')
 const members = await server.ssrLoadModule('/functions/api/batches/[id]/members.ts')
+const assign = await server.ssrLoadModule('/functions/api/batches/assign.ts')
 const reviews = await server.ssrLoadModule('/functions/api/batches/[id]/reviews.ts')
 const workQueue = await server.ssrLoadModule('/functions/api/work-queue/index.ts')
 const snapshotApi = await server.ssrLoadModule('/functions/api/export/snapshot/index.ts')
@@ -108,4 +109,54 @@ test('portfolio backup includes batches and restores their relationships', async
   await call(importData.onRequestPost, context('/api/domains/import', backup, 'POST'))
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_batches')[0].count, 1)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_batch_members')[0].count, 1)
+})
+
+
+test('batch assignment creates a batch and atomically assigns websites with optional fields', async () => {
+  const first = await createSite('Assign first')
+  const second = await createSite('Assign second')
+  const result = await call(assign.onRequestPost, context('/api/batches/assign', {
+    website_ids: [first.id, second.id],
+    batch: { name: 'Bulk assignment', source: '组合筛选' },
+    member_note: '同一轮导入',
+    website_fields: { stage: '验证', operating_scenario: 'Astro 内容站' }
+  }, 'POST'), 201)
+  assert.equal(result.accepted, 2)
+  assert.equal(result.skipped, 0)
+  assert.equal(result.batch.name, 'Bulk assignment')
+  assert.deepEqual(store.sql('SELECT website_id, member_note, membership_status FROM website_batch_members ORDER BY website_id'), [
+    { website_id: 1, member_note: '同一轮导入', membership_status: 'active' },
+    { website_id: 2, member_note: '同一轮导入', membership_status: 'active' }
+  ])
+  assert.deepEqual(store.sql('SELECT stage, operating_scenario FROM websites ORDER BY id'), [
+    { stage: '验证', operating_scenario: 'Astro 内容站' },
+    { stage: '验证', operating_scenario: 'Astro 内容站' }
+  ])
+})
+
+test('batch assignment skips current members and reactivates removed members', async () => {
+  const first = await createSite('Existing member')
+  const second = await createSite('Removed member')
+  const batch = await call(batchList.onRequestPost, context('/api/batches', { name: 'Existing batch' }, 'POST'), 201)
+  await call(members.onRequestPost, context(`/api/batches/${batch.id}/members`, { website_ids: [first.id, second.id] }, 'POST', '1', String(batch.id)))
+  await call(members.onRequestDelete, context(`/api/batches/${batch.id}/members`, { website_ids: [second.id], reason: '换批次' }, 'DELETE', '1', String(batch.id)))
+  const result = await call(assign.onRequestPost, context('/api/batches/assign', { batch_id: batch.id, website_ids: [first.id, second.id], member_note: '重新加入' }, 'POST'))
+  assert.equal(result.accepted, 1)
+  assert.equal(result.skipped, 1)
+  assert.equal(result.reactivated, 1)
+  assert.deepEqual(store.sql('SELECT website_id, membership_status, member_note, removed_reason FROM website_batch_members ORDER BY id'), [
+    { website_id: 1, membership_status: 'active', member_note: null, removed_reason: null },
+    { website_id: 2, membership_status: 'removed', member_note: null, removed_reason: '换批次' },
+    { website_id: 2, membership_status: 'active', member_note: '重新加入', removed_reason: null }
+  ])
+})
+
+test('batch assignment rejects archived batches and invalid website ids before writing', async () => {
+  const site = await createSite('Valid site')
+  const batch = await call(batchList.onRequestPost, context('/api/batches', { name: 'Archived batch' }, 'POST'), 201)
+  await call(batchDetail.onRequestPatch, context(`/api/batches/${batch.id}`, { status: '已归档' }, 'PATCH', '1', String(batch.id)))
+  await call(assign.onRequestPost, context('/api/batches/assign', { batch_id: batch.id, website_ids: [site.id] }, 'POST'), 409)
+  await call(assign.onRequestPost, context('/api/batches/assign', { website_ids: [site.id, 999], batch: { name: 'Should not exist' } }, 'POST'), 404)
+  assert.equal(store.sql("SELECT COUNT(*) AS count FROM website_batches WHERE name='Should not exist'")[0].count, 0)
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_batch_members')[0].count, 0)
 })

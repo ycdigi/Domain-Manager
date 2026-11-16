@@ -20,6 +20,7 @@
         <el-option v-for="item in stages" :key="item" :value="item" :label="item" />
       </el-select>
       <el-button size="small" type="primary" :loading="bulkUpdating" @click="applyBulkUpdate({ stage: bulkStage })">设置阶段</el-button>
+      <el-button size="small" type="primary" :disabled="bulkUpdating" @click="batchAssignmentVisible = true">加入批次</el-button>
       <el-button size="small" :loading="bulkUpdating" @click="applyBulkUpdate({ lifecycle: view === 'stopped' ? 'active' : 'stopped' })">{{ view === 'stopped' ? '恢复经营' : '停止经营' }}</el-button>
       <el-button size="small" text :disabled="bulkUpdating" @click="clearSelection">清空选择</el-button>
     </div>
@@ -120,6 +121,7 @@
       <template #footer><div class="dialog-footer"><el-button @click="createVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="createSite">创建网站</el-button></div></template>
     </el-dialog>
 
+    <BatchAssignmentDialog v-model="batchAssignmentVisible" :websites="view === 'stopped' ? stoppedSites : visibleSites" :batches="availableBatches" :selected-website-ids="[...selectedIds]" :submitting="batchAssigning" @submit="assignSelectedBatch" />
     <WebsiteDetailDrawer v-model:visible="detailVisible" :website="selected" @changed="load(true)" />
   </div>
 </template>
@@ -131,9 +133,10 @@ import { useRoute, useRouter } from 'vue-router'
 import { Cloudy, Connection, EditPen, Monitor, Platform, Plus, Refresh, Search, Sort, View } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
+import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { bulkUpdateWebsites, createWebsite, deleteWebsite, getWebsites, updateWebsite, type Website, type WebsiteStage } from '../api/websites'
-import { addBatchMembers, getBatches, type Batch } from '../api/batches'
+import { addBatchMembers, assignBatch, getBatches, type Batch, type BatchAssignmentPayload } from '../api/batches'
 import type { ProviderResource, ProviderType } from '../../functions/types'
 import { api } from '../utils/request'
 import { monitorOverview, monitorLabels } from '../api/monitor'
@@ -181,6 +184,8 @@ const detailVisible = computed({ get: () => Boolean(route.name === 'Home' && rou
 const selected = ref<Website>()
 const newSite = reactive({ name: '', domain: '', registrar: '', service_type: '网站', registrar_date: '', expiry_date: '', batchId: undefined as number | undefined })
 const availableBatches = ref<Batch[]>([])
+const batchAssignmentVisible = ref(false)
+const batchAssigning = ref(false)
 const computerNames = computed(() => sortComputerNames(websites.value.flatMap(site => site.domains.map(domain => domain.computer_name))))
 const matchesSearch = (site: Website) => {
   if (route.query.adsense_account && String(site.adsense_account_id) !== String(route.query.adsense_account)) return false
@@ -384,6 +389,21 @@ const load = async (force = false) => {
   finally { loading.value = false }
 }
 const clearSelection = () => selectedIds.clear()
+const assignSelectedBatch = async (payload: BatchAssignmentPayload) => {
+  if (batchAssigning.value) return
+  batchAssigning.value = true
+  try {
+    const result = await assignBatch(payload)
+    batchAssignmentVisible.value = false
+    clearSelection()
+    await Promise.all([load(true), getBatches(true)])
+    const summary = [`已加入 ${result.accepted} 个网站`]
+    if (result.reactivated) summary.push(`重新加入 ${result.reactivated} 个`)
+    if (result.skipped) summary.push(`跳过当前成员 ${result.skipped} 个`)
+    ElMessage.success(summary.join('，'))
+  } catch (e) { ElMessage.error(e instanceof Error ? e.message : '批量加入批次失败') }
+  finally { batchAssigning.value = false }
+}
 const applyBulkUpdate = async (fields: Record<string, unknown>) => {
   const websiteIds = [...selectedIds]
   if (!websiteIds.length || bulkUpdating.value) return
@@ -511,6 +531,10 @@ const removeSite = async (site: Website) => {
 }
 watch(() => route.query.site, syncSelectedSite)
 watch(websites, syncSelectedSite)
+watch(() => (view.value === 'stopped' ? stoppedSites.value : visibleSites.value).map(site => site.id).join(','), () => {
+  const visibleIds = new Set((view.value === 'stopped' ? stoppedSites.value : visibleSites.value).map(site => site.id))
+  for (const id of [...selectedIds]) if (!visibleIds.has(id)) selectedIds.delete(id)
+})
 watch(activePortfolio, (value, previous) => {
   sortKey.value = ''; sortDirection.value = 'asc'
   if ((value === 'stopped') !== (previous === 'stopped')) clearSelection()
