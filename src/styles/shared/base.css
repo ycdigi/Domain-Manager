@@ -12,26 +12,26 @@ html.dm-ui .el-input__inner:focus-visible, html.dm-ui .el-textarea__inner:focus-
 html.dm-ui .el-input__wrapper.is-focus, html.dm-ui .el-select__wrapper.is-focused { box-shadow: 0 0 0 2px var(--color-focus) inset; }
 
 /* One button hierarchy for the workbench, nested managers and confirmations. */
-html.dm-ui .el-button { min-height: var(--control-height); padding-inline: var(--space-sm); border-radius: var(--radius-control); font-family: var(--font-body); font-size: var(--text-sm); font-weight: 500; transition: none; }
+html.dm-ui .el-button { min-height: var(--control-height); padding-inline: var(--space-sm); border-radius: var(--radius-control); font-family: var(--font-body); font-size: var(--text-sm); font-weight: var(--weight-medium); transition: none; }
 html.dm-ui .el-button + .el-button { margin-left: 0; }
 html.dm-ui .el-button.is-disabled { opacity: 0.55; cursor: not-allowed; }
 html.dm-ui .el-button--primary { --el-button-text-color: var(--color-accent-ink); --el-button-bg-color: var(--color-accent); --el-button-border-color: var(--color-accent); --el-button-hover-text-color: var(--color-accent-ink); --el-button-hover-bg-color: var(--color-accent-hover); --el-button-hover-border-color: var(--color-accent-hover); --el-button-active-bg-color: var(--color-accent-hover); --el-button-active-border-color: var(--color-accent-hover); --el-button-disabled-text-color: var(--color-accent-ink); --el-button-disabled-bg-color: var(--color-accent); --el-button-disabled-border-color: var(--color-accent); }
 html.dm-ui .el-input__wrapper, html.dm-ui .el-select__wrapper { min-height: var(--control-height); border-radius: var(--radius-control); }
 html.dm-ui .el-textarea__inner { border-radius: var(--radius-control); font-family: var(--font-body); line-height: 1.6; }
 html.dm-ui .el-form-item { margin-bottom: var(--space-md); min-width: 0; }
-html.dm-ui .el-form-item__label { color: var(--color-ink-2); font-size: var(--text-sm); font-weight: 500; }
+html.dm-ui .el-form-item__label { color: var(--color-ink-2); font-size: var(--text-sm); font-weight: var(--weight-medium); }
 html.dm-ui .el-form-item__content { min-width: 0; }
 html.dm-ui .el-form-item__error { position: static; padding-top: var(--space-2xs); line-height: 1.4; }
 html.dm-ui .el-form-item__content > .el-form-item__error { flex-basis: 100%; }
 html.dm-ui .el-select { max-width: 100%; }
-html.dm-ui .el-tabs__item { font-size: var(--text-sm); font-weight: 500; }
+html.dm-ui .el-tabs__item { font-size: var(--text-sm); font-weight: var(--weight-medium); }
 html.dm-ui .el-tabs__nav-wrap::after { height: 1px; background: var(--color-rule); }
 
 /* Teleported overlays share the same frame; their business content stays scoped. */
 html.dm-ui .el-overlay { background-color: var(--color-scrim); }
 html.dm-ui .el-dialog { max-width: calc(100% - 32px); margin: 4svh auto; padding: 0; border: 1px solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-paper); }
 html.dm-ui .el-dialog__header { margin: 0; padding: var(--space-md) 52px var(--space-md) var(--space-lg); border-bottom: 1px solid var(--color-rule); }
-html.dm-ui .el-dialog__title { display: block; color: var(--color-ink); font-size: var(--text-lg); font-weight: 600; line-height: 1.5; overflow-wrap: anywhere; }
+html.dm-ui .el-dialog__title { display: block; color: var(--color-ink); font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.5; overflow-wrap: anywhere; }
 html.dm-ui .el-dialog__headerbtn { top: 4px; right: 4px; width: var(--touch-target); height: var(--touch-target); }
 html.dm-ui .el-dialog__body { max-height: min(70svh, 760px); overflow-y: auto; padding: var(--space-lg); color: var(--color-ink-2); }
 html.dm-ui .el-dialog__footer { padding: var(--space-sm) var(--space-lg); border-top: 1px solid var(--color-rule); }
@@ -53,7 +53,7 @@ html.dm-ui .el-message__content { overflow-wrap: anywhere; line-height: 1.5; }
 /* Table defaults also serve account/income/resource tables inside dialogs. */
 html.dm-ui .el-table { --el-table-border-color: var(--color-rule); --el-table-header-bg-color: var(--color-paper-2); --el-table-header-text-color: var(--color-muted); --el-table-text-color: var(--color-ink); --el-table-row-hover-bg-color: var(--color-paper-3); font-size: var(--text-sm); }
 html.dm-ui .el-table .cell { padding-inline: var(--space-xs); line-height: 1.5; }
-html.dm-ui .el-table th.el-table__cell { padding-block: var(--space-xs); font-size: var(--text-xs); font-weight: 500; }
+html.dm-ui .el-table th.el-table__cell { padding-block: var(--space-xs); font-size: var(--text-xs); font-weight: var(--weight-medium); }
 html.dm-ui .el-table td.el-table__cell { padding-block: 6px; font-variant-numeric: tabular-nums; }
 html.dm-ui .el-dialog .el-table .cell { overflow-wrap: anywhere; }
 
@@ -67,10 +67,10 @@ html.dm-ui .el-dialog .el-table .cell { overflow-wrap: anywhere; }
   html.dm-ui .el-message-box { max-width: calc(100% - 24px); padding: var(--space-md); }
 }
 @media (min-width: 1024px) {
-  html.dm-ui body { font-size: 15px; }
-  html.dm-ui .el-button, html.dm-ui .el-input, html.dm-ui .el-select, html.dm-ui .el-form-item__label { font-size: 14px; }
-  html.dm-ui .el-table { font-size: 14px; }
-  html.dm-ui .el-table th.el-table__cell { font-size: 13px; }
+  html.dm-ui body { font-size: var(--text-body-desktop); }
+  html.dm-ui .el-button, html.dm-ui .el-input, html.dm-ui .el-select, html.dm-ui .el-form-item__label { font-size: var(--text-md); }
+  html.dm-ui .el-table { font-size: var(--text-md); }
+  html.dm-ui .el-table th.el-table__cell { font-size: var(--text-sm); }
 }
 @media (prefers-reduced-motion: reduce) {
   html.dm-ui *, html.dm-ui *::before, html.dm-ui *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition: none !important; scroll-behavior: auto !important; }

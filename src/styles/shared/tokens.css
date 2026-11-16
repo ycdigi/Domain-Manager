@@ -1,5 +1,6 @@
 /* Hallmark · shape: app screen · genre: modern-minimal · theme: project · redesign: full · scope: explicit opt-in · v2.0.0 */
 /* Hallmark · pre-emit critique: use the requested blue primary and preserve semantic status colors; use one surface and density scale across existing workflows. */
+/* Semantic colors: surfaces, text, borders, actions, focus, and status. */
 :root.dm-ui {
   --color-paper: oklch(100% 0 0);
   --color-paper-2: oklch(98% 0.003 250);
@@ -22,6 +23,10 @@
   --color-warning-paper: oklch(97% 0.035 90);
   --color-error: oklch(44% 0.17 26);
   --color-error-paper: oklch(97% 0.015 26);
+  --color-expiring-row: color-mix(in srgb, var(--color-error) 8%, var(--color-paper));
+  --color-expired-row: color-mix(in srgb, var(--color-error) 16%, var(--color-paper));
+  --color-expiring-row-hover: color-mix(in srgb, var(--color-error) 12%, var(--color-accent-paper));
+  --color-expired-row-hover: color-mix(in srgb, var(--color-error) 20%, var(--color-accent-paper));
   --color-clear: transparent;
   --color-scrim: oklch(20% 0.02 255 / 0.24);
   --shadow-overlay: 0 12px 40px oklch(20% 0.02 255 / 0.12);
@@ -30,6 +35,7 @@
   --row-height: 44px;
   --font-body: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   --font-display: var(--font-body);
+  /* Primitive spacing, type, and weight scales. */
   --space-3xs: 2px;
   --space-2xs: 4px;
   --space-xs: 8px;
@@ -42,7 +48,12 @@
   --text-sm: 13px;
   --text-md: 14px;
   --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 20px;
+  --text-body-desktop: 15px;
   --text-title: 24px;
+  --weight-medium: 500;
+  --weight-semibold: 600;
   --radius-control: 6px;
   --radius-panel: 8px;
   --container: 1440px;

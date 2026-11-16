@@ -9,9 +9,16 @@ monitor = dict(website_id=1, website_name='Monitor site', domain='example.test',
     response_ms=120, final_url='https://example.test/', title='Latest title', baseline_title='Old title',
     checked_at='2026-11-12T01:00:00Z', next_check_at='2026-11-12T13:00:00Z', required_text=[], forbidden_text=[],
     allowed_redirect_hosts=[], consecutive_failures=0)
+healthy_monitor = dict(website_id=2, website_name='Healthy site', domain='healthy.example.test', domain_id=2,
+    enabled=True, effective_enabled=True, status='healthy', reason='healthy', http_status=200,
+    response_ms=80, final_url='https://healthy.example.test/', title='Healthy title', baseline_title='Healthy title',
+    checked_at='2026-11-12T01:00:00Z', next_check_at='2026-11-12T13:00:00Z', required_text=[], forbidden_text=[],
+    allowed_redirect_hosts=[], consecutive_failures=0)
 incident = dict(id=1, website_id=1, website_name='Monitor site', domain='example.test', reason='title_changed',
     opened_at='2026-11-12T01:00:00Z', last_seen_at='2026-11-12T01:00:00Z', resolved_at=None, read_at=None)
 site = dict(id=1, name='Monitor site', stage='维护', lifecycle='active', ownership='自营网站', platform='Astro',
+    industry='资讯站', next_action_status='待做', domains=[], adsense_connected='未知', gsc_connected='未知')
+healthy_site = dict(id=2, name='Healthy site', stage='维护', lifecycle='active', ownership='自营网站', platform='Astro',
     industry='资讯站', next_action_status='待做', domains=[], adsense_connected='未知', gsc_connected='未知')
 state = dict(lease=True, fail=False, empty=False, overview_reads=0, sample_complete=False, sample_present=True)
 patches = []
@@ -33,7 +40,7 @@ with sync_playwright() as p:
         if path == 'monitor':
             state['overview_reads'] += 1
             code = 503 if state['fail'] else 200
-            data = dict(monitors=[] if state['empty'] else [monitor], incidents=[] if state['empty'] else [incident],
+            data = dict(monitors=[] if state['empty'] else [healthy_monitor, monitor], incidents=[] if state['empty'] else [incident],
                 runner=dict(last_started_at='2026-11-12T01:00:00Z', last_completed_at='2026-11-12T01:00:00Z', last_error=None),
                 unread_count=0 if incident['read_at'] else 1)
         elif path == 'monitor/incidents/1/read':
@@ -58,16 +65,20 @@ with sync_playwright() as p:
                     title=state.get('sample_title', monitor['title']), content_complete=state['sample_complete']))
             data = dict(monitor=monitor, history=history, incidents=[incident])
         elif path == 'websites':
-            data = [site]
+            data = [site, healthy_site]
         route.fulfill(status=code, json=dict(status=code, message='模拟服务失败' if code != 200 else '成功', data=data))
     page.route('**/api/**', handle)
     page.goto(os.environ.get('MONITOR_UI_URL', 'http://127.0.0.1:5174') + '/monitor')
     expect(page.get_by_role('heading', name='网站监控', exact=True)).to_be_visible()
+    rows = page.locator('.monitor-table tbody tr')
+    expect(rows).to_have_count(2)
+    expect(rows.nth(0)).to_contain_text('Monitor site')
+    expect(rows.nth(1)).to_contain_text('Healthy site')
     expect(page.get_by_text('超过 10 分钟未完成巡检')).to_be_visible()
     row = page.locator('[data-monitor-site="1"]')
     expect(page.locator('.monitor-table thead th').nth(1)).to_have_text('页面标题')
     expect(row.locator('td').nth(1)).to_have_text('Latest title')
-    expect(page.get_by_text('HTTP响应、跳转与页面标题', exact=True)).to_be_visible()
+    expect(page.get_by_text('异常优先，定时检查可访问性', exact=True)).to_be_visible()
     expect(row).to_contain_text('旧检查/待重新检查')
     expect(row).not_to_contain_text('旧版内容检查')
     expect(row).not_to_contain_text('内容检查未完成')
@@ -97,7 +108,7 @@ with sync_playwright() as p:
     expect(panel).to_contain_text('2026/11/12 09:00:00')
     expect(panel).to_contain_text('访问受限（HTTP 429）')
     expect(panel).to_contain_text('previous.example.test')
-    expect(panel).to_contain_text('响应正常仅表示 HTTP 可访问')
+    expect(panel).to_contain_text('HTTP 正常不等于网站安全')
     expect(panel).to_contain_text('旧版内容检查')
     expect(panel).not_to_contain_text('内容检查未完成')
     for label in ['必须包含的文本', '禁止包含的文本']:

@@ -6,7 +6,7 @@
       <div class="monitor-actions"><el-tag :type="monitorTone(detail.monitor.status)">{{ monitorLabels[detail.monitor.status] }}</el-tag><span v-if="monitorCurrentReason(detail.monitor)">{{ monitorCurrentReason(detail.monitor) }}</span><el-button :loading="busy" :disabled="loading" @click="runCheck">立即检查</el-button></div>
       <p v-if="!detail.monitor.effective_enabled" class="page-muted">当前未参与自动巡检，请检查监控开关、网站阶段和主域名。</p>
       <dl class="monitor-facts"><dt>最近检查（上海时间）</dt><dd>{{ monitorTime(detail.monitor.checked_at) }}</dd><template v-if="detail.monitor.effective_enabled"><dt>下次检查（上海时间）</dt><dd>{{ monitorNextCheck(detail.monitor) }}</dd></template><dt>HTTP / 响应时间</dt><dd>{{ detail.monitor.http_status ?? '—' }} / {{ detail.monitor.response_ms ?? '—' }} ms</dd><dt>最新页面标题</dt><dd>{{ detail.monitor.title || '未获取到标题' }}</dd><dt>最终地址</dt><dd>{{ detail.monitor.final_url || '—' }}</dd></dl>
-      <p class="page-muted">页面标题可辅助识别停放或到期页面；响应正常仅表示 HTTP 可访问，不代表网站安全。</p>
+      <p class="page-muted">标题用于辅助识别停放页；HTTP 正常不等于网站安全。</p>
       <el-form label-position="top" class="monitor-config" @submit.prevent="save">
         <el-form-item label="自动监控"><el-switch v-model="form.enabled" aria-label="自动监控" :disabled="busy" /></el-form-item>
         <el-form-item label="允许跳转的主机名（每行一项）"><el-input v-model="form.hosts" type="textarea" :rows="2" aria-label="允许跳转的主机名" :disabled="busy" placeholder="example.com" /></el-form-item>

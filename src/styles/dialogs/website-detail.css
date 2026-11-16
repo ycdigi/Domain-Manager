@@ -1,6 +1,6 @@
 .website-detail-drawer .portfolio-detail-section { padding:var(--space-sm) 0 var(--space-md); border-bottom:1px solid var(--color-rule); }
 .website-detail-drawer .portfolio-detail-heading { display:flex; align-items:center; justify-content:space-between; gap:var(--space-sm); margin-bottom:var(--space-sm); }
-.website-detail-drawer .portfolio-detail-heading h2 { margin:0; font-size:var(--text-lg); font-weight:600; }
+.website-detail-drawer .portfolio-detail-heading h2 { margin:0; font-size:var(--text-lg); font-weight:var(--weight-semibold); }
 .website-detail-drawer .portfolio-detail-heading > span { color:var(--color-muted); font-size:var(--text-xs); }
 .website-detail-drawer .portfolio-detail-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:0 var(--space-md); }
 .website-detail-drawer .portfolio-detail-full { grid-column:1/-1; }

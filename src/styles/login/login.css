@@ -5,12 +5,12 @@
 .login-workspace { flex: 1; display: grid; place-items: center; padding-block: var(--space-2xl); }
 .login-panel { width: 100%; max-width: 400px; padding: var(--space-lg); border: 1px solid var(--color-rule); border-radius: var(--radius-panel); background: var(--color-paper); }
 .login-heading { margin-bottom: var(--space-lg); }
-.login-heading h1 { margin: 0; color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-title); font-weight: 600; line-height: 1.35; min-width: 0; overflow-wrap: break-word; text-wrap: balance; }
+.login-heading h1 { margin: 0; color: var(--color-ink); font-family: var(--font-display); font-size: var(--text-title); font-weight: var(--weight-semibold); line-height: 1.35; min-width: 0; overflow-wrap: break-word; text-wrap: balance; }
 .login-heading p { margin: var(--space-xs) 0 0; color: var(--color-muted); font-size: var(--text-md); }
 :deep(.el-form-item) { margin-bottom: var(--space-lg); }
-:deep(.el-form-item__label) { color: var(--color-ink); font-weight: 500; }
+:deep(.el-form-item__label) { color: var(--color-ink); font-weight: var(--weight-medium); }
 :deep(.el-input) { width: 100%; }
 .login-submit { width: 100%; }
 .login-error { padding: var(--space-sm); margin: 0 0 var(--space-md); border: 1px solid var(--color-error); border-radius: var(--radius-control); background: var(--color-error-paper); color: var(--color-error); font-size: var(--text-sm); overflow-wrap: anywhere; }
-@media (max-width: 760px) { .login-heading h1 { font-size: 20px; } .login-workspace { padding-block: var(--space-lg); } }
+@media (max-width: 760px) { .login-heading h1 { font-size: var(--text-2xl); } .login-workspace { padding-block: var(--space-lg); } }
 @media (max-width: 600px) { .login-panel { padding: var(--space-md); } }
