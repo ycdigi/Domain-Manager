@@ -51,6 +51,7 @@ with sync_playwright() as p:
     expect(page.get_by_role('heading', name='November sites', exact=True)).to_be_visible()
     expect(page.get_by_text('Astro batch site', exact=True)).to_be_visible()
     expect(page.get_by_text('页面 12', exact=False)).to_be_visible()
+    expect(page.get_by_text('可混合不同技术栈和经营场景；网站仍保留自己的阶段与场景。', exact=True)).not_to_be_visible()
     expect(page.get_by_role('button', name='批次编辑', exact=True)).to_be_visible()
     expect(page.locator('thead th').filter(has_text='网站 / 主域名')).to_be_visible()
     expect(page.locator('thead th').filter(has_text='内容规模')).to_be_visible()
