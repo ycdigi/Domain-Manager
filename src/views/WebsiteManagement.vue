@@ -7,10 +7,11 @@
     <div v-if="notice" class="management-notice" role="status"><span>{{ notice.domain }} · {{ notice.record.kind }}已记录</span><el-button text :loading="undoing" @click="undoLast">撤销本次</el-button><el-button text aria-label="关闭记录提示" @click="notice=undefined">关闭</el-button></div>
     <div class="management-filters">
       <el-input :model-value="query('q')" clearable placeholder="搜索网站或域名" aria-label="搜索网站或域名" @update:model-value="value=>filter('q',value)" />
-      <el-select :model-value="query('view')" aria-label="网站状态筛选" @change="value=>filter('view',value)"><el-option label="经营中" value="" /><el-option label="停止经营" value="stopped" /><el-option label="全部网站" value="all" /></el-select>
-      <el-select v-for="(kind,index) in workKinds" :key="kind" :model-value="query('work'+index)" :aria-label="`${kind}筛选`" @change="value=>filter('work'+index,value)"><el-option :label="kind+' · 全部'" value="" /><el-option :label="kind+' · 否'" value="no" /><el-option :label="kind+' · 是'" value="yes" /></el-select>
-      <el-select :model-value="query('gsc')" aria-label="GSC 账号筛选" @change="value=>filter('gsc',String(value))"><el-option label="全部 GSC 账号" value="" /><el-option label="未关联" value="none" /><el-option v-for="account in accounts" :key="account.id" :label="account.name" :value="String(account.id)" /></el-select>
-      <el-select :model-value="query('sort')" aria-label="记录排序" @change="value=>filter('sort',value)"><el-option label="默认顺序" value="" /><el-option label="最近登记优先" value="recent" /><el-option label="最久未登记优先" value="oldest" /></el-select>
+      <el-select :model-value="query('view')" clearable placeholder="全部网站" aria-label="网站状态筛选" @change="value=>filter('view',value)"><el-option label="全部网站" value="all" /><el-option label="经营中" value="active" /><el-option label="停止经营" value="stopped" /></el-select>
+      <el-select :model-value="query('batch')" clearable filterable placeholder="全部批次" aria-label="网站批次筛选" @change="value=>filter('batch',value)"><el-option label="全部批次" value="" /><el-option v-for="batch in batches" :key="batch.id" :label="batch.name" :value="String(batch.id)" /></el-select>
+      <el-select v-for="(kind,index) in workKinds" :key="kind" :model-value="query('work'+index)" clearable :placeholder="kind+' · 全部'" :aria-label="`${kind}筛选`" @change="value=>filter('work'+index,value)"><el-option :label="kind+' · 全部'" value="" /><el-option :label="kind+' · 否'" value="no" /><el-option :label="kind+' · 是'" value="yes" /></el-select>
+      <el-select :model-value="query('gsc')" clearable placeholder="全部 GSC 账号" aria-label="GSC 账号筛选" @change="value=>filter('gsc',value)"><el-option label="全部 GSC 账号" value="" /><el-option label="未关联" value="none" /><el-option v-for="account in accounts" :key="account.id" :label="account.name" :value="String(account.id)" /></el-select>
+      <el-select :model-value="query('sort')" clearable placeholder="默认顺序" aria-label="记录排序" @change="value=>filter('sort',value)"><el-option label="默认顺序" value="" /><el-option label="最近登记优先" value="recent" /><el-option label="最久未登记优先" value="oldest" /></el-select>
     </div>
     <div class="management-results"><span role="status">{{ visibleRows.length }} / {{ rows.length }} 个网站</span><el-button v-if="hasFilters" text @click="clearFilters">清除全部条件</el-button><span class="page-muted">点击胶囊登记一次；数字可查看历史。</span></div>
     <div class="management-table-wrap" role="region" aria-label="网站工作记录，可横向滚动" tabindex="0" :aria-busy="loading">
@@ -41,8 +42,10 @@ import GscAccountsDialog from '../components/GscAccountsDialog.vue'
 import { workKinds, type WorkKind } from '../../shared/website-management'
 import { getManagement,getGscAccounts,recordWork,undoWork,assignGsc,workTime,type ManagementRow,type GscAccount,type WorkRecord,type RecordResult } from '../api/website-management'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
+import { getBatches, type Batch } from '../api/batches'
 import '../styles/website-management.css'
 const route=useRoute(),router=useRouter(),rows=ref<ManagementRow[]>([]),accounts=ref<GscAccount[]>([])
+const batches=ref<Batch[]>([])
 const loading=ref(false),error=ref(''),busy=reactive(new Set<string>()),requests=new Map<string,string>()
 const openedGsc=ref<number>()
 const accountsVisible=ref(false),historyVisible=ref(false),historyBusy=ref(false),historyRevision=ref(0),undoing=ref(false)
@@ -50,18 +53,18 @@ const history=ref<{row:ManagementRow;kind:WorkKind}>(),notice=ref<{row:Managemen
 useUnsavedChanges(computed(()=>false),{blocked:computed(()=>busy.size>0 || historyBusy.value || undoing.value)})
 const query=(name:string)=>typeof route.query[name]==='string'?String(route.query[name]):''
 const filter=(name:string,value:string)=>{const next={...route.query};if(value)next[name]=value;else delete next[name];void router.replace({query:next})}
-const hasFilters=computed(()=>['q','view','gsc','sort',...workKinds.map((_,i)=>'work'+i)].some(name=>query(name)))
+const hasFilters=computed(()=>['q','view','batch','gsc','sort',...workKinds.map((_,i)=>'work'+i)].some(name=>query(name)))
 const clearFilters=()=>{void router.replace({query:{}})}
 const latest=(row:ManagementRow)=>Math.max(0,...workKinds.map(kind=>Date.parse(row.stats[kind].last_at || '') || 0))
 const visibleRows=computed(()=>{
- const search=query('q').trim().toLowerCase(),gsc=query('gsc')
- const filtered=rows.value.filter(row=>(query('view')==='all' || row.lifecycle===(query('view')==='stopped'?'stopped':'active')) && `${row.name} ${row.domain || ''}`.toLowerCase().includes(search) && (!gsc || (gsc==='none'?!row.gsc_account:String(row.gsc_account?.id)===gsc)) && workKinds.every((kind,index)=>!query('work'+index) || (row.stats[kind].count>0)===(query('work'+index)==='yes')))
+ const search=query('q').trim().toLowerCase(),gsc=query('gsc'),batch=query('batch'),view=query('view')
+ const filtered=rows.value.filter(row=>(!view || view==='all' || row.lifecycle===view) && (!batch || row.batch_ids.includes(Number(batch))) && `${row.name} ${row.domain || ''}`.toLowerCase().includes(search) && (!gsc || (gsc==='none'?!row.gsc_account:String(row.gsc_account?.id)===gsc)) && workKinds.every((kind,index)=>!query('work'+index) || (row.stats[kind].count>0)===(query('work'+index)==='yes')))
  if(['recent','oldest'].includes(query('sort')))filtered.sort((a,b)=>(latest(a)-latest(b))*(query('sort')==='recent'?-1:1)||a.id-b.id)
  return filtered
 })
 const key=(row:ManagementRow,kind:WorkKind)=>row.id+':'+kind
 const tooltip=(row:ManagementRow,kind:WorkKind)=>row.stats[kind].count?`${kind} · 共 ${row.stats[kind].count} 次；最近：${workTime(row.stats[kind].last_at)}（上海时间）；点击查看全部记录`:`${kind}：尚无记录；点击查看历史`
-const load=async(force=false)=>{if(busy.size || historyBusy.value || undoing.value)return;loading.value=true;error.value='';try{[rows.value,accounts.value]=await Promise.all([getManagement(force),getGscAccounts(force)])}catch(e){error.value=e instanceof Error?e.message:'网站管理读取失败'}finally{loading.value=false}}
+const load=async(force=false)=>{if(busy.size || historyBusy.value || undoing.value)return;loading.value=true;error.value='';try{[rows.value,accounts.value,batches.value]=await Promise.all([getManagement(force),getGscAccounts(force),getBatches(force)])}catch(e){error.value=e instanceof Error?e.message:'网站管理读取失败'}finally{loading.value=false}}
 const openAccounts=async()=>{try{accounts.value=await getGscAccounts(true);accountsVisible.value=true}catch(e){ElMessage.error(e instanceof Error?e.message:'账号读取失败')}}
 const changed=(row:ManagementRow,result:RecordResult)=>{const current=rows.value.find(item=>item.id===row.id);if(current)current.stats[result.record.kind]=result.stats[result.record.kind];if(notice.value?.record.id===result.record.id && result.record.voided_at)notice.value=undefined}
 const record=async(row:ManagementRow,kind:WorkKind)=>{

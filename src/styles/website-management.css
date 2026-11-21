@@ -1,6 +1,6 @@
  .management-filters { display:flex; flex-wrap:wrap; gap:var(--space-xs); margin-bottom:var(--space-xs); }
 .management-filters > .el-input { width:240px; }
-.management-filters > .el-select { width:150px; }
+.management-filters > .el-select { width:170px; }
 .management-results, .management-notice { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-sm); margin-bottom:var(--space-xs); }
 .management-notice { padding:var(--space-xs) var(--space-sm); border:1px solid var(--color-accent); border-radius:var(--radius-control); background:var(--color-accent-paper); }
 .management-table-wrap { width:100%; overflow-x:auto; border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); }

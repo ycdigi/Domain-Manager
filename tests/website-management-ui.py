@@ -2,7 +2,7 @@
 import base64,json,re
 from playwright.sync_api import sync_playwright,expect
 kinds=['TDK调整','计算器开发','文章开发','样式调整']
-rows=[dict(id=1,name='Example',domain='example.test',lifecycle='active',gsc_account=None,stats={k:dict(count=0,last_at=None) for k in kinds}),dict(id=2,name='Other',domain='other.test',lifecycle='active',gsc_account=None,stats={k:dict(count=0,last_at=None) for k in kinds})]
+rows=[dict(id=1,name='Example',domain='example.test',lifecycle='active',batch_ids=[7,8],gsc_account=None,stats={k:dict(count=0,last_at=None) for k in kinds}),dict(id=2,name='Other',domain='other.test',lifecycle='stopped',batch_ids=[],gsc_account=None,stats={k:dict(count=0,last_at=None) for k in kinds})]
 records=[];accounts=[];attempts=[];state=dict(fail=False,read_fail=False)
 def stats():
  for row in rows:
@@ -16,6 +16,7 @@ with sync_playwright() as p:
  def handle(route):
   path=route.request.url.split('?')[0].split('/api/')[-1];method=route.request.method;data=[];code=200;message='成功'
   if path=='website-management':data=rows;code=503 if state['read_fail'] else 200;message='模拟读取失败'
+  elif path=='batches':data=[dict(id=7,name='第一批',status='进行中'),dict(id=8,name='历史批次',status='已归档')]
   elif path=='gsc/accounts':
    if method=='POST':
     body=route.request.post_data_json;data=dict(id=len(accounts)+1,**body,created_at='2026-11-21T00:00:00.000Z',linked_websites=0);accounts.append(data)
@@ -47,6 +48,34 @@ with sync_playwright() as p:
  page.goto('http://127.0.0.1:5173/website-management');page.wait_for_load_state('networkidle')
  expect(page.get_by_role('heading',name='网站管理',exact=True)).to_be_visible()
  expect(page.locator('.management-table tbody tr')).to_have_count(2)
+ # Filters start unrestricted, with Chinese prompts, and persist explicit choices.
+ filters=page.locator('.management-filters')
+ expect(filters).not_to_contain_text('Select')
+ for prompt in ['全部网站','全部批次','全部 GSC 账号','默认顺序']+[k+' · 全部' for k in kinds]:
+  expect(filters.get_by_text(prompt,exact=True)).to_be_visible()
+ assert filters.locator('.el-select__selected-item.is-transparent').evaluate_all('items=>items.every(e=>e.scrollWidth<=e.clientWidth+1)')
+ def choose_filter(name,label):
+  filters.locator('.el-select').filter(has=page.get_by_role('combobox',name=name,exact=True)).locator('.el-select__wrapper').click()
+  page.get_by_role('option',name=label,exact=True).click()
+ choose_filter('网站批次筛选','第一批')
+ expect(page.locator('.management-table tbody tr')).to_have_count(1);expect(page).to_have_url(re.compile('batch=7'))
+ page.reload();page.wait_for_load_state('networkidle');expect(page.locator('.management-table tbody tr')).to_have_count(1)
+ expect(filters.get_by_text('第一批',exact=True)).to_be_visible()
+ choose_filter('网站状态筛选','停止经营')
+ expect(page.locator('.management-table tbody tr')).to_have_count(0)
+ page.get_by_role('button',name='清除全部条件',exact=True).click();expect(page.locator('.management-table tbody tr')).to_have_count(2)
+ choose_filter('网站批次筛选','历史批次');expect(page.locator('.management-table tbody tr')).to_have_count(1)
+ filters.locator('.el-select').nth(1).hover()
+ filters.locator('.el-select').nth(1).locator('.el-select__clear').click()
+ expect(page.locator('.management-table tbody tr')).to_have_count(2);expect(page).not_to_have_url(re.compile('batch='))
+ for name in ['TDK调整筛选','GSC 账号筛选']:
+  choose_filter(name,'TDK调整 · 否' if name.startswith('TDK') else '未关联')
+ choose_filter('记录排序','最近登记优先')
+ expect(page.locator('.management-table tbody tr')).to_have_count(2)
+ gsc_filter=filters.locator('.el-select').filter(has=page.get_by_role('combobox',name='GSC 账号筛选',exact=True))
+ gsc_filter.hover();gsc_filter.locator('.el-select__clear').click()
+ expect(page).not_to_have_url(re.compile('gsc='));expect(filters.get_by_text('全部 GSC 账号',exact=True)).to_be_visible()
+ page.get_by_role('button',name='清除全部条件',exact=True).click()
  # Wide screens keep the domain column compact and each row on a single line.
  page.set_viewport_size(dict(width=2560,height=1000))
  first=page.locator('.management-table tbody tr').first

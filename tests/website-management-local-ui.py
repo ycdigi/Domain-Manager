@@ -31,7 +31,7 @@ def call(path, body=None, method='GET', status=200):
 
 session = call('/api/login', {'username': 'preview', 'password': 'preview-local-only'}, 'POST')['token']
 stamp = str(time.time_ns())
-site_id = account_id = None
+site_id = account_id = batch_id = None
 errors = []
 try:
     created = call('/api/websites', {'name': '管理验收 ' + stamp, 'domain': {
@@ -43,6 +43,10 @@ try:
     call(prefix + '/operations', {'operation_date': '2026-11-21', 'operation_kind': 'SEO'}, 'POST', 201)
     account = call('/api/gsc/accounts', {'name': '验收 GSC ' + stamp, 'email': stamp + '@example.test'}, 'POST', 201)
     account_id = account['id']
+    batch = call('/api/batches', {'name': '验收批次 ' + stamp}, 'POST', 201)
+    batch_id = batch['id']
+    members_path = '/api/batches/' + str(batch_id) + '/members'
+    call(members_path, {'website_ids': [site_id]}, 'POST')
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={'width': 1440, 'height': 1000}, accept_downloads=True)
@@ -53,6 +57,17 @@ try:
         page.wait_for_load_state('networkidle')
         row = page.locator('.management-table tbody tr')
         expect(row).to_have_count(1)
+        filters = page.locator('.management-filters')
+        expect(filters).not_to_contain_text('Select')
+        filters.locator('.el-select').filter(has=page.get_by_role('combobox', name='网站批次筛选', exact=True)).locator('.el-select__wrapper').click()
+        page.get_by_role('option', name=batch['name'], exact=True).click()
+        expect(row).to_have_count(1)
+        page.reload(); page.wait_for_load_state('networkidle')
+        expect(filters.get_by_text(batch['name'], exact=True)).to_be_visible()
+        call(members_path, {'website_ids': [site_id]}, 'DELETE')
+        page.get_by_role('button', name='刷新', exact=True).click(); expect(row).to_have_count(0)
+        call(members_path, {'website_ids': [site_id]}, 'POST')
+        page.get_by_role('button', name='刷新', exact=True).click(); expect(row).to_have_count(1)
         count = row.get_by_role('button', name='查看TDK调整记录：' + domain, exact=True)
         button = row.get_by_role('button', name='登记TDK调整：' + domain, exact=True)
         expect(count).to_have_text('0')
@@ -130,6 +145,8 @@ try:
 finally:
     if site_id is not None:
         call('/api/websites/' + str(site_id), method='DELETE')
+    if batch_id is not None:
+        call('/api/batches/' + str(batch_id), method='DELETE')
     if account_id is not None:
         call('/api/gsc/accounts/' + str(account_id), method='DELETE')
 
