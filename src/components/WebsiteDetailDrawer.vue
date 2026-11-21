@@ -73,6 +73,7 @@
         </div>
         <p v-else class="portfolio-empty">还没有任务。</p>
       </section><section class="portfolio-detail-section">
+        <div class="portfolio-detail-heading"><h2>工作登记</h2><router-link :to="{name:'WebsiteManagement',query:{q:website.name}}">查看网站管理</router-link></div><WebsiteWorkHistory v-if="visible && activeSection==='work'" :key="website.id" :website-id="website.id" @busy="workHistoryBusy=$event" @changed="notifyChanged" /></section><section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>操作记录</h2><span>{{ operations.length }} 条</span></div>
         <form class="portfolio-operation-form" @submit.prevent="addOperation"><el-date-picker v-model="operationForm.operation_date" type="date" value-format="YYYY-MM-DD" aria-label="操作日期" /><el-select v-model="operationForm.operation_kind" aria-label="操作类型"><el-option v-for="kind in taskTypes" :key="kind" :label="kind" :value="kind" /></el-select><el-button type="primary" :loading="savingOperation" native-type="submit">记录操作</el-button></form>
         <div v-for="operation in operations" :key="operation.id" class="portfolio-detail-row"><span>{{ operation.operation_date }} · {{ operation.operation_kind }}</span><el-button text type="danger" :aria-label="`删除 ${operation.operation_date} ${operation.operation_kind} 操作`" @click="removeOperation(operation)"><Delete /></el-button></div>
@@ -139,6 +140,7 @@ import { ElMessage } from 'element-plus'
 import DomainFavicon from './DomainFavicon.vue'
 import WebsiteDeployment from './WebsiteDeployment.vue'
 import { sortComputerNames } from '../utils/computer-options'
+import WebsiteWorkHistory from './WebsiteWorkHistory.vue'
 import WebsiteMonitorPanel from './WebsiteMonitorPanel.vue'
 import { Delete } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
@@ -203,6 +205,7 @@ let profileOriginal: typeof profile | undefined
 let profileWebsiteId: number | undefined
 let loadVersion = 0
 const profileDirty = computed(() => Boolean(props.visible && profileBaseline.value && JSON.stringify(profile) !== profileBaseline.value))
+const workHistoryBusy=ref(false)
 const monitorPanel = ref<InstanceType<typeof WebsiteMonitorPanel>>()
 const deploymentPanel = ref<InstanceType<typeof WebsiteDeployment>>()
 const draftSnapshots = () => ({ domain: JSON.stringify(domainForm), task: JSON.stringify({ taskForm, baselineRange: baselineRange.value, baselineClicks: baselineClicks.value }), income: JSON.stringify(incomeForm), effort: JSON.stringify(effortForm), operation: JSON.stringify(operationForm) })
@@ -212,7 +215,7 @@ const taskEditDirty = computed(() => taskDialogVisible.value && JSON.stringify(t
 const noteDirty = computed(() => noteDialogVisible.value && JSON.stringify(noteForm) !== noteBaseline.value)
 const discardAccepted = ref(false)
 const dirty = computed(() => Boolean(props.visible && !discardAccepted.value && (profileDirty.value || (Object.entries(draftSnapshots()).some(([key, value]) => draftsBaseline.value[key] !== value)) || taskEditDirty.value || noteDirty.value || monitorPanel.value?.dirty || deploymentPanel.value?.dirty)))
-const savingAny = computed(() => Boolean(saving.value || savingDomain.value || savingTask.value || savingIncome.value || savingEffort.value || savingOperation.value || savingNote.value || monitorPanel.value?.busy || deploymentPanel.value?.busy))
+const savingAny = computed(() => Boolean(workHistoryBusy.value || saving.value || savingDomain.value || savingTask.value || savingIncome.value || savingEffort.value || savingOperation.value || savingNote.value || monitorPanel.value?.busy || deploymentPanel.value?.busy))
 useUnsavedChanges(dirty, { blocked: savingAny, leaving: (to, from) => to.path !== from.path || to.query.site !== from.query.site })
 const beforeClose = async (done: () => void) => {
   if (savingAny.value) { ElMessage.warning('正在保存，请稍候'); return }

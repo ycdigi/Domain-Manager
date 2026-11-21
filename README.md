@@ -39,3 +39,7 @@ Pages 项目为 domain-manager，构建 npm run build，产物 dist。D1 绑定�
 GET /api/backups 导出 format_version=1 的网站管理数据；POST /api/backups 导入，同一路径 dry_run=1 只预校验。数据管理页提供 JSON 备份与多表 Excel。普通备份不含完整 Token、加密凭据、图标缓存、监控租约和巡检器运行状态。完整数据库备份另行保护保存。
 
 旧数组备份和旧字段不再被运行接口接受；升级前完成一次转换与核验。历史 SQL、测试夹具、ADR 和 docs/archive 保留历史证据。
+
+“网站管理”记录四类工作次数、最近时间和 GSC 账号归属，每次登记可查看历史和撤销；原按日操作记录保留。JSON 与 Excel 包含工作记录及账号关联。规格、迁移和验收边界见 [网站管理](docs/specs/website-management.md)。
+
+网站管理使用增量迁移 v1.27.0。上线前核对 `new_site_override`；仅缺失时补执行 v1.16.0。完整备份及副本演练要求见上述规格。

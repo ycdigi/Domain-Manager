@@ -1,6 +1,6 @@
-# 数据库结构（当前 v1.26.0）
+# 数据库结构（当前 v1.27.0）
 
-24 张业务表；界面表格复用这些数据，不为每个视图新建数据库表。monitor_runner 独立记录巡检器状态。
+27 张表（含巡检器状态表 monitor_runner）；界面表格复用这些数据，不为每个视图新建数据库表。
 
 ```mermaid
 erDiagram
@@ -15,6 +15,9 @@ erDiagram
     websites ||--o{ website_tasks : tracks
     website_tasks ||--o{ website_click_snapshots : measures
     websites ||--o{ website_operations : records
+    websites ||--o{ website_work_records : registers
+    websites ||--o| website_gsc_accounts : associates
+    gsc_accounts ||--o{ website_gsc_accounts : manages
     websites ||--o{ website_ai_notes : records
     website_ai_notes ||--o{ website_ai_note_versions : versions
     websites ||--o{ website_income : earns
@@ -32,6 +35,16 @@ erDiagram
 网站数量仅为 page_count、calculator_count、article_count；computer_name 仅归网站。website_accounts 表达账号归属，website_resources 只关联真实资源，并按用途分别指定主要资源。默认凭据在账号内唯一。AdSense 账号收入使用 amount_usd、amount_cny；网站收入使用独立来源及币种，不跨币种换算。
 
 ## 完整字段字典
+
+### 网站管理新增表
+
+| 表 | 字段与约束 |
+|---|---|
+| `website_work_records` | `id` 主键、`website_id` 网站外键、`kind` 四类工作、`request_id` 请求编号、`created_at` UTC 登记时间、`voided_at` 可空撤销时间；网站与请求编号联合唯一 |
+| `gsc_accounts` | `id` 主键、`name` 必填且不区分大小写唯一、`email` 默认为空且非空邮箱唯一、`created_at` UTC 创建时间 |
+| `website_gsc_accounts` | `website_id` 网站外键及主键、`account_id` 账号外键；删除网站级联删除关联，已关联账号禁止直接删除 |
+
+迁移、历史保留和恢复规则见 [网站管理规格](specs/website-management.md)。
 
 ### `adsense_accounts`
 

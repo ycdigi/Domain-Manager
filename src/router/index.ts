@@ -24,6 +24,7 @@ const router = createRouter({
             meta: { requiresAuth: true },
             children: [
                 { path: 'finance', name: 'Finance', component: () => import('../views/Finance.vue') },
+                { path: 'website-management', name: 'WebsiteManagement', component: () => import('../views/WebsiteManagement.vue') },
                 { path: 'home', name: 'Home', component: () => import('../views/Home.vue') },
                 { path: 'work', name: 'WorkQueue', component: () => import('../views/WorkQueue.vue') },
                 { path: 'batches', name: 'Batches', component: () => import('../views/Batches.vue') },

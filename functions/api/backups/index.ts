@@ -5,6 +5,7 @@ import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 import { validateWebsiteFields } from '../../domain/website-validation'
 import { validateMonitorPatch } from '../../domain/monitor'
+import { validateManagementBackup } from '../../domain/website-management'
 import { validateBatchFields } from '../../domain/batches'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
@@ -112,6 +113,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (item.domain_role !== undefined && (item.domain_role === '主域名') !== (item.is_primary === 1)) errors.push({ domain: key, error: '域名用途与主域名标记不一致' })
         }
         errors.push(...validateMonitoring(input, websites, domains))
+        errors.push(...validateManagementBackup(input, new Set(websites.map(site => site.id))))
         for (const table of ['website_income', 'website_effort', 'website_tasks', 'website_operations', 'website_ai_notes', 'website_resources', 'website_accounts']) {
             if (input[table] === undefined) continue
             if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
@@ -134,7 +136,8 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         for (const site of websites) {
             const name = String(site.name || '未知网站')
             if (typeof site.name !== 'string' || !site.name.trim()) errors.push({ domain: name, error: '网站名称必填' })
-            const validation = validateWebsiteFields(site)
+            // Restore historical values exactly, including dates that were never recorded.
+            const validation = validateWebsiteFields(site, {}, { snapshot: true })
             if (validation) errors.push({ domain: name, error: validation })
             if (!domains.some(domain => Number(domain.website_id) === Number(site.id))) errors.push({ domain: name, error: '网站至少需要一个关联域名' })
             if (domains.filter(domain => domain.website_id === site.id && domain.is_primary === 1).length !== 1) errors.push({ domain: name, error: '每个网站必须恰有一个主域名' })
@@ -164,6 +167,15 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         for (const link of input.website_resources || []) {
             const resource = (input.provider_resources || []).find((row: Row) => row.id === link.resource_id)
             if (!resource || !resourceSupportsRole(resource.provider, link.role)) errors.push({ domain:'website_resources', error:'资源类型与用途不匹配' })
+        }
+        const gscTargets = new Map<number,number>()
+        const matchedGscIds = new Set<number>()
+        for (const row of Array.isArray(input.gsc_accounts) ? input.gsc_accounts : []) {
+            if (typeof row.name !== 'string' || typeof row.email !== 'string') continue
+            const name = row.name.trim(), email = row.email.trim().toLowerCase()
+            const matches = (await context.env.DB.prepare("SELECT id FROM gsc_accounts WHERE name=? COLLATE NOCASE OR (?<>'' AND lower(email)=?)").bind(name,email,email).all<{id:number}>()).results || []
+            if (matches.length > 1 || matches.length === 1 && matchedGscIds.has(matches[0].id)) errors.push({ domain:'gsc_accounts',error:'账号名称与邮箱指向冲突的现有账号，请先核对账号资料' })
+            else if (matches.length === 1) { gscTargets.set(row.id,matches[0].id); matchedGscIds.add(matches[0].id) }
         }
         if (errors.length) return json({ total: domains.length, created: 0, updated: 0, success: 0, failed: errors.length, errors }, 400, '预校验失败，未写入数据')
         let created = 0
@@ -339,6 +351,26 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         for (const link of input.website_accounts || []) {
             const websiteId = siteMap.get(Number(link.website_id)); const accountId = resourceMap.get(-Number(link.account_id))
             if (websiteId && accountId) write(db.prepare('INSERT INTO website_accounts(website_id,account_id,memo,created_at) VALUES (?,?,?,COALESCE(?,CURRENT_TIMESTAMP)) ON CONFLICT(website_id,account_id) DO UPDATE SET memo=excluded.memo,created_at=excluded.created_at').bind(websiteId,accountId,link.memo || '',link.created_at || null))
+        }
+        const gscMap = new Map<number,number>()
+        for (const row of input.gsc_accounts || []) {
+            const name = row.name.trim(), email = row.email.trim().toLowerCase()
+            const existingId = gscTargets.get(row.id)
+            const id = existingId || await allocateId('gsc_accounts')
+            write(existingId ? db.prepare('UPDATE gsc_accounts SET name=?,email=?,created_at=COALESCE(?,created_at) WHERE id=?').bind(name,email,row.created_at || null,id)
+                : db.prepare(`INSERT INTO gsc_accounts(id,name,email,created_at) VALUES(?,?,?,COALESCE(?,strftime('%Y-%m-%dT%H:%M:%fZ','now')))`).bind(id,name,email,row.created_at || null))
+            gscMap.set(row.id,id)
+        }
+        if (input.website_gsc_accounts !== undefined) {
+            write(db.prepare('DELETE FROM website_gsc_accounts WHERE website_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify([...siteMap.values()])))
+            for (const row of input.website_gsc_accounts) write(db.prepare('INSERT INTO website_gsc_accounts(website_id,account_id) VALUES(?,?)').bind(siteMap.get(row.website_id)!,gscMap.get(row.account_id)!))
+        }
+        if (input.website_work_records !== undefined) {
+            write(db.prepare('DELETE FROM website_work_records WHERE website_id IN (SELECT value FROM json_each(?))').bind(JSON.stringify([...siteMap.values()])))
+            for (let offset=0; offset<input.website_work_records.length; offset+=500) {
+                const rows = input.website_work_records.slice(offset,offset+500).map((row:Row) => [siteMap.get(row.website_id)!,row.kind,row.request_id,row.created_at,row.voided_at ?? null])
+                write(db.prepare(`INSERT INTO website_work_records(website_id,kind,request_id,created_at,voided_at) SELECT json_extract(value,'$[0]'),json_extract(value,'$[1]'),json_extract(value,'$[2]'),json_extract(value,'$[3]'),json_extract(value,'$[4]') FROM json_each(?)`).bind(JSON.stringify(rows)))
+            }
         }
         const restoreTime = new Date().toISOString()
         for (const row of input.website_monitors || []) {
