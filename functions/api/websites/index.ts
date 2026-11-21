@@ -2,14 +2,12 @@ import { cacheDomainFavicon } from '../../domain/favicons'
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
-import { validateWebsiteFields, normalizeContentFields } from '../../domain/website-validation'
+import { validateWebsiteFields } from '../../domain/website-validation'
 import { websiteIncomeRowsCte } from '../../domain/website-income'
-import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
 import { isWebsiteNew } from '../../../shared/website-newness'
-import { validateScenarioFields } from '../../domain/batches'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count'])
+const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'page_count'])
 
 const validSiteFields = (fields: Record<string, unknown>) => {
     return validateWebsiteFields(fields)
@@ -31,18 +29,14 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                  FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id LEFT JOIN provider_accounts a ON a.id=r.account_id WHERE wr.website_id=w.id AND wr.role='托管' AND wr.is_primary=1) AS hosting_json,
                 (SELECT json_object('id',r.id,'name',r.name,'resource_url',r.resource_url,'account_id',r.account_id,'status',r.status)
                  FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND wr.role='代码仓库' AND wr.is_primary=1 AND r.provider='github') AS repository_json,
-                (SELECT json_group_array(json_object('id', d.id, 'domain', d.domain, 'domain_role', d.domain_role, 'is_primary', d.is_primary, 'registrar', d.registrar, 'registrar_link', d.registrar_link, 'registrar_date', d.registrar_date, 'expiry_date', d.expiry_date, 'service_type', d.service_type, 'status', d.status, 'memo', d.memo, 'last_status_check_at', d.last_status_check_at, 'computer_name', d.computer_name))
+                (SELECT json_group_array(json_object('id', d.id, 'domain', d.domain, 'domain_role', d.domain_role, 'is_primary', d.is_primary, 'registrar', d.registrar, 'registrar_link', d.registrar_link, 'registrar_date', d.registrar_date, 'expiry_date', d.expiry_date, 'service_type', d.service_type, 'status', d.status, 'memo', d.memo, 'last_status_check_at', d.last_status_check_at))
                  FROM domains d WHERE d.website_id = w.id ORDER BY d.is_primary DESC, d.domain) AS domains_json,
                 (SELECT COUNT(*) FROM website_tasks t WHERE t.website_id = w.id AND t.task_type <> 'SEO复查' AND t.status <> '已完成') AS open_task_count,
                 (SELECT COUNT(*) FROM website_tasks t WHERE t.website_id = w.id AND t.task_type = 'SEO复查' AND t.status IN ('待做', '待跟进')) AS review_count,
                 (SELECT json_object('week_start', e.week_start, 'hours', e.hours) FROM website_effort e WHERE e.website_id=w.id ORDER BY e.week_start DESC LIMIT 1) AS latest_effort_json,
                 (SELECT json_group_array(DISTINCT wr.resource_id) FROM website_resources wr WHERE wr.website_id=w.id) AS resource_ids_json,
-                (SELECT json_group_array(DISTINCT r.account_id) FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND r.account_id IS NOT NULL) AS provider_account_ids_json,
-                (SELECT GROUP_CONCAT(DISTINCT r.provider || ': ' || r.name) FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id WHERE wr.website_id = w.id) AS resource_names,
-                (SELECT json_object('id', r.id, 'provider', r.provider, 'name', r.name, 'status', r.status)
-                 FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id
-                 WHERE wr.website_id = w.id ORDER BY wr.is_primary DESC, wr.id LIMIT 1) AS primary_resource_json,
-                (SELECT COUNT(*) FROM website_resources wr WHERE wr.website_id = w.id) AS primary_resource_count
+                (SELECT json_group_array(account_id) FROM (SELECT r.account_id FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND r.account_id IS NOT NULL UNION SELECT wa.account_id FROM website_accounts wa WHERE wa.website_id=w.id)) AS provider_account_ids_json,
+                (SELECT GROUP_CONCAT(DISTINCT r.provider || ': ' || r.name) FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id WHERE wr.website_id = w.id) AS resource_names
             FROM websites w ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
             ORDER BY CASE w.stage WHEN '验证' THEN 1 WHEN '增长' THEN 2 WHEN '维护' THEN 3 WHEN '暂停' THEN 4 ELSE 0 END, w.lifecycle, w.priority_order, w.id
         `).bind(...values).all<Record<string, unknown>>(), context.env.DB.prepare(`
@@ -75,9 +69,8 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         }
         for (const item of incomeTotals.results || []) incomeTotalsByWebsite.set(item.website_id, [...(incomeTotalsByWebsite.get(item.website_id) || []), { currency: item.currency, amount: Number(item.amount) }])
         return json((rows.results || []).map(row => {
-            const { hosting_json: hostingJson, repository_json: repositoryJson, domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, primary_resource_json: primaryResourceJson, ...site } = row
+            const { hosting_json: hostingJson, repository_json: repositoryJson, domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, ...site } = row
             const domains = JSON.parse(String(domainsJson || '[]'))
-            const primaryResource = primaryResourceJson ? JSON.parse(String(primaryResourceJson)) as { id: number; provider: string; name: string; status: string } : null
             const siteIncomes = incomeByWebsite.get(Number(site.id)) || []
             const currentIncome = siteIncomes.filter(item => item.income_month === currentMonth)
             const latestMonth = siteIncomes[0]?.income_month
@@ -87,7 +80,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 ...site,
                 hosting: hostingJson ? JSON.parse(String(hostingJson)) : null,
                 repository: repositoryJson ? JSON.parse(String(repositoryJson)) : null,
-                industry: normalizeWebsiteIndustry(site.industry),
+                industry: site.industry,
                 domains,
                 is_new_site: isWebsiteNew(site.new_site_override as number | null | undefined, domains.find((domain: { is_primary?: number }) => domain.is_primary)?.registrar_date || domains[0]?.registrar_date, today),
                 current_income: currentIncome.map(presentIncome),
@@ -96,10 +89,6 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 latest_effort: effortJson ? JSON.parse(String(effortJson)) : null,
                 resource_ids: JSON.parse(String(resourceIds || '[]')),
                 provider_account_ids: JSON.parse(String(accountIds || '[]')),
-                primary_resource_id: primaryResource?.id || null,
-                primary_resource_provider: primaryResource?.provider || null,
-                primary_resource_name: primaryResource?.name || null,
-                primary_resource_status: primaryResource?.status || null
             }
         }))
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取网站失败') }
@@ -109,10 +98,10 @@ export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
         const body = await context.request.json() as Record<string, unknown>
+        if (Object.keys(body).some(key => key !== 'domain' && !siteFields.has(key))) return json(null, 400, '网站创建包含不支持的字段')
         const domain = body.domain as Record<string, unknown> | undefined
         const fields = Object.fromEntries(Object.entries(body).filter(([key]) => siteFields.has(key)))
-        const aliasError = normalizeContentFields(fields); if (aliasError) return json(null, 400, aliasError)
-        const fieldError = validSiteFields(fields) || validateScenarioFields(fields)
+        const fieldError = validSiteFields(fields)
         if (fieldError) return json(null, 400, fieldError)
         if (!domain || typeof domain !== 'object') return json(null, 400, '新建网站必须同时提供一个域名')
         const domainError = validateDomain({ ...domain, status: domain.status || '在线' } as never)

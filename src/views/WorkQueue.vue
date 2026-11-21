@@ -9,6 +9,7 @@
 <script setup lang="ts">
 import '../styles/workspace/batches.css'
 import { computed, onMounted, ref } from 'vue'
+import { websiteQuery } from '../utils/website-location'
 import { useRouter } from 'vue-router'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import { getWorkQueue, type WorkQueue, type WorkQueueItem } from '../api/batches'
@@ -18,5 +19,5 @@ onMounted(() => { void load() })
 type QueueGroup = { key: WorkQueueItem['type']; label: string; count: number }
 const summaryItems = computed<QueueGroup[]>(() => [{ key: 'monitor', label: '监控异常', count: queue.value.counts.monitor }, { key: 'next_action', label: '逾期下一步', count: queue.value.counts.next_action }, { key: 'task', label: '任务待跟进', count: queue.value.counts.task }, { key: 'batch', label: '批次待复盘', count: queue.value.counts.batch }])
 const groups = computed(() => summaryItems.value.map(item => ({ ...item, items: queue.value.items.filter(queueItem => queueItem.type === item.key as WorkQueueItem['type']) })))
-const openItem = (item: WorkQueueItem) => { if (item.batch_id) void router.push({ name: 'BatchDetail', params: { id: item.batch_id } }); else if (item.website_id) void router.push({ name: 'Home', query: { site: item.website_id } }) }
+const openItem = (item: WorkQueueItem) => { if (item.batch_id) void router.push({ name: 'BatchDetail', params: { id: item.batch_id } }); else if (item.website_id) void router.push({ name: 'Home', query: websiteQuery(item.website_id, item.type === 'monitor' ? 'monitor' : 'work') }) }
 </script>

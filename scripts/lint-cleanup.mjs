@@ -1,6 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import process from 'node:process'
+import { missingCssClasses } from './css-sources.mjs'
 
 const root = process.cwd()
 const read = file => fs.readFileSync(path.join(root, file), 'utf8')
@@ -13,17 +14,22 @@ const walk = dir => {
         else if (/\.(vue|ts|css|mjs)$/.test(entry.name)) sourceFiles.push(relative)
     }
 }
-walk('src'); walk('functions')
+walk('src'); walk('functions'); walk('shared'); walk('workers')
 const appFiles = sourceFiles.filter(file => !file.endsWith('.css'))
 const source = sourceFiles.map(read).join('\n')
 const appSource = appFiles.map(read).join('\n')
 
 const assert = (condition, message) => { if (!condition) failures.push(message) }
+for (const name of ['wp_calculator_count', 'wp_article_count', 'operating_scenario', 'scenario_note', 'scenario_counts', 'baseline_title', 'required_text', 'forbidden_text', 'content_complete', 'primary_resource_', 'StableNumberInput', 'idx_provider_resources_account_ownership']) {
+    assert(!source.includes(name) && !read('schema.sql').includes(name), `运行代码或新库仍有已退役结构: ${name}`)
+}
+for (const file of ['functions/api/domains/import.ts', 'functions/api/domains/export.ts', 'functions/api/export/snapshot/index.ts', 'functions/api/dashboard/summary/index.ts', 'functions/api/monitor/status.ts', 'functions/api/domains/status.ts', 'src/components/StableNumberInput.vue', 'scripts/check-domain-status.mjs', '.github/workflows/domain-status-check.yml']) assert(!fs.existsSync(path.join(root, file)), `已退役文件仍存在: ${file}`)
+for (const route of ['/api/domains/import', '/api/domains/export', '/api/export/snapshot', '/api/dashboard/summary', '/api/monitor/status', '/api/domains/status']) assert(!appSource.includes(route), `已退役接口仍有调用: ${route}`)
 assert(!source.includes('dm-home-route'), '旧 dm-home-route 作用域仍存在')
 assert(!source.includes('/api/addrec') && !fs.existsSync(path.join(root, 'functions/api/addrec/index.ts')), '已删除的 /api/addrec 仍有引用')
 assert(fs.existsSync(path.join(root, 'functions/api/domains/check.ts')), '域名状态检查路由缺失')
 assert(!fs.existsSync(path.join(root, 'functions/api/check/index.ts')), '已移除的 Telegram 检查路由仍存在')
-assert(fs.existsSync(path.join(root, 'functions/api/domains/export.ts')), 'JSON 备份接口缺失')
+assert(fs.existsSync(path.join(root, 'functions/api/backups/index.ts')), 'JSON 备份接口缺失')
 assert(fs.existsSync(path.join(root, 'functions/api/websites/index.ts')), '网站组合 API 缺失')
 assert(fs.existsSync(path.join(root, 'functions/api/websites/[id]/tasks/index.ts')), '逐站任务 API 缺失')
 assert(fs.existsSync(path.join(root, 'functions/api/websites/[id]/operations/index.ts')), '网站操作记录 API 缺失')
@@ -39,15 +45,10 @@ assert(!source.includes('<style scoped>'), '仍存在未外置的模板内联样
 
 const cssFiles = sourceFiles.filter(file => file.endsWith('.css'))
 const css = cssFiles.map(read).join('\n')
-const classNames = new Set()
-for (const match of appSource.matchAll(/(?:class|className)\s*=\s*(["'`])([^"'`]+)\1/g)) match[2].split(/\s+/).forEach(name => classNames.add(name))
-for (const match of read('index.html').matchAll(/(?:class|className)\s*=\s*(["'`])([^"'`]+)\1/g)) match[2].split(/\s+/).forEach(name => classNames.add(name))
-for (const match of appSource.matchAll(/["']([A-Za-z_][\w-]*)["']\s*:/g)) classNames.add(match[1])
-for (const match of appSource.matchAll(/classList\.(?:add|remove|toggle)\([^)]*?["']([A-Za-z_][\w-]*)["']/g)) classNames.add(match[1])
-for (const match of css.matchAll(/\.([A-Za-z_][\w-]*)/g)) {
-    const name = match[1]
-    if (/^(el-|is-|has-|deep$|global$|slotted$)/.test(name)) continue
-    assert(classNames.has(name) || appSource.includes(name), `CSS 类没有模板或运行时来源: .${name}`)
+// Element Plus Upload, Menu, Input, Select and Button generate these states.
+const componentStates = new Set(['is-dragover', 'is-active', 'is-disabled', 'is-focus', 'is-focused', 'cell'])
+for (const name of missingCssClasses(css, appSource + '\n' + read('index.html'), componentStates)) {
+    assert(false, `CSS 类没有模板或运行时来源: .${name}`)
 }
 
 const tokenDefinitions = new Map()
@@ -55,6 +56,8 @@ for (const match of read('src/styles/shared/tokens.css').matchAll(/(--[\w-]+)\s*
     tokenDefinitions.set(match[1], (tokenDefinitions.get(match[1]) || 0) + 1)
 }
 for (const [token, count] of tokenDefinitions) assert(count === 1, `共享 token 重复定义: ${token}`)
+// --el-* variables are consumed by the installed Element Plus theme at runtime.
+for (const token of tokenDefinitions.keys()) if (!token.startsWith('--el-')) assert(source.includes(`var(${token})`) || source.includes(`var(${token},`), `共享 token 没有消费来源: ${token}`)
 
 const queue = read('src/utils/writeQueue.ts')
 const batch = read('functions/api/domains/batch/index.ts')

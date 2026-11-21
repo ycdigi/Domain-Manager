@@ -2,44 +2,35 @@
   <el-drawer v-model="visible" class="website-detail-drawer" :size="drawerSize" :title="website?.name || '网站详情'" :before-close="beforeClose" destroy-on-close>
     <template v-if="website">
       <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="loadAll">重试</el-button></div>
-      <section class="portfolio-detail-section">
-        <div class="portfolio-detail-heading"><h2>基本资料</h2><el-button type="primary" :disabled="!profileDirty" :loading="saving" @click="saveProfile">保存</el-button></div>
-        <el-form label-position="top" class="portfolio-detail-grid">
-          <el-form-item label="网站名称"><el-input v-model="profile.name" maxlength="200" /></el-form-item>
-          <el-form-item label="阶段"><el-select v-model="profile.stage"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select></el-form-item>
-          <el-form-item label="新站分类"><el-select v-model="profile.new_site_mode"><el-option label="自动判断" value="auto" /><el-option label="手动标记为新站" value="new" /><el-option label="手动设为普通站" value="regular" /></el-select></el-form-item>
-          <el-form-item label="状态"><el-select v-model="profile.lifecycle"><el-option label="经营中" value="active" /><el-option label="停止经营" value="stopped" /></el-select></el-form-item>
-          <el-form-item label="网站归属"><el-select v-model="profile.ownership"><el-option v-for="item in ownerships" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-          <el-form-item label="技术栈"><el-select v-model="profile.platform"><el-option v-for="item in platforms" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-          <el-form-item label="网站类型"><el-select v-model="profile.industry" clearable placeholder="未设置"><el-option v-for="item in industries" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-          <el-form-item label="主要管理电脑"><el-select v-model="profile.computer_name" filterable allow-create clearable default-first-option><el-option v-for="name in computerNames" :key="name" :label="name" :value="name" /></el-select></el-form-item>
-          <el-form-item v-if="profile.platform === '其他'" label="其他技术栈"><el-input v-model="profile.platform_other" maxlength="100" /></el-form-item>
-          <el-form-item label="AdSense"><el-select v-model="profile.adsense_connected"><el-option v-for="item in serviceStates" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-          <el-form-item v-if="profile.adsense_connected === '已开通' || profile.adsense_account_id" label="AdSense 账号"><el-select v-model="profile.adsense_account_id" clearable placeholder="请选择账号"><el-option v-for="account in adsenseAccounts" :key="account.id" :label="account.name" :value="account.id" /></el-select></el-form-item>
-          <el-form-item v-if="profile.adsense_connected === '已开通' || profile.adsense_opened_date" label="开通日期"><el-date-picker v-model="profile.adsense_opened_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
-          <el-form-item label="GSC"><el-select v-model="profile.gsc_connected"><el-option v-for="item in serviceStates" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-          <el-form-item label="日点击量"><el-input-number v-model="profile.daily_clicks" :min="0" :precision="0" :controls="false" @change="profile.daily_clicks_range = ''" /></el-form-item>
-          <el-form-item label="日点击区间"><el-select v-model="profile.daily_clicks_range" clearable placeholder="未记录" @change="clearExactClicks"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></el-form-item>
-          <el-form-item label="点击数据日期"><el-date-picker v-model="profile.clicks_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
-          <el-form-item label="总页面数"><el-input-number v-model="profile.page_count" :min="0" :precision="0" :controls="false" /></el-form-item>
-            <el-form-item label="计算器数量"><el-input-number v-model="profile.calculator_count" :min="0" :precision="0" :controls="false" /></el-form-item>
-            <el-form-item label="文章数量"><el-input-number v-model="profile.article_count" :min="0" :precision="0" :controls="false" /></el-form-item>
-            <el-form-item label="内容统计日期"><el-date-picker v-model="profile.content_stats_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
-          <el-form-item class="portfolio-detail-full" label="潜力判断"><el-input v-model="profile.potential" type="textarea" :rows="2" maxlength="2000" /></el-form-item>
-          <el-form-item label="当前下一步"><el-input v-model="profile.next_action" maxlength="300" /></el-form-item>
-          <el-form-item label="截止日期"><el-date-picker v-model="profile.next_action_due_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
-          <el-form-item label="下一步状态"><el-select v-model="profile.next_action_status"><el-option label="待做" value="待做" /><el-option label="处理中" value="处理中" /><el-option label="已完成" value="已完成" /></el-select></el-form-item>
-        </el-form>
-      </section>
-
-      <section class="portfolio-detail-section"><div class="portfolio-detail-heading"><h2>网站图标</h2><el-button :loading="refreshingIcon" @click="refreshIcon">刷新图标</el-button></div><DomainFavicon :domain-id="domains.find(d=>d.is_primary)?.id" :revision="iconRevision" /><p class="page-muted">使用已保存的图标，刷新列表不会重复获取。</p></section>
-      <WebsiteDeployment :key="website.id" :website="website" @changed="notifyChanged" />
-      <WebsiteMonitorPanel v-if="visible" :key="website.id" ref="monitorPanel" :website-id="website.id" />
-
-      <section class="portfolio-detail-section">
+      <div class="portfolio-detail-heading"><span v-if="profileDirty">有未保存资料</span><el-button type="primary" :disabled="!profileDirty" :loading="saving" @click="saveProfile">保存</el-button></div>
+      <el-tabs v-model="activeSection" class="website-sections">
+        <el-tab-pane label="基本资料" name="basic" lazy><div v-loading="sectionLoading.basic"><el-form label-position="top" class="portfolio-detail-grid">
+<el-form-item label="网站名称"><el-input v-model="profile.name" maxlength="200" /></el-form-item>
+<el-form-item label="阶段"><el-select v-model="profile.stage"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select></el-form-item>
+<el-form-item label="新站分类"><el-select v-model="profile.new_site_mode"><el-option label="自动判断" value="auto" /><el-option label="手动标记为新站" value="new" /><el-option label="手动设为普通站" value="regular" /></el-select></el-form-item>
+<el-form-item label="状态"><el-select v-model="profile.lifecycle"><el-option label="经营中" value="active" /><el-option label="停止经营" value="stopped" /></el-select></el-form-item>
+<el-form-item label="网站归属"><el-select v-model="profile.ownership"><el-option v-for="item in ownerships" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+<el-form-item label="技术栈"><el-select v-model="profile.platform"><el-option v-for="item in platforms" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+<el-form-item label="网站类型"><el-select v-model="profile.industry" clearable placeholder="未设置"><el-option v-for="item in industries" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+<el-form-item label="主要管理电脑"><el-select v-model="profile.computer_name" filterable allow-create clearable default-first-option><el-option v-for="name in computerNames" :key="name" :label="name" :value="name" /></el-select></el-form-item>
+<el-form-item v-if="profile.platform === '其他'" label="其他技术栈"><el-input v-model="profile.platform_other" maxlength="100" /></el-form-item>
+</el-form><section class="portfolio-detail-section"><div class="portfolio-detail-heading"><h2>网站图标</h2><el-button :loading="refreshingIcon" @click="refreshIcon">刷新图标</el-button></div><DomainFavicon :domain-id="domains.find(d=>d.is_primary)?.id" :revision="iconRevision" /><p class="page-muted">使用已保存的图标，刷新列表不会重复获取。</p></section></div></el-tab-pane>
+        <el-tab-pane label="内容与点击" name="content" lazy><div v-loading="sectionLoading.content"><el-form label-position="top" class="portfolio-detail-grid">
+<el-form-item label="GSC"><el-select v-model="profile.gsc_connected"><el-option v-for="item in serviceStates" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+<el-form-item label="日点击量"><el-input-number v-model="profile.daily_clicks" :min="0" :precision="0" :controls="false" @change="profile.daily_clicks_range = ''" /></el-form-item>
+<el-form-item label="日点击区间"><el-select v-model="profile.daily_clicks_range" clearable placeholder="未记录" @change="clearExactClicks"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></el-form-item>
+<el-form-item label="点击数据日期"><el-date-picker v-model="profile.clicks_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
+<el-form-item label="总页面数"><el-input-number v-model="profile.page_count" :min="0" :precision="0" :controls="false" /></el-form-item>
+<el-form-item label="计算器数量"><el-input-number v-model="profile.calculator_count" :min="0" :precision="0" :controls="false" /></el-form-item>
+<el-form-item label="文章数量"><el-input-number v-model="profile.article_count" :min="0" :precision="0" :controls="false" /></el-form-item>
+<el-form-item label="内容统计日期"><el-date-picker v-model="profile.content_stats_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
+</el-form></div></el-tab-pane>
+        <el-tab-pane label="部署与账号" name="deployment" lazy><div v-loading="sectionLoading.deployment"><WebsiteDeployment ref="deploymentPanel" :key="website.id" :website="website" @changed="notifyChanged" /></div></el-tab-pane>
+        <el-tab-pane label="域名" name="domains" lazy><div v-loading="sectionLoading.domains"><section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>域名</h2><span>{{ domains.length }} 个</span></div>
         <div v-for="domain in domains" :key="domain.id" class="portfolio-detail-row">
           <div><strong>{{ domain.domain }}</strong><small>{{ domain.domain_role }} · {{ domain.registrar }} · 到期 {{ domain.expiry_date }} · {{ domain.status }}<template v-if="domain.last_status_check_at"> · 检查 {{ domain.last_status_check_at.slice(0, 10) }}</template></small></div>
+          <el-button v-if="!domain.is_primary" text @click="setPrimary(domain)">设为主域名</el-button>
           <el-button text :loading="checkingDomainId === domain.id" :aria-label="`检查域名 ${domain.domain}`" @click="checkDomain(domain)">检查</el-button>
           <el-button text type="danger" :disabled="domains.length <= 1" :aria-label="`删除域名 ${domain.domain}`" @click="removeDomain(domain.id)"><Delete /></el-button>
         </div>
@@ -50,9 +41,13 @@
           <el-date-picker v-model="domainForm.expiry_date" type="date" value-format="YYYY-MM-DD" placeholder="到期日期" aria-label="到期日期" />
           <el-button type="primary" :loading="savingDomain" native-type="submit">关联域名</el-button>
         </el-form>
-      </section>
-
-      <section class="portfolio-detail-section">
+      </section></div></el-tab-pane>
+        <el-tab-pane label="任务与记录" name="work" lazy><div v-loading="sectionLoading.work"><el-form label-position="top" class="portfolio-detail-grid">
+<el-form-item class="portfolio-detail-full" label="潜力判断"><el-input v-model="profile.potential" type="textarea" :rows="2" maxlength="2000" /></el-form-item>
+<el-form-item label="当前下一步"><el-input v-model="profile.next_action" maxlength="300" /></el-form-item>
+<el-form-item label="截止日期"><el-date-picker v-model="profile.next_action_due_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
+<el-form-item label="下一步状态"><el-select v-model="profile.next_action_status"><el-option label="待做" value="待做" /><el-option label="处理中" value="处理中" /><el-option label="已完成" value="已完成" /></el-select></el-form-item>
+</el-form><section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>网站任务</h2><span>{{ tasks.length }} 项</span></div>
         <form class="portfolio-task-form" @submit.prevent="addTask">
           <el-input v-model="taskForm.title" maxlength="200" placeholder="任务标题" aria-label="任务标题" />
@@ -77,25 +72,24 @@
           </article>
         </div>
         <p v-else class="portfolio-empty">还没有任务。</p>
-      </section>
-
-      <section class="portfolio-detail-section">
+      </section><section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>操作记录</h2><span>{{ operations.length }} 条</span></div>
         <form class="portfolio-operation-form" @submit.prevent="addOperation"><el-date-picker v-model="operationForm.operation_date" type="date" value-format="YYYY-MM-DD" aria-label="操作日期" /><el-select v-model="operationForm.operation_kind" aria-label="操作类型"><el-option v-for="kind in taskTypes" :key="kind" :label="kind" :value="kind" /></el-select><el-button type="primary" :loading="savingOperation" native-type="submit">记录操作</el-button></form>
         <div v-for="operation in operations" :key="operation.id" class="portfolio-detail-row"><span>{{ operation.operation_date }} · {{ operation.operation_kind }}</span><el-button text type="danger" :aria-label="`删除 ${operation.operation_date} ${operation.operation_kind} 操作`" @click="removeOperation(operation)"><Delete /></el-button></div>
         <p v-if="!operations.length" class="portfolio-empty">还没有操作记录。</p>
-      </section>
-
-      <section class="portfolio-detail-section">
+      </section><section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>AI 提示词与想法</h2><el-button type="primary" @click="editNote()">新增记录</el-button></div>
         <article v-for="item in notes" :key="item.id" class="portfolio-note-row">
           <header><div><strong>{{ item.kind }}</strong><small>更新于 {{ item.updated_at || item.created_at || '未知' }} · {{ item.version_count || 1 }} 个版本</small></div><div class="portfolio-task-controls"><el-button text @click="editNote(item)">编辑</el-button><el-button text @click="showNoteHistory(item)">历史</el-button><el-button text type="danger" @click="archiveNote(item)">归档</el-button></div></header>
           <pre>{{ item.content }}</pre>
         </article>
         <p v-if="!notes.length" class="portfolio-empty">还没有 AI 提示词或想法记录。</p>
-      </section>
-
-      <section class="portfolio-detail-section">
+      </section></div></el-tab-pane>
+        <el-tab-pane label="收入与投入" name="finance" lazy><div v-loading="sectionLoading.finance"><el-form label-position="top" class="portfolio-detail-grid">
+<el-form-item label="AdSense"><el-select v-model="profile.adsense_connected"><el-option v-for="item in serviceStates" :key="item" :label="item" :value="item" /></el-select></el-form-item>
+<el-form-item v-if="profile.adsense_connected === '已开通' || profile.adsense_account_id" label="AdSense 账号"><el-select v-model="profile.adsense_account_id" clearable placeholder="请选择账号"><el-option v-for="account in adsenseAccounts" :key="account.id" :label="account.name" :value="account.id" /></el-select></el-form-item>
+<el-form-item v-if="profile.adsense_connected === '已开通' || profile.adsense_opened_date" label="开通日期"><el-date-picker v-model="profile.adsense_opened_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
+</el-form><section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>收入与投入</h2><span>不跨币种合计</span></div>
         <div class="portfolio-income-effort-grid">
           <div>
@@ -109,10 +103,12 @@
             <div v-for="item in efforts" :key="item.id" class="portfolio-detail-row"><span>{{ item.week_start }} 起</span><strong>{{ Number(item.hours).toFixed(1) }} 小时</strong></div>
           </div>
         </div>
-      </section>
+      </section></div></el-tab-pane>
+        <el-tab-pane label="监控" name="monitor" lazy><div v-loading="sectionLoading.monitor"><WebsiteMonitorPanel v-if="visible" :key="website.id" ref="monitorPanel" :website-id="website.id" /></div></el-tab-pane>
+      </el-tabs>
     </template>
   </el-drawer>
-  <el-dialog v-model="taskDialogVisible" title="编辑网站任务" width="min(620px, 94vw)" append-to-body>
+  <el-dialog v-model="taskDialogVisible" title="编辑网站任务" :before-close="closeTask" width="min(620px, 94vw)" append-to-body>
     <el-form label-position="top" @submit.prevent="saveTaskEdit">
       <el-form-item label="标题"><el-input v-model="taskEdit.title" maxlength="200" /></el-form-item>
       <el-form-item label="说明"><el-input v-model="taskEdit.description" type="textarea" :rows="3" maxlength="5000" /></el-form-item>
@@ -124,11 +120,11 @@
         <el-form-item label="点击窗口天数"><el-input-number v-model="taskEdit.review_window_days" :min="1" :max="365" :precision="0" /></el-form-item>
       </template>
     </el-form>
-    <template #footer><div class="dialog-footer"><el-button @click="taskDialogVisible = false">取消</el-button><el-button type="primary" :loading="savingTask" @click="saveTaskEdit">保存任务</el-button></div></template>
+    <template #footer><div class="dialog-footer"><el-button @click="closeTask(() => taskDialogVisible = false)">取消</el-button><el-button type="primary" :loading="savingTask" @click="saveTaskEdit">保存任务</el-button></div></template>
   </el-dialog>
-  <el-dialog v-model="noteDialogVisible" :title="editingNoteId ? '编辑记录' : '新增记录'" width="min(680px, 94vw)" append-to-body>
+  <el-dialog v-model="noteDialogVisible" :before-close="closeNote" :title="editingNoteId ? '编辑记录' : '新增记录'" width="min(680px, 94vw)" append-to-body>
     <el-form label-position="top"><el-form-item label="类型"><el-select v-model="noteForm.kind"><el-option label="AI提示词" value="AI提示词" /><el-option label="想法说明" value="想法说明" /></el-select></el-form-item><el-form-item label="内容"><el-input v-model="noteForm.content" type="textarea" :rows="12" maxlength="20000" show-word-limit /></el-form-item></el-form>
-    <template #footer><div class="dialog-footer"><el-button @click="noteDialogVisible = false">取消</el-button><el-button type="primary" :loading="savingNote" @click="saveNote">保存</el-button></div></template>
+    <template #footer><div class="dialog-footer"><el-button @click="closeNote(() => noteDialogVisible = false)">取消</el-button><el-button type="primary" :loading="savingNote" @click="saveNote">保存</el-button></div></template>
   </el-dialog>
   <el-dialog v-model="historyVisible" title="记录历史" width="min(680px, 94vw)" append-to-body>
     <ol class="portfolio-note-history"><li v-for="version in noteHistory" :key="version.id"><strong>第 {{ version.version_no }} 版 · {{ version.created_at }}</strong><pre>{{ version.content }}</pre></li></ol>
@@ -137,6 +133,8 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { websiteQuery, websiteSections, type WebsiteSection } from '../utils/website-location'
 import { ElMessage } from 'element-plus'
 import DomainFavicon from './DomainFavicon.vue'
 import WebsiteDeployment from './WebsiteDeployment.vue'
@@ -146,10 +144,9 @@ import { Delete } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
 import { getWriteQueue } from '../utils/writeQueue'
-import { useUnsavedChanges } from '../composables/useUnsavedChanges'
+import { useUnsavedChanges, confirmDiscard } from '../composables/useUnsavedChanges'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import type { Website, WebsiteDomain, WebsiteTask, WebsiteTaskType } from '../api/websites'
-import { normalizeWebsiteIndustry } from '../../shared/website-classification'
 
 interface IncomeRow { id?: number | null; income_month: string; source: string; currency: string; amount: number; origin?: 'website' | 'adsense_account' }
 interface EffortRow { id: number; week_start: string; hours: number }
@@ -158,6 +155,11 @@ interface AiNote { id: number; kind: 'AI提示词' | '想法说明'; content: st
 interface NoteVersion { id: number; version_no: number; content: string; created_at: string }
 const props = defineProps<{ visible: boolean; website?: Website }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; changed: [] }>()
+const route = useRoute(); const router = useRouter()
+const activeSection = computed<WebsiteSection>({ get: () => websiteSections.some(item => item.key === route.query.section) ? route.query.section as WebsiteSection : 'basic', set: section => { if (props.website) void router.replace({ query: websiteQuery(props.website.id, section, route.query) }) } })
+const sectionLoading = reactive<Record<string, boolean>>({})
+const sectionErrors = reactive<Record<string, string>>({})
+const loadedSections = new Set<string>()
 const queue = getWriteQueue()
 const visible = computed({ get: () => props.visible, set: value => emit('update:visible', value) })
 const drawerSize = ref('760px')
@@ -181,7 +183,7 @@ const efforts = ref<EffortRow[]>([])
 const operations = ref<OperationRow[]>([])
 const notes = ref<AiNote[]>([])
 const noteHistory = ref<NoteVersion[]>([])
-const error = ref('')
+const error = computed(() => sectionErrors[activeSection.value] || '')
 const saving = ref(false); const savingDomain = ref(false); const savingTask = ref(false); const savingIncome = ref(false); const savingEffort = ref(false); const savingOperation = ref(false); const savingNote = ref(false)
 const checkingDomainId = ref<number | null>(null)
 const noteDialogVisible = ref(false); const historyVisible = ref(false); const editingNoteId = ref<number | null>(null)
@@ -201,32 +203,68 @@ let profileOriginal: typeof profile | undefined
 let profileWebsiteId: number | undefined
 let loadVersion = 0
 const profileDirty = computed(() => Boolean(props.visible && profileBaseline.value && JSON.stringify(profile) !== profileBaseline.value))
-const { canDiscard: canDiscardProfile } = useUnsavedChanges(profileDirty)
 const monitorPanel = ref<InstanceType<typeof WebsiteMonitorPanel>>()
+const deploymentPanel = ref<InstanceType<typeof WebsiteDeployment>>()
+const draftSnapshots = () => ({ domain: JSON.stringify(domainForm), task: JSON.stringify({ taskForm, baselineRange: baselineRange.value, baselineClicks: baselineClicks.value }), income: JSON.stringify(incomeForm), effort: JSON.stringify(effortForm), operation: JSON.stringify(operationForm) })
+const draftsBaseline = ref<Record<string, string>>({})
+const taskEditBaseline = ref(''); const noteBaseline = ref('')
+const taskEditDirty = computed(() => taskDialogVisible.value && JSON.stringify(taskEdit) !== taskEditBaseline.value)
+const noteDirty = computed(() => noteDialogVisible.value && JSON.stringify(noteForm) !== noteBaseline.value)
+const discardAccepted = ref(false)
+const dirty = computed(() => Boolean(props.visible && !discardAccepted.value && (profileDirty.value || (Object.entries(draftSnapshots()).some(([key, value]) => draftsBaseline.value[key] !== value)) || taskEditDirty.value || noteDirty.value || monitorPanel.value?.dirty || deploymentPanel.value?.dirty)))
+const savingAny = computed(() => Boolean(saving.value || savingDomain.value || savingTask.value || savingIncome.value || savingEffort.value || savingOperation.value || savingNote.value || monitorPanel.value?.busy || deploymentPanel.value?.busy))
+useUnsavedChanges(dirty, { blocked: savingAny, leaving: (to, from) => to.path !== from.path || to.query.site !== from.query.site })
 const beforeClose = async (done: () => void) => {
-  if (!(await canDiscardProfile()) || (monitorPanel.value && !(await monitorPanel.value.canClose()))) return
-  profileBaseline.value = JSON.stringify(profile)
+  if (savingAny.value) { ElMessage.warning('正在保存，请稍候'); return }
+  if (!(await confirmDiscard(dirty.value))) return
+  discardAccepted.value = true
   done()
 }
+const closeTask = async (done: () => void) => { if (!savingTask.value && await confirmDiscard(taskEditDirty.value)) done() }
+const closeNote = async (done: () => void) => { if (!savingNote.value && await confirmDiscard(noteDirty.value)) done() }
+const markDraftsClean = (key?: string) => { const values = draftSnapshots(); if (key) draftsBaseline.value[key] = values[key as keyof typeof values]; else draftsBaseline.value = values }
 const markProfileClean = () => { profileOriginal = JSON.parse(JSON.stringify(profile)); profileBaseline.value = JSON.stringify(profile) }
 const notifyChanged = () => { invalidateData('/api/websites'); emit('changed') }
 const loadAll = async () => {
   if (!props.website) return
   const version = ++loadVersion
-  error.value = ''
   if (profileWebsiteId !== props.website.id) {
-  Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', computer_name: props.website.computer_name || '', page_count: props.website.page_count ?? undefined, adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', calculator_count: props.website.calculator_count ?? undefined, article_count: props.website.article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
+  Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: props.website.industry || '', computer_name: props.website.computer_name || '', page_count: props.website.page_count ?? undefined, adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', calculator_count: props.website.calculator_count ?? undefined, article_count: props.website.article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
     profileWebsiteId = props.website.id
     markProfileClean()
     tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []
   }
   domains.value = queue.applyPendingDomains(props.website.domains || [])
   const id = props.website.id
-  try {
-    const [domainRows, taskRows, incomeRows, effortRows, operationRows, noteRows, accountRows] = await Promise.all([api.get<WebsiteDomain[]>(`/api/domains?website_id=${id}`), api.get<WebsiteTask[]>(`/api/websites/${id}/tasks`), api.get<IncomeRow[]>(`/api/websites/${id}/income`), api.get<EffortRow[]>(`/api/websites/${id}/effort`), api.get<OperationRow[]>(`/api/websites/${id}/operations`), api.get<AiNote[]>(`/api/websites/${id}/ai-notes`), api.get<Array<{ id: number; name: string }>>('/api/adsense/accounts')])
-    if (props.website?.id === id && version === loadVersion) { domains.value = queue.applyPendingDomains(domainRows); tasks.value = taskRows; incomes.value = incomeRows; efforts.value = effortRows; operations.value = operationRows; notes.value = noteRows; adsenseAccounts.value = accountRows }
-  } catch (e) { if (props.website?.id === id && version === loadVersion) error.value = e instanceof Error ? e.message : '详情加载失败' }
+  await loadSection(activeSection.value, true, version, id)
 }
+const loadSection = async (section: WebsiteSection, force = false, version = loadVersion, id = props.website?.id) => {
+  if (!id || !props.visible || (!force && loadedSections.has(section))) return
+  sectionLoading[section] = true; sectionErrors[section] = ''
+  const reads: Array<() => Promise<void>> = []
+  const read = <T,>(url: string, assign: (value: T) => void) => reads.push(async () => {
+    const value = await api.get<T>(url)
+    if (props.website?.id === id && version === loadVersion) assign(value)
+  })
+  if (section === 'domains') read<WebsiteDomain[]>(`/api/domains?website_id=${id}`, value => { domains.value = queue.applyPendingDomains(value) })
+  if (section === 'work') {
+    read<WebsiteTask[]>(`/api/websites/${id}/tasks`, value => { tasks.value = value })
+    read<OperationRow[]>(`/api/websites/${id}/operations`, value => { operations.value = value })
+    read<AiNote[]>(`/api/websites/${id}/ai-notes`, value => { notes.value = value })
+  }
+  if (section === 'finance') {
+    read<IncomeRow[]>(`/api/websites/${id}/income`, value => { incomes.value = value })
+    read<EffortRow[]>(`/api/websites/${id}/effort`, value => { efforts.value = value })
+    read<Array<{ id: number; name: string }>>('/api/adsense/accounts', value => { adsenseAccounts.value = value })
+  }
+  const results = await Promise.allSettled(reads.map(run => run()))
+  if (props.website?.id !== id || version !== loadVersion) return
+  sectionErrors[section] = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map(result => result.reason instanceof Error ? result.reason.message : '分区读取失败').join('；')
+  if (!sectionErrors[section]) loadedSections.add(section)
+  sectionLoading[section] = false
+}
+watch(activeSection, section => { void loadSection(section) })
+
 const saveProfile = async () => {
   if (!props.website || saving.value) return
   saving.value = true
@@ -274,7 +312,7 @@ const saveProfile = async () => {
     if (!Object.keys(patch).length) return
     await api.patch(`/api/websites/${props.website.id}`, patch)
     if (Object.prototype.hasOwnProperty.call(patch, 'adsense_account_id')) {
-      invalidateData('/api/adsense/accounts', '/api/dashboard/summary')
+      invalidateData('/api/adsense/accounts')
       await loadAll()
     }
     markProfileClean(); notifyChanged(); ElMessage.success('经营信息已保存')
@@ -286,10 +324,11 @@ const clearExactClicks = (range: string) => { if (range) profile.daily_clicks = 
 const addDomain = async () => {
   if (!props.website || savingDomain.value) return
   savingDomain.value = true
-  try { const created = await api.post<WebsiteDomain>('/api/domains', { ...domainForm, website_id: props.website.id, service_type: '网站', status: '在线', domain_role: '备用域名' }); domains.value.push(created); Object.assign(domainForm, { domain: '', registrar: '', registrar_date: '', expiry_date: '' }); notifyChanged(); ElMessage.success('域名已关联') }
+  try { const created = await api.post<WebsiteDomain>('/api/domains', { ...domainForm, website_id: props.website.id, service_type: '网站', status: '在线', domain_role: '备用域名' }); domains.value.push(created); Object.assign(domainForm, { domain: '', registrar: '', registrar_date: '', expiry_date: '' }); markDraftsClean('domain'); notifyChanged(); ElMessage.success('域名已关联') }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '域名关联失败') }
   finally { savingDomain.value = false }
 }
+const setPrimary = async (domain: WebsiteDomain) => { try { await api.put(`/api/domains/${domain.id}`, { domain_role: '主域名' }); await loadAll(); notifyChanged() } catch (e) { ElMessage.error(e instanceof Error ? e.message : '主域名更新失败') } }
 const removeDomain = async (id: number) => {
   try { await confirmAction('删除这个域名？网站经营记录会保留。', '删除域名', { confirmButtonText: '删除域名' }); await api.delete(`/api/domains/${id}`); await loadAll(); notifyChanged() }
   catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '域名删除失败') }
@@ -307,7 +346,7 @@ const addTask = async () => {
   try {
     const baseline = baselineClicks.value == null ? undefined : { period_start: baselineRange.value[0], period_end: baselineRange.value[1], clicks: baselineClicks.value }
     const task = await api.post<WebsiteTask>(`/api/websites/${props.website.id}/tasks`, { ...taskForm, baseline })
-    tasks.value.unshift(task); Object.assign(taskForm, { task_type: '内容', title: '', description: '', review_delay_days: 28, review_window_days: 28 }); baselineRange.value = []; baselineClicks.value = undefined; notifyChanged()
+    tasks.value.unshift(task); Object.assign(taskForm, { task_type: '内容', title: '', description: '', review_delay_days: 28, review_window_days: 28 }); baselineRange.value = []; baselineClicks.value = undefined; markDraftsClean('task'); notifyChanged()
   }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '任务添加失败') }
   finally { savingTask.value = false }
@@ -320,6 +359,7 @@ const updateTask = async (task: WebsiteTask, fields: Record<string, unknown>) =>
 const editTask = (task: WebsiteTask) => {
   editingTask.value = task
   Object.assign(taskEdit, { title: task.title, description: task.description || '', completion_summary: task.completion_summary || '', result_url: task.result_url || '', due_at: task.due_at || '', review_delay_days: task.review_delay_days, review_window_days: task.review_window_days })
+  taskEditBaseline.value = JSON.stringify(taskEdit)
   taskDialogVisible.value = true
 }
 const saveTaskEdit = async () => {
@@ -341,7 +381,7 @@ const removeTask = async (task: WebsiteTask) => {
 const addOperation = async () => {
   if (!props.website || savingOperation.value) return
   savingOperation.value = true
-  try { const row = await api.post<OperationRow>(`/api/websites/${props.website.id}/operations`, operationForm); operations.value = [row, ...operations.value.filter(item => item.id !== row.id)]; notifyChanged() }
+  try { const row = await api.post<OperationRow>(`/api/websites/${props.website.id}/operations`, operationForm); operations.value = [row, ...operations.value.filter(item => item.id !== row.id)]; markDraftsClean('operation'); notifyChanged() }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '操作记录保存失败') }
   finally { savingOperation.value = false }
 }
@@ -350,7 +390,7 @@ const removeOperation = async (item: OperationRow) => {
   try { await confirmAction(`删除 ${item.operation_date} 的 ${item.operation_kind} 操作记录？`, '删除操作记录', { confirmButtonText: '删除' }); await api.delete(`/api/websites/${props.website.id}/operations/${item.id}`); operations.value = operations.value.filter(row => row.id !== item.id); notifyChanged() }
   catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '操作记录删除失败') }
 }
-const editNote = (item?: AiNote) => { editingNoteId.value = item?.id || null; noteForm.kind = item?.kind || 'AI提示词'; noteForm.content = item?.content || ''; noteDialogVisible.value = true }
+const editNote = (item?: AiNote) => { editingNoteId.value = item?.id || null; noteForm.kind = item?.kind || 'AI提示词'; noteForm.content = item?.content || ''; noteBaseline.value = JSON.stringify(noteForm); noteDialogVisible.value = true }
 const saveNote = async () => {
   if (!props.website || savingNote.value) return
   savingNote.value = true
@@ -371,26 +411,32 @@ const showNoteHistory = async (item: AiNote) => {
 const saveIncome = async () => {
   if (!props.website || savingIncome.value) return
   savingIncome.value = true
-  try { await api.post(`/api/websites/${props.website.id}/income`, incomeForm); incomes.value = await api.get(`/api/websites/${props.website.id}/income`); notifyChanged() }
+  try { await api.post(`/api/websites/${props.website.id}/income`, incomeForm); incomes.value = await api.get(`/api/websites/${props.website.id}/income`); markDraftsClean('income'); notifyChanged() }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '收入保存失败') }
   finally { savingIncome.value = false }
 }
 const saveEffort = async () => {
   if (!props.website || savingEffort.value) return
   savingEffort.value = true
-  try { await api.post(`/api/websites/${props.website.id}/effort`, effortForm); efforts.value = await api.get(`/api/websites/${props.website.id}/effort`); notifyChanged() }
+  try { await api.post(`/api/websites/${props.website.id}/effort`, effortForm); efforts.value = await api.get(`/api/websites/${props.website.id}/effort`); markDraftsClean('effort'); notifyChanged() }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '投入时间保存失败') }
   finally { savingEffort.value = false }
 }
 watch(() => [props.visible, props.website?.id], ([open]) => {
+  discardAccepted.value = false
   profileWebsiteId = undefined
   loadVersion++
+  loadedSections.clear()
+  for (const key of Object.keys(sectionErrors)) delete sectionErrors[key]
+  for (const key of Object.keys(sectionLoading)) delete sectionLoading[key]
   noteDialogVisible.value = false; taskDialogVisible.value = false; historyVisible.value = false
   Object.assign(taskForm, { task_type: '内容', title: '', description: '', review_delay_days: 28, review_window_days: 28 })
   Object.assign(domainForm, { domain: '', registrar: '', registrar_date: '', expiry_date: '' })
   Object.assign(incomeForm, { income_month: '', source: '', currency: 'USD', amount: 0 })
   Object.assign(effortForm, { week_start: '', hours: 0 })
   baselineRange.value = []; baselineClicks.value = undefined
+  Object.assign(operationForm, { operation_date: '', operation_kind: 'SEO' })
+  markDraftsClean()
   if (open) void loadAll()
 })
 onMounted(updateDrawerSize)

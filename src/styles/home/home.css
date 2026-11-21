@@ -1,9 +1,3 @@
-.portfolio-page {
-  min-height: 100svh;
-  padding: var(--space-lg) clamp(12px, 1.5vw, 32px);
-  background: var(--color-paper-2);
-  color: var(--color-ink);
-}
 .portfolio-bulk-toolbar {
   display: flex;
   align-items: center;
@@ -56,12 +50,6 @@
   border-color: var(--color-brand);
   background: var(--color-brand);
   color: var(--color-paper);
-}
-.portfolio-stage-tab small {
-  color: inherit;
-  opacity: 0.78;
-  font-size: var(--text-xs);
-  font-variant-numeric: tabular-nums;
 }
 .portfolio-sort-reset {
   flex: 0 0 auto;
@@ -139,10 +127,6 @@
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
-.portfolio-sort-trigger .el-icon {
-  flex: 0 0 auto;
-  font-size: 14px;
-}
 .portfolio-table td {
   height: 58px;
   min-width: 0;
@@ -156,33 +140,6 @@
 }
 .portfolio-table tbody tr:hover td {
   background: var(--color-accent-paper);
-}
-.portfolio-table tbody tr.is-expiring-soon td {
-  background: var(--color-expiring-row);
-}
-.portfolio-table tbody tr.is-expired td {
-  background: var(--color-expired-row);
-}
-.portfolio-table tbody tr.is-expiring-soon:hover td {
-  background: var(--color-expiring-row-hover);
-}
-.portfolio-table tbody tr.is-expired:hover td {
-  background: var(--color-expired-row-hover);
-}
-.portfolio-table .el-select {
-  width: 100%;
-  min-width: 0;
-}
-.portfolio-table .el-select .el-select__wrapper {
-  min-height: 32px;
-  padding: 0 8px;
-  box-shadow: none;
-  background: transparent;
-}
-.portfolio-table td small {
-  color: var(--color-muted);
-  font-size: var(--text-xs);
-  line-height: 1.35;
 }
 .portfolio-empty {
   padding: var(--space-md) 0;
@@ -201,15 +158,12 @@
   }
 }
 @media (max-width: 760px) {
-  .portfolio-page {
-    padding: var(--space-md) var(--space-xs);
-  }
   .portfolio-stage-tabs {
     justify-content: flex-start;
     padding-bottom: 3px;
   }
   .portfolio-table {
-    font-size: var(--text-xs);
+    font-size: var(--text-md);
   }
   .portfolio-table th {
     padding: 8px 7px;
@@ -234,9 +188,6 @@
 .site-view-tabs {
   justify-content: flex-start;
   margin-bottom: 16px;
-}
-.site-table {
-  min-inline-size: 1611px;
 }
 .site-table th:first-child,
 .site-table td:first-child {
@@ -357,3 +308,6 @@
     position: static;
   }
 }
+
+.site-results { display:flex; flex-wrap:wrap; align-items:center; gap:var(--space-xs); margin-block:var(--space-sm); font-size:var(--text-md); }
+.site-scroll-hint { margin:0; padding:var(--space-xs) var(--space-sm); color:var(--color-muted); font-size:var(--text-xs); }

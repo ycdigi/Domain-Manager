@@ -31,3 +31,42 @@ test('v1.24 preserves all records while moving counts and primary-domain compute
     store.close()
   }
 })
+
+test('v1.25 migrates account ownership links without keeping placeholder deployment resources', () => {
+  const store = database()
+  try {
+    store.init(fs.readFileSync(new URL('./fixtures/schema-v1.24.0.sql', import.meta.url), 'utf8'))
+    store.sql(`INSERT INTO websites(name) VALUES('one'),('two');
+INSERT INTO provider_accounts(provider,name) VALUES('vhost','SiteGround');
+INSERT INTO provider_resources(account_id,provider,name,identifier) VALUES(1,'vhost','account placeholder','account:1');
+INSERT INTO website_resources(website_id,resource_id,role,is_primary,memo) VALUES(1,1,'托管',1,'owner'),(2,1,'其他',0,'note');`)
+    store.script(fs.readFileSync(new URL('../schema-migration-v1.25.0.sql', import.meta.url), 'utf8'))
+    assert.deepEqual(store.sql('SELECT website_id,account_id,memo FROM website_accounts ORDER BY website_id'), [{website_id:1,account_id:1,memo:'owner'},{website_id:2,account_id:1,memo:'note'}])
+    assert.equal(store.sql('SELECT COUNT(*) AS n FROM website_resources')[0].n,0)
+    assert.equal(store.sql('SELECT COUNT(*) AS n FROM provider_resources')[0].n,0)
+    assert.deepEqual(store.sql('PRAGMA foreign_key_check'),[])
+  } finally { store.close() }
+})
+
+test('v1.26 removes retired structures while preserving canonical values and matching a fresh database', () => {
+ const store=database();const fresh=database()
+ try {
+  store.init(fs.readFileSync(new URL('./fixtures/schema-v1.24.0.sql',import.meta.url),'utf8'))
+  store.sql(`INSERT INTO websites(name,industry,wp_article_count,wp_calculator_count,page_count,computer_name) VALUES('kept','电气/工程',8,3,20,'Workstation');
+INSERT INTO domains(website_id,domain,registrar,registrar_date,expiry_date,service_type,computer_name) VALUES(1,'example.com','r','2026-01-01','2027-01-01','网站','Old computer');
+INSERT INTO website_monitor_checks(website_id,domain,checked_at,outcome,reason,response_ms,final_url,content_complete) VALUES(1,'example.com','2026-11-20T00:00:00Z','review','title_changed',10,'https://example.com',0);
+CREATE TABLE alertcfg(id INTEGER PRIMARY KEY,tg_token TEXT);`)
+  store.script(fs.readFileSync(new URL('../schema-migration-v1.25.0.sql',import.meta.url),'utf8'))
+  store.script(fs.readFileSync(new URL('../schema-migration-v1.26.0.sql',import.meta.url),'utf8'))
+  assert.deepEqual(store.sql('SELECT article_count,calculator_count,page_count,computer_name,industry FROM websites'),[{article_count:8,calculator_count:3,page_count:20,computer_name:'Workstation',industry:'其他'}])
+  assert.equal(store.sql('SELECT COUNT(*) AS n FROM website_monitor_checks')[0].n,0)
+  assert.equal(store.sql("SELECT count(*) AS n FROM sqlite_schema WHERE name='alertcfg' OR name LIKE 'trg_counts_%'")[0].n,0)
+  fresh.init()
+  const structure=db=>db.sql("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map(({name})=>({name,columns:db.sql(`PRAGMA table_info(${name})`).map(({cid,...column})=>column).sort((a,b)=>a.name.localeCompare(b.name)),foreignKeys:db.sql(`PRAGMA foreign_key_list(${name})`).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))}))
+  assert.deepEqual(structure(store),structure(fresh))
+  const indexes=db=>db.sql("SELECT name,tbl_name FROM sqlite_schema WHERE type='index' AND sql IS NOT NULL ORDER BY name").map(row=>({...row,columns:db.sql(`PRAGMA index_info(${row.name})`),unique:db.sql(`PRAGMA index_list(${row.tbl_name})`).find(index=>index.name===row.name).unique}))
+  assert.deepEqual(indexes(store),indexes(fresh))
+  assert.deepEqual(store.sql("SELECT name FROM sqlite_schema WHERE type='trigger' ORDER BY name"),fresh.sql("SELECT name FROM sqlite_schema WHERE type='trigger' ORDER BY name"))
+  assert.deepEqual(store.sql('PRAGMA foreign_key_check'),[])
+ }finally{store.close();fresh.close()}
+})

@@ -13,7 +13,7 @@ export const useAuth = () => {
             token
         }
 
-        // 使用原有 Base64 格式保存，兼容已登录的浏览器。
+        // 登录凭据以 Base64 编码保存。
         const encrypted = btoa(JSON.stringify(authData))
         localStorage.setItem('auth_token', encrypted)
         isAuthenticated.value = true

@@ -25,7 +25,6 @@ export interface Domain {
     is_primary?: number
     memo?: string | null
     last_status_check_at?: string | null
-    computer_name?: string | null
     website_name?: string | null
     website_stage?: string | null
     created_at?: string
@@ -83,7 +82,6 @@ export interface AdsenseIncome {
     id?: number
     adsense_account_id: number
     income_month: string
-    amount: number
     amount_usd: number
     amount_cny?: number | null
     transfer_date?: string | null

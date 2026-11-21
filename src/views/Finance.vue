@@ -21,8 +21,7 @@
           ></el-table-column
         ><template v-if="tab === 'income'"
           ><el-table-column prop="income_month" label="月份" /><el-table-column
-            prop="source"
-            label="来源" /><el-table-column prop="currency" label="币种" /><el-table-column
+            label="来源"><template #default="{ row }">{{ row.source }}{{ row.origin === 'adsense_account' ? ' · 账号收入' : '' }}</template></el-table-column><el-table-column prop="currency" label="币种" /><el-table-column
             prop="amount"
             label="金额" /></template
         ><template v-else
@@ -40,6 +39,7 @@
 </template>
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { websiteQuery } from '../utils/website-location'
 import { useRouter } from 'vue-router'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import { api } from '../utils/request'
@@ -58,13 +58,13 @@ const rows = computed(() =>
   )
 )
 const siteName = (id: number) => sites.value.find((s) => s.id === id)?.name || `网站 #${id}`
-const open = (id: number) => router.push({ name: 'Home', query: { site: String(id) } })
+const open = (id: number) => router.push({ name: 'Home', query: websiteQuery(id, 'finance') })
 const load = async () => {
   loading.value = true
   error.value = ''
   try {
     const data = await api.get<{ websites: typeof sites.value; website_income: Row[]; website_effort: Row[] }>(
-      '/api/export/snapshot'
+      '/api/finance'
     )
     sites.value = data.websites
     incomes.value = data.website_income

@@ -1,15 +1,13 @@
 /// <reference types="@cloudflare/workers-types" />
 import { decodeHTML } from 'entities'
 
-// Legacy content fields remain readable in stored checks and backups.
 export type MonitorCheckResult = {
-  outcome: 'healthy' | 'failure' | 'review' | 'incomplete'
+  outcome: 'healthy' | 'failure'
   reason: string
   http_status: number | null
   response_ms: number
   final_url: string
   title: string | null
-  content_complete: boolean
   available: boolean | null
 }
 
@@ -83,14 +81,11 @@ const readTitle = async (response: Response, deadline: Promise<never>): Promise<
 export async function checkWebsite(input: {
   domain: string
   allowed_redirect_hosts: string[]
-  required_text?: string[]
-  forbidden_text?: string[]
-  baseline_title?: string | null
 }, fetcher: typeof fetch = fetch): Promise<MonitorCheckResult> {
   const started = performance.now()
   const result: MonitorCheckResult = {
     outcome: 'failure', reason: 'invalid_url', http_status: null, response_ms: 0,
-    final_url: '', title: null, content_complete: false, available: null,
+    final_url: '', title: null, available: null,
   }
   const finish = (reason: string): MonitorCheckResult => ({
     ...result, reason, outcome: reason === 'healthy' ? 'healthy' : 'failure',

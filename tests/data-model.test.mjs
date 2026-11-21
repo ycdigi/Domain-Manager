@@ -73,7 +73,7 @@ test('a domain can be unassigned but a website domain references one website', (
 })
 
 test('portable export does not select credential storage', () => {
-  const source = fs.readFileSync(path.join(root, 'functions/api/export/snapshot/index.ts'), 'utf8')
+  const source = fs.readFileSync(path.join(root, 'functions/api/backups/index.ts'), 'utf8')
   assert.doesNotMatch(source, /provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|API_TOKEN/)
   assert.match(source, /website_click_snapshots/)
   assert.match(source, /website_tasks/)
@@ -97,7 +97,7 @@ test('cleanup audit and workspace routes point at the portfolio implementation',
 
 test('v1.23 adds operating scenarios and website batch history to an existing portfolio', () => {
   const migrationPath = path.join(root, 'schema-migration-v1.23.0.sql')
-  const legacySchema = schema.replace('    operating_scenario TEXT,\n    scenario_note TEXT,\n    page_count INTEGER CHECK (page_count IS NULL OR page_count >= 0),\n', '').split('\n\nCREATE TABLE IF NOT EXISTS website_batches')[0]
+  const legacySchema = fs.readFileSync(path.join(root, 'tests/fixtures/schema-v1.23.0.sql'), 'utf8').replace('    operating_scenario TEXT,\n    scenario_note TEXT,\n    page_count INTEGER CHECK (page_count IS NULL OR page_count >= 0),\n', '').split('\n\nCREATE TABLE IF NOT EXISTS website_batches')[0]
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'portfolio-batches-migration-')); const file = path.join(dir, 'db.sqlite')
   try {
     run(file, `PRAGMA foreign_keys=ON;\n${legacySchema}`)

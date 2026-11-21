@@ -2,12 +2,10 @@ import type { Env } from '../../../types'
 import { checkApiToken } from '../../../utils/auth'
 import { isValidDate, normalizeDomain, todayShanghaiDate } from '../../../utils/domain-validation'
 import { addDays, ensureSeoReview, insertSnapshot, validateWindow } from '../../../domain/website-tasks'
-import { isUnchangedLegacyIndustry, validateWebsiteFields, normalizeContentFields } from '../../../domain/website-validation'
-import { validateScenarioFields } from '../../../domain/batches'
-import { normalizeWebsiteIndustry } from '../../../../shared/website-classification'
+import { validateWebsiteFields } from '../../../domain/website-validation'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const siteFields = new Set(['name', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'operating_scenario', 'scenario_note', 'page_count', 'potential'])
+const siteFields = new Set(['name', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'content_stats_updated_date', 'page_count', 'potential'])
 const conclusions = ['提升', '持平', '下降', '数据不足']
 const statuses = ['待做', '处理中', '已完成']
 
@@ -37,7 +35,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             WHERE t.website_id=? AND t.status <> '已完成' ORDER BY COALESCE(t.due_at, t.created_at), t.id`).bind(site.id).all<Record<string, unknown>>()
 
         const { domains_json: domainsJson, ...websiteData } = website
-        const parsedWebsite = { ...websiteData, industry: normalizeWebsiteIndustry(websiteData.industry), domains: JSON.parse(String(domainsJson || '[]')) }
+        const parsedWebsite = { ...websiteData, industry: websiteData.industry, domains: JSON.parse(String(domainsJson || '[]')) }
         return json({ website: parsedWebsite, tasks: (tasks.results || []).map(task => ({ ...task, review_due: task.task_type === 'SEO复查' && reviewIsDue(task.due_at), snapshots: JSON.parse(String(task.snapshots_json || '[]')) })) })
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取 AI 同步上下文失败') }
 }
@@ -56,8 +54,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (!website) return json(null, 404, '网站不存在')
         const fields = body.fields || {}
         if (typeof fields !== 'object' || Array.isArray(fields) || Object.keys(fields).some(key => !siteFields.has(key))) return json(null, 400, 'fields 必须是受支持字段组成的对象')
-        const aliasError = normalizeContentFields(fields); if (aliasError) return json(null, 400, aliasError)
-        const fieldError = validateWebsiteFields(fields, website) || validateScenarioFields(fields, website)
+        const fieldError = validateWebsiteFields(fields, website)
         if (fieldError) return json(null, 400, fieldError)
         if (fields.adsense_account_id != null && (!Number.isInteger(fields.adsense_account_id) || !await db.prepare('SELECT id FROM adsense_accounts WHERE id=?').bind(fields.adsense_account_id).first())) return json(null, 400, 'AdSense 账号不存在')
         if (body.task_updates !== undefined && (!Array.isArray(body.task_updates) || body.task_updates.length > 50)) return json(null, 400, 'task_updates 最多支持 50 项')
@@ -101,7 +98,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                 if (review.after === undefined && review.conclusion !== undefined && review.conclusion !== '数据不足') return json(null, 400, '缺少复查数据时不能判断提升、持平或下降')
             }
         }
-        const fieldEntries = Object.entries(fields).filter(([key, value]) => !(key === 'industry' && isUnchangedLegacyIndustry(value, website.industry)))
+        const fieldEntries = Object.entries(fields)
         if (!fieldEntries.length && !updates.length) return json(null, 400, '没有可同步的变化')
         const statements: D1PreparedStatement[] = []
         if (fieldEntries.length) statements.push(db.prepare(`UPDATE websites SET ${fieldEntries.map(([key]) => `${key}=?`).join(', ')} WHERE id=?`).bind(...fieldEntries.map(([, value]) => value === '' ? null : value), websiteId))

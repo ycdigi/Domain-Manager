@@ -38,7 +38,7 @@ Authorization: Bearer ${API_TOKEN}
 - `adsense_account_id`：可选，只使用已确认的现有账号 ID。账号或开通日期未知时省略，仍可更新已确认的服务开通状态。
 - `adsense_opened_date`、`seo_last_date`、`clicks_updated_date`、`content_stats_updated_date`：真实日期，格式 `YYYY-MM-DD`。
 - `daily_clicks`：已确认的非负整数；或 `daily_clicks_range`：`under10`、`10to29`、`30to49`、`50to99`、`over100`。更新点击数值/区间时必须同时提供 `clicks_updated_date`。
-- `wp_calculator_count`、`wp_article_count`：仅 WordPress 网站可更新，必须是非负整数；统计发生变化时一并提供 `content_stats_updated_date`。
+- `page_count`、`calculator_count`、`article_count`：所有技术栈均可更新，必须是非负整数；统计发生变化时一并提供 `content_stats_updated_date`。
 - `potential`：只有我明确提供或确认时才修改，最多 2000 个字符。
 
 不要根据任务结果推断未明确提及的网站资料。不要把估算点击量写成 GSC 实际点击量。
@@ -131,4 +131,6 @@ Content-Type: application/json
 
 ## 通用内容数量（v1.24）
 
-所有技术栈使用 `page_count`、`calculator_count`、`article_count` 及 `content_stats_updated_date`。未知不覆盖，确定为零写入 0；统计指公开内容页面，不是已收录页面。旧 `wp_calculator_count` / `wp_article_count` 仍可读写，与新字段冲突时请求失败。`computer_name` 属于网站。经营场景只作历史兼容，不需补充，不用于决定数量字段。
+所有技术栈使用 `page_count`、`calculator_count`、`article_count` 及 `content_stats_updated_date`。未知不覆盖，确定为零写入 0；统计指公开内容页面，不是已收录页面。旧 `calculator_count` / `article_count` 仍可读写，与新字段冲突时请求失败。`computer_name` 属于网站。经营场景只作历史兼容，不需补充，不用于决定数量字段。
+
+网站电脑只使用 `computer_name`；内容三项分别记录，不相加推算页面总量。接口不接受旧字段别名。

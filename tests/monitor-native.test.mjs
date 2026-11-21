@@ -26,7 +26,6 @@ test('Cloudflare fetches and decodes the page title then cancels the rest of the
   assert.deepEqual(data.methods, ['GET'])
   assert.equal(data.result.outcome, 'healthy')
   assert.equal(data.result.http_status, 200)
-  assert.equal(data.result.content_complete, false)
   assert.equal(data.result.title, 'Domain & 停放')
   assert.equal(data.cancelled, true)
   assert.ok(data.chunks <= 2)

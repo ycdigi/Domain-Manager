@@ -21,12 +21,13 @@ export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
         const data = await context.request.json() as AdsenseIncome
-        if (!Number.isInteger(data.adsense_account_id) || Number(data.adsense_account_id) <= 0 || !validMonth(data.income_month) || !validMoney(data.amount_usd ?? data.amount) || (data.amount_cny != null && !validMoney(data.amount_cny)) || (data.transfer_date != null && data.transfer_date !== '' && !isValidDate(data.transfer_date))) return json(null, 400, '账号、月份、金额或转账日期格式不正确')
+        if (Object.keys(data).some(key => !['adsense_account_id','income_month','amount_usd','amount_cny','transfer_date','memo'].includes(key))) return Response.json({status:400,message:'收入包含不支持的字段',data:null},{status:400})
+        if (!Number.isInteger(data.adsense_account_id) || Number(data.adsense_account_id) <= 0 || !validMonth(data.income_month) || !validMoney(data.amount_usd) || (data.amount_cny != null && !validMoney(data.amount_cny)) || (data.transfer_date != null && data.transfer_date !== '' && !isValidDate(data.transfer_date))) return json(null, 400, '账号、月份、金额或转账日期格式不正确')
         if (!await context.env.DB.prepare('SELECT id FROM adsense_accounts WHERE id=?').bind(data.adsense_account_id).first()) return json(null, 400, 'AdSense 账号不存在')
-        const amountUsd = data.amount_usd ?? data.amount
-        const result = await context.env.DB.prepare(`INSERT INTO adsense_income (adsense_account_id, income_month, amount, amount_usd, amount_cny, transfer_date, memo)
-            VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(adsense_account_id, income_month) DO UPDATE SET amount=excluded.amount, amount_usd=excluded.amount_usd, amount_cny=excluded.amount_cny, transfer_date=excluded.transfer_date, memo=excluded.memo RETURNING *`)
-            .bind(data.adsense_account_id, data.income_month, amountUsd, amountUsd, data.amount_cny ?? null, data.transfer_date || null, data.memo || '').first()
+        const amountUsd = data.amount_usd
+        const result = await context.env.DB.prepare(`INSERT INTO adsense_income (adsense_account_id, income_month, amount_usd, amount_cny, transfer_date, memo)
+            VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT(adsense_account_id, income_month) DO UPDATE SET amount_usd=excluded.amount_usd, amount_cny=excluded.amount_cny, transfer_date=excluded.transfer_date, memo=excluded.memo RETURNING *`)
+            .bind(data.adsense_account_id, data.income_month, amountUsd, data.amount_cny ?? null, data.transfer_date || null, data.memo || '').first()
         return json(result, 200, '收入已保存')
     } catch (error) { return json(null, 409, error instanceof Error ? error.message : '收入保存失败') }
 }

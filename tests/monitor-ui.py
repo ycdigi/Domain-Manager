@@ -5,16 +5,16 @@ import os
 from playwright.sync_api import sync_playwright, expect
 
 monitor = dict(website_id=1, website_name='Monitor site', domain='example.test', domain_id=1,
-    enabled=True, effective_enabled=True, status='review', reason='title_changed', http_status=200,
-    response_ms=120, final_url='https://example.test/', title='Latest title', baseline_title='Old title',
-    checked_at='2026-11-12T01:00:00Z', next_check_at='2026-11-12T13:00:00Z', required_text=[], forbidden_text=[],
+    enabled=True, effective_enabled=True, status='pending', reason='http_error', http_status=503,
+    response_ms=120, final_url='https://example.test/', title='Latest title',
+    checked_at='2026-11-12T01:00:00Z', next_check_at='2026-11-12T13:00:00Z',
     allowed_redirect_hosts=[], consecutive_failures=0)
 healthy_monitor = dict(website_id=2, website_name='Healthy site', domain='healthy.example.test', domain_id=2,
     enabled=True, effective_enabled=True, status='healthy', reason='healthy', http_status=200,
-    response_ms=80, final_url='https://healthy.example.test/', title='Healthy title', baseline_title='Healthy title',
-    checked_at='2026-11-12T01:00:00Z', next_check_at='2026-11-12T13:00:00Z', required_text=[], forbidden_text=[],
+    response_ms=80, final_url='https://healthy.example.test/', title='Healthy title',
+    checked_at='2026-11-12T01:00:00Z', next_check_at='2026-11-12T13:00:00Z',
     allowed_redirect_hosts=[], consecutive_failures=0)
-incident = dict(id=1, website_id=1, website_name='Monitor site', domain='example.test', reason='title_changed',
+incident = dict(id=1, website_id=1, website_name='Monitor site', domain='example.test', reason='http_error',
     opened_at='2026-11-12T01:00:00Z', last_seen_at='2026-11-12T01:00:00Z', resolved_at=None, read_at=None)
 site = dict(id=1, name='Monitor site', stage='维护', lifecycle='active', ownership='自营网站', platform='Astro',
     industry='资讯站', next_action_status='待做', domains=[], adsense_connected='未知', gsc_connected='未知')
@@ -56,13 +56,13 @@ with sync_playwright() as p:
                 code = 409
             elif method == 'POST':
                 monitor.update(status='healthy', reason='healthy', title='Current page title')
-            history = [dict(id=1, website_id=1, domain='previous.example.test', checked_at='2026-11-11T01:00:00Z', outcome='failure', reason='http_error', http_status=429, response_ms=120, final_url='https://example.test/', title='Latest title', content_complete=True),
-                dict(id=3, website_id=1, domain='example.test', checked_at='2026-11-10T01:00:00Z', outcome='incomplete', reason='content_extraction_limit', http_status=200, response_ms=100, final_url='https://example.test/', title=None, content_complete=False)]
+            history = [dict(id=1, website_id=1, domain='previous.example.test', checked_at='2026-11-11T01:00:00Z', outcome='failure', reason='http_error', http_status=429, response_ms=120, final_url='https://example.test/', title='Latest title'),
+                dict(id=3, website_id=1, domain='example.test', checked_at='2026-11-10T01:00:00Z', outcome='healthy', reason='healthy', http_status=200, response_ms=100, final_url='https://example.test/', title=None)]
             if state['sample_present']:
                 history.insert(0, dict(id=2, website_id=1, domain=monitor['domain'], checked_at=monitor['checked_at'],
                     outcome=monitor['status'], reason=monitor['reason'], http_status=monitor['http_status'],
                     response_ms=monitor['response_ms'], final_url=monitor['final_url'],
-                    title=state.get('sample_title', monitor['title']), content_complete=state['sample_complete']))
+                    title=state.get('sample_title', monitor['title'])))
             data = dict(monitor=monitor, history=history, incidents=[incident])
         elif path == 'websites':
             data = [site, healthy_site]
@@ -80,7 +80,7 @@ with sync_playwright() as p:
     expect(row.locator('td').nth(1)).to_have_text('Latest title')
     expect(page.locator('.workspace-heading .monitor-filters')).to_be_visible()
     expect(page.get_by_text('上次巡检 2026/11/12 09:00:00 · 上海时间', exact=True)).to_be_visible()
-    expect(row).to_contain_text('旧检查/待重新检查')
+    expect(row).to_contain_text('待确认')
     expect(row).not_to_contain_text('旧版内容检查')
     expect(row).not_to_contain_text('内容检查未完成')
     expect(row).to_contain_text('2026/11/12 21:00:00')
@@ -109,7 +109,7 @@ with sync_playwright() as p:
     expect(panel).to_contain_text('访问受限（HTTP 429）')
     expect(panel).to_contain_text('previous.example.test')
     expect(panel).to_contain_text('HTTP 正常不等于网站安全')
-    expect(panel).to_contain_text('旧版内容检查')
+    expect(panel).to_contain_text('响应正常')
     expect(panel).not_to_contain_text('内容检查未完成')
     for label in ['必须包含的文本', '禁止包含的文本']:
         expect(panel.get_by_label(label)).to_have_count(0)
@@ -159,14 +159,6 @@ with sync_playwright() as p:
     panel.get_by_role('button', name='保存监控配置').click()
     expect(panel.get_by_role('button', name='保存监控配置')).to_be_disabled()
     assert patches[-1] == dict(enabled=True, allowed_redirect_hosts=['cdn.example.test', 'www.example.test'])
-    for legacy_status, reason in [('review', 'title_changed'), ('incomplete', 'content_extraction_limit'), ('incomplete', 'html_extraction_limit')]:
-        monitor.update(status=legacy_status, reason=reason)
-        with page.expect_response(lambda response: response.url.endswith('/api/websites/1/monitor') and response.request.method == 'GET'):
-            panel.get_by_role('button', name='刷新监控').click()
-        expect(panel.get_by_role('button', name='刷新监控')).to_be_enabled()
-        expect(panel.locator('.monitor-actions').first).to_contain_text('旧检查/待重新检查')
-        expect(panel.locator('.monitor-actions').first).not_to_contain_text('旧版内容检查')
-        expect(panel).not_to_contain_text('内容检查未完成')
     hosts.fill('unsaved.example.test')
     page.get_by_role('button', name='Close this dialog').click()
     expect(page.get_by_text('尚有未保存的修改，是否放弃？')).to_be_visible()
@@ -188,6 +180,7 @@ with sync_playwright() as p:
     expect(panel).to_have_count(0)
     page.get_by_role('button', name='网站总表', exact=True).first.click()
     page.get_by_role('button', name='Monitor site', exact=True).click()
+    page.get_by_role('tab', name='监控', exact=True).click()
     expect(page.locator('.website-monitor-panel')).to_have_count(1)
     expect(page.get_by_role('dialog')).to_have_count(1)
     page.get_by_role('button', name='Close this dialog').click()
@@ -220,7 +213,7 @@ with sync_playwright() as p:
     page.get_by_role('button', name='重试', exact=True).click()
     expect(page.get_by_text('暂无网站监控')).to_be_visible()
     page.set_viewport_size({'width': 390, 'height': 844})
-    expect(page.locator('.monitor-filters')).to_be_hidden()
+    expect(page.locator('.monitor-filters')).to_be_visible()
     assert not errors, errors
     browser.close()
 print('Monitor UI passed')

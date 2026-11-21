@@ -20,6 +20,7 @@
 import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
+import { websiteQuery } from '../utils/website-location'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import { cachedValue } from '../utils/workspaceCache'
 import { getWebsites, type Website } from '../api/websites'
@@ -43,7 +44,7 @@ const busy = reactive(new Set<number>()); const rowErrors = reactive<Record<numb
 const load = async (force = false) => { loading.value = true; error.value = ''; try { await getMonitorOverview(force); now.value = Date.now() } catch (e) { error.value = monitorError(e) } finally { loading.value = false } }
 const loadSites = async (force = false) => { detailError.value = ''; try { await getWebsites(force) } catch (e) { detailError.value = monitorError(e) } }
 const refreshSites = () => { void loadSites(true); void load(true) }
-const openSite = (id: number) => { void loadSites(); void router.push({ query: { ...route.query, site: String(id) } }) }
+const openSite = (id: number) => { void loadSites(); void router.push({ query: websiteQuery(id, 'monitor', route.query) }) }
 const closeSite = (visible: boolean) => { if (!visible) { const query = { ...route.query }; delete query.site; void router.push({ query }) } }
 const mutate = async (id: number, action: () => Promise<unknown>) => { if (busy.has(id)) return; busy.add(id); rowErrors[id] = ''; try { await action() } catch (e) { rowErrors[id] = monitorError(e) } finally { busy.delete(id) } }
 const check = (id: number) => mutate(id, () => checkMonitor(id))

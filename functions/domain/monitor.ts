@@ -2,7 +2,7 @@ import { checkWebsite, type MonitorCheckResult } from '../../shared/site-monitor
 
 export type MonitorState = {
     website_id: number; domain_id: number | null; domain: string | null; enabled: number
-    required_text: string; forbidden_text: string; allowed_redirect_hosts: string; baseline_title: string | null
+    allowed_redirect_hosts: string
     status: string; reason: string | null; http_status: number | null; response_ms: number | null
     final_url: string | null; title: string | null; checked_at: string | null; next_check_at: string
     consecutive_failures: number; config_version: number; lease_token: string | null; lease_until: string | null
@@ -16,9 +16,9 @@ const isoAfter = (now: string, ms: number) => new Date(Date.parse(now) + ms).toI
 const effective = (row: JoinedMonitor) => Boolean(row.enabled && row.domain && row.lifecycle === 'active' && row.stage !== '暂停')
 export const presentMonitor = (row: JoinedMonitor) => ({
     ...row, enabled: Boolean(row.enabled), effective_enabled: effective(row),
-    status: effective(row) ? ['review', 'incomplete'].includes(row.status) ? 'unchecked' : row.status : 'disabled',
-    reason: ['review', 'incomplete'].includes(row.status) ? null : row.reason,
-    required_text: JSON.parse(row.required_text), forbidden_text: JSON.parse(row.forbidden_text), allowed_redirect_hosts: JSON.parse(row.allowed_redirect_hosts),
+    status: effective(row) ? row.status : 'disabled',
+    reason: row.reason,
+    allowed_redirect_hosts: JSON.parse(row.allowed_redirect_hosts),
     lease_token: undefined, lease_until: undefined, config_version: undefined, lifecycle: undefined, stage: undefined
 })
 
@@ -30,7 +30,7 @@ export const getMonitorDetail = async (db: D1Database, id: number) => {
         db.prepare('SELECT * FROM website_monitor_checks WHERE website_id=? ORDER BY checked_at DESC,id DESC LIMIT 100').bind(id).all(),
         db.prepare('SELECT * FROM website_monitor_incidents WHERE website_id=? ORDER BY opened_at DESC,id DESC LIMIT 100').bind(id).all()
     ])
-    return { monitor: presentMonitor(row), history: (history.results || []).map(row => ({ ...row, content_complete: Boolean(row.content_complete) })), incidents: incidents.results || [] }
+    return { monitor: presentMonitor(row), history: history.results || [], incidents: incidents.results || [] }
 }
 export const getMonitorOverview = async (db: D1Database) => {
     const [rows, incidents, runner, unread] = await Promise.all([
@@ -44,15 +44,14 @@ export const getMonitorOverview = async (db: D1Database) => {
 
 export const validateMonitorPatch = (body: Record<string, unknown>) => {
     const keys = Object.keys(body)
-    if (!keys.length || keys.some(key => !['enabled', 'required_text', 'forbidden_text', 'allowed_redirect_hosts', 'baseline_title'].includes(key))) return '监控配置包含不支持的字段'
+    if (!keys.length || keys.some(key => !['enabled', 'allowed_redirect_hosts'].includes(key))) return '监控配置包含不支持的字段'
     if ('enabled' in body && typeof body.enabled !== 'boolean') return '启用状态必须为布尔值'
-    for (const key of ['required_text', 'forbidden_text', 'allowed_redirect_hosts']) {
+    for (const key of ['allowed_redirect_hosts']) {
         if (!(key in body)) continue
         const items = body[key]
         if (!Array.isArray(items) || items.length > 20 || items.some(item => typeof item !== 'string' || !item.trim() || item.length > 500)) return '每组规则最多 20 条，每条为 1–500 个字符'
         if (key === 'allowed_redirect_hosts' && items.some(host => !/^(?=.{3,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(host) || /(?:^|\.)(?:localhost|local|internal|test|invalid)$/i.test(host))) return '允许跳转域名必须为公网主机名，不能包含协议或路径'
     }
-    if ('baseline_title' in body && body.baseline_title !== null && (typeof body.baseline_title !== 'string' || body.baseline_title.length > 1000)) return '标题参考值不能超过 1000 个字符'
     return null
 }
 export const patchMonitor = async (db: D1Database, id: number, body: Record<string, unknown>) => {
@@ -95,8 +94,8 @@ const saveResult = async (db: D1Database, row: MonitorState, result: MonitorChec
     // Re-check the primary domain and configuration inside every write: a fetch can outlive an edit.
     const guard = `EXISTS(SELECT 1 FROM website_monitors m JOIN domains d ON d.id=m.domain_id WHERE m.website_id=? AND m.lease_token=? AND m.config_version=? AND d.id=? AND d.domain=? AND d.is_primary=1 AND d.website_id=m.website_id${automatic ? " AND m.enabled=1 AND EXISTS(SELECT 1 FROM websites w WHERE w.id=m.website_id AND w.lifecycle='active' AND w.stage<>'暂停')" : ''})`
     const bindings = [row.website_id, token, row.config_version, row.domain_id, row.domain]
-    const statements = [db.prepare(`INSERT INTO website_monitor_checks (website_id,domain,checked_at,outcome,reason,http_status,response_ms,final_url,title,content_complete)
-        SELECT ?,?,?,?,?,?,?,?,?,? WHERE ${guard}`).bind(row.website_id, row.domain, now, result.outcome, result.reason, result.http_status, Math.round(result.response_ms), result.final_url, result.title, Number(result.content_complete), ...bindings)]
+    const statements = [db.prepare(`INSERT INTO website_monitor_checks (website_id,domain,checked_at,outcome,reason,http_status,response_ms,final_url,title)
+        SELECT ?,?,?,?,?,?,?,?,? WHERE ${guard}`).bind(row.website_id, row.domain, now, result.outcome, result.reason, result.http_status, Math.round(result.response_ms), result.final_url, result.title, ...bindings)]
     if (status === 'failure') {
         statements.push(db.prepare(`INSERT INTO website_monitor_incidents(website_id,domain,reason,opened_at,last_seen_at)
             SELECT ?,?,?,?,? WHERE ${guard} ON CONFLICT(website_id) WHERE resolved_at IS NULL DO UPDATE SET reason=excluded.reason,last_seen_at=excluded.last_seen_at`)
@@ -107,8 +106,8 @@ const saveResult = async (db: D1Database, row: MonitorState, result: MonitorChec
     if (result.available !== null) statements.push(db.prepare(`UPDATE domains SET status=?,last_status_check_at=? WHERE id=? AND ${guard}`)
         .bind(result.available ? '在线' : '离线', new Date(Date.parse(now) + 8 * 3_600_000).toISOString().slice(0, 10), row.domain_id, ...bindings))
     statements.push(db.prepare(`UPDATE website_monitors SET status=?,reason=?,http_status=?,response_ms=?,final_url=?,title=?,checked_at=?,next_check_at=?,consecutive_failures=?,
-        baseline_title=CASE WHEN baseline_title IS NULL AND ?='healthy' THEN ? ELSE baseline_title END,lease_token=NULL,lease_until=NULL WHERE website_id=? AND ${guard}`)
-        .bind(status, result.reason, result.http_status, Math.round(result.response_ms), result.final_url, result.title, now, next, failures, status === 'healthy' && result.content_complete ? 'healthy' : 'incomplete', result.title ?? '', row.website_id, ...bindings))
+        lease_token=NULL,lease_until=NULL WHERE website_id=? AND ${guard}`)
+        .bind(status, result.reason, result.http_status, Math.round(result.response_ms), result.final_url, result.title, now, next, failures, row.website_id, ...bindings))
     statements.push(db.prepare('UPDATE website_monitors SET lease_token=NULL,lease_until=NULL WHERE website_id=? AND lease_token=?').bind(row.website_id, token))
     if (runnerToken) statements.push(db.prepare('UPDATE monitor_runner SET last_completed_at=?,last_error=NULL,lease_token=NULL,lease_until=NULL WHERE id=1 AND lease_token=?').bind(now, runnerToken))
     await db.batch(statements)

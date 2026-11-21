@@ -5,9 +5,3 @@ export const isSiteOwnership = (value: unknown): value is SiteOwnership =>
 
 export const websiteIndustries = ['计算器', '资讯站', '其他'] as const
 export type WebsiteIndustry = typeof websiteIndustries[number]
-export const isWebsiteIndustry = (value: unknown): value is WebsiteIndustry =>
-    typeof value === 'string' && websiteIndustries.includes(value as WebsiteIndustry)
-export const normalizeWebsiteIndustry = (value: unknown): WebsiteIndustry | null => {
-    if (value == null || value === '') return null
-    return isWebsiteIndustry(value) ? value : '其他'
-}

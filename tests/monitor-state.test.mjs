@@ -5,7 +5,7 @@ import { database } from './helpers/database.mjs'
 const server = await createServer({ configFile: false, optimizeDeps: { noDiscovery: true, include: [] }, server: { middlewareMode: true, hmr: false }, appType: 'custom' })
 const store = database()
 const now = '2026-11-12T00:00:00.000Z'
-const failure = { outcome: 'failure', reason: 'HTTP 500', http_status: 500, response_ms: 50, final_url: 'https://one.test/', title: null, content_complete: true, available: false }
+const failure = { outcome: 'failure', reason: 'HTTP 500', http_status: 500, response_ms: 50, final_url: 'https://one.test/', title: null, available: false }
 const healthy = { ...failure, outcome: 'healthy', reason: '', http_status: 200, available: true, title: 'One' }
 let monitor
 beforeEach(() => {
@@ -46,17 +46,15 @@ test('two failures open one incident, read does not resolve it, and success reco
   await m.checkOne(store.db, 1, { now: '2026-11-12T00:15:00.000Z', checker: async () => healthy })
   row = store.sql('SELECT * FROM website_monitors WHERE website_id=1')[0]
   assert.equal(row.status, 'healthy'); assert.equal(row.consecutive_failures, 0)
-  assert.equal(row.next_check_at, '2026-11-12T12:15:00.000Z'); assert.equal(row.baseline_title, 'One')
+  assert.equal(row.next_check_at, '2026-11-12T12:15:00.000Z')
   assert.equal(store.sql('SELECT resolved_at FROM website_monitor_incidents')[0].resolved_at, '2026-11-12T00:15:00.000Z')
 })
 
-test('title review and incomplete content stay separate from domain availability', async () => {
-  const m = await load();
-  await m.checkOne(store.db, 1, { now, checker: async () => ({ ...healthy, outcome: 'review', reason: '标题发生变化' }) })
-  assert.equal(store.sql('SELECT status FROM domains WHERE id=1')[0].status, '在线')
-  assert.equal(store.sql('SELECT status FROM website_monitors WHERE website_id=1')[0].status, 'review')
-  await m.checkOne(store.db, 1, { now, checker: async () => ({ ...healthy, outcome: 'incomplete', reason: '内容检查未完成', content_complete: false }) })
-  assert.equal(store.sql('SELECT status FROM website_monitors WHERE website_id=1')[0].status, 'incomplete')
+test('title changes keep a normal HTTP response healthy', async () => {
+ const m=await load()
+ await m.checkOne(store.db,1,{now,checker:async()=>({...healthy,title:'Changed title'})})
+ assert.equal(store.sql('SELECT status FROM domains WHERE id=1')[0].status,'在线')
+ assert.equal(store.sql('SELECT status,title FROM website_monitors WHERE website_id=1')[0].status,'healthy')
 })
 
 test('a lease prevents overlapping checks and a changed primary domain rejects stale results', async () => {
@@ -70,7 +68,7 @@ test('a lease prevents overlapping checks and a changed primary domain rejects s
   release(healthy); await running
   assert.equal(store.sql('SELECT * FROM website_monitor_checks').length, 0)
   const row = store.sql('SELECT * FROM website_monitors WHERE website_id=1')[0]
-  assert.equal(row.domain, 'new.test'); assert.equal(row.baseline_title, null); assert.equal(row.status, 'unchecked')
+  assert.equal(row.domain, 'new.test'); assert.equal(row.status, 'unchecked')
 })
 
 test('a free-budget scheduled tick checks one of 100 sites, excludes paused/stopped, and prunes old checks', async () => {
@@ -100,7 +98,7 @@ test('changing primary resolves the old-domain incident and resets the title sam
   store.sql("UPDATE domains SET is_primary=0 WHERE id=1; INSERT INTO domains(id,website_id,domain,registrar,registrar_date,expiry_date,service_type) VALUES(4,1,'other.test','r','2026-01-01','2027-01-01','网站');")
 
   const row=store.sql('SELECT * FROM website_monitors WHERE website_id=1')[0]
-  assert.equal(row.domain_id,4);assert.equal(row.baseline_title,null);assert.equal(row.consecutive_failures,0)
+  assert.equal(row.domain_id,4);assert.equal(row.consecutive_failures,0)
   assert.ok(store.sql('SELECT resolved_at FROM website_monitor_incidents')[0].resolved_at)
   assert.equal(store.sql('SELECT domain FROM website_monitor_checks LIMIT 1')[0].domain,'one.test')
 })
@@ -110,7 +108,7 @@ test('configuration edited during a fetch rejects the old check and legacy statu
   let release
   const running=m.checkOne(store.db,1,{now,checker:()=>new Promise(resolve=>{release=resolve})})
   while(!release) await new Promise(resolve=>setTimeout(resolve,0))
-  await m.patchMonitor(store.db,1,{required_text:['new rule']})
+  await m.patchMonitor(store.db,1,{allowed_redirect_hosts:['cdn.example.com']})
   release(healthy);await running
   assert.equal(store.sql('SELECT * FROM website_monitor_checks').length,0)
   await m.checkOne(store.db,1,{now:'2026-11-12T23:00:00.000Z',checker:async()=>healthy})
@@ -157,12 +155,11 @@ test('scheduled results are discarded when a site is disabled while checking; ma
   assert.equal(store.sql('SELECT COUNT(*) AS n FROM website_monitor_checks WHERE website_id=1')[0].n,1)
 })
 
-test('an incomplete representation does not initialize a missing-title baseline',async()=>{
-  const m=await load()
-  await m.checkOne(store.db,1,{now,checker:async()=>({...healthy,title:null,content_complete:false})})
-  assert.equal(store.sql('SELECT baseline_title FROM website_monitors WHERE website_id=1')[0].baseline_title,null)
-  await m.checkOne(store.db,1,{now,checker:async()=>({...healthy,title:null})})
-  assert.equal(store.sql('SELECT baseline_title FROM website_monitors WHERE website_id=1')[0].baseline_title,'')
+test('a missing title keeps a normal HTTP result and stores null',async()=>{
+ const m=await load()
+ await m.checkOne(store.db,1,{now,checker:async()=>({...healthy,title:null})})
+ const detail=await m.getMonitorDetail(store.db,1)
+ assert.equal(detail.monitor.title,null);assert.equal(detail.history[0].title,null);assert.equal(detail.monitor.status,'healthy')
 })
 
 test('a full scheduled check uses at most three D1 round trips including heartbeat and result writes',async()=>{
@@ -190,10 +187,9 @@ test('automatic leasing skips a website already rescheduled by a completed manua
 
 test('a fetched page title is saved in current state and retained in its check history',async()=>{
   const m=await load()
-  await m.checkOne(store.db,1,{now,checker:async()=>({...healthy,title:'Expired domain | Registrar parking',content_complete:false})})
+  await m.checkOne(store.db,1,{now,checker:async()=>({...healthy,title:'Expired domain | Registrar parking'})})
   const detail=await m.getMonitorDetail(store.db,1)
   assert.equal(detail.monitor.title,'Expired domain | Registrar parking')
   assert.equal(detail.history[0].title,'Expired domain | Registrar parking')
-  assert.equal(detail.monitor.baseline_title,null)
   assert.equal(detail.monitor.status,'healthy')
 })

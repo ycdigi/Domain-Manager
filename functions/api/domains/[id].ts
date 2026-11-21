@@ -4,7 +4,7 @@ import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const editable = ['website_id', 'domain', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'domain_role', 'is_primary', 'computer_name'] as const
+const editable = ['website_id', 'domain', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'status', 'memo', 'domain_role', 'is_primary'] as const
 
 const ensurePrimary = async (db: D1Database, websiteId: number | null) => {
     if (websiteId == null) return
@@ -51,9 +51,18 @@ export const onRequestPut: PagesFunction<Env> = async context => {
             }
         }
         if (!Object.keys(changes).length) return json(current)
+        if (body.domain_role !== undefined && body.is_primary !== undefined && (body.domain_role === '主域名') !== (body.is_primary === true || body.is_primary === 1)) return json(null, 400, '主域名标记与用途不一致')
+        if (body.domain_role !== undefined) changes.is_primary = body.domain_role === '主域名' ? 1 : 0
+        if (changes.is_primary === true || changes.is_primary === 1) changes.domain_role = '主域名'
+        else if (changes.is_primary !== undefined && (changes.domain_role || current.domain_role) === '主域名') changes.domain_role = '备用域名'
+        if (!moving && current.is_primary && changes.is_primary === 0 && nextWebsiteId !== null) return json(null, 400, '请先将其他域名设为主域名')
+        if (nextWebsiteId === null) { changes.is_primary=0; if ((changes.domain_role || current.domain_role) === '主域名') changes.domain_role='备用域名' }
         const isPrimary = changes.is_primary === true || changes.is_primary === 1
-        if (isPrimary && nextWebsiteId !== null) await db.prepare('UPDATE domains SET is_primary=0 WHERE website_id=? AND id<>?').bind(nextWebsiteId, id).run()
-        const result = await db.prepare(`UPDATE domains SET ${Object.keys(changes).map(key => `${key}=?`).join(', ')} WHERE id=? RETURNING *`).bind(...Object.entries(changes).map(([key, value]) => key === 'is_primary' ? (isPrimary ? 1 : 0) : value), id).first()
+        const statements: D1PreparedStatement[] = []
+        if (isPrimary && nextWebsiteId !== null) statements.push(db.prepare("UPDATE domains SET is_primary=0, domain_role=CASE WHEN domain_role='主域名' THEN '备用域名' ELSE domain_role END WHERE website_id=? AND id<>?").bind(nextWebsiteId, id))
+        statements.push(db.prepare(`UPDATE domains SET ${Object.keys(changes).map(key => `${key}=?`).join(', ')} WHERE id=? RETURNING *`).bind(...Object.entries(changes).map(([key, value]) => key === 'is_primary' ? (isPrimary ? 1 : 0) : value), id))
+        const results = await db.batch(statements)
+        const result = results[results.length - 1].results[0]
         if (moving) await ensurePrimary(db, oldWebsiteId)
         await ensurePrimary(db, nextWebsiteId)
         if (context.waitUntil) context.waitUntil(cacheDomainFavicon(context.env.DB, id))

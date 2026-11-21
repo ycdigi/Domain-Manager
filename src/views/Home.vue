@@ -1,5 +1,5 @@
 <template>
-  <div class="home-container portfolio-page">
+  <div class="workspace-page">
     <WorkspaceHeading title="网站总表" subtitle="网站、部署位置与开发资料"
       ><el-button :loading="loading" @click="load(true)">刷新</el-button
       ><el-button type="primary" @click="createVisible = true">新增网站</el-button></WorkspaceHeading
@@ -40,6 +40,11 @@
         ><el-option v-for="value in providerNames" :key="value" :label="value" :value="value"
       /></el-select>
     </div>
+    <div class="site-results">
+      <span role="status">{{ visibleSites.length }} / {{ websites.length }} 个网站</span>
+      <el-tag v-for="condition in activeFilters" :key="condition.key" closable @close="filter(condition.key, '')">{{ condition.label }}</el-tag>
+      <el-button v-if="activeFilters.length" text @click="clearFilters">清除全部条件</el-button>
+    </div>
     <nav class="portfolio-stage-tabs site-view-tabs" aria-label="网站状态">
       <button
         v-for="tab in views"
@@ -62,9 +67,10 @@
       ><el-button v-else :loading="busy" @click="bulk({ lifecycle: 'active' })">恢复经营</el-button
       ><el-button @click="selectedIds.clear()">取消选择</el-button>
     </div>
-    <section class="portfolio-stage portfolio-list">
-      <div class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动">
-        <table class="portfolio-table site-table">
+    <section class="portfolio-stage portfolio-list" :aria-busy="loading">
+      <p id="table-scroll-hint" class="site-scroll-hint">左右滚动查看完整资料；宽屏下网站和操作固定。</p>
+      <div class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动" aria-describedby="table-scroll-hint">
+        <table class="portfolio-table site-table" :style="{ minWidth: columns.reduce((sum, col) => sum + col.width, 0) + 'px' }">
           <caption class="sr-only">
             网站总表，共
             {{
@@ -137,18 +143,18 @@
                   :title="
                     site.content_stats_updated_date ? `统计日期：${site.content_stats_updated_date}` : '未记录统计日期'
                   "
-                  @click="openSite(site)"
+                  @click="openSite(site, 'content')"
                 >
                   {{ site[key] ?? '—' }}
                 </button>
               </td>
               <td>
-                <button class="site-cell" :title="site.clicks_updated_date || '未记录统计日期'" @click="openSite(site)">
+                <button class="site-cell" :title="site.clicks_updated_date || '未记录统计日期'" @click="openSite(site, 'content')">
                   {{ clickLabel(site) }}
                 </button>
               </td>
               <td>
-                <button class="site-cell" :title="site.hosting?.name" @click="openSite(site)">
+                <button class="site-cell" :title="site.hosting?.name" @click="openSite(site, 'deployment')">
                   {{ site.hosting?.provider_name || '—' }}
                 </button>
               </td>
@@ -160,7 +166,7 @@
                   target="_blank"
                   rel="noopener noreferrer"
                   >{{ site.repository.name }}</a
-                ><button v-else class="site-cell" @click="openSite(site)">—</button>
+                ><button v-else class="site-cell" @click="openSite(site, 'deployment')">—</button>
               </td>
               <td>
                 <button
@@ -222,7 +228,11 @@
           </tbody>
         </table>
       </div>
-      <p v-if="!loading && !visibleSites.length" class="portfolio-empty">没有符合条件的网站。</p>
+      <p v-if="loading && !websites.length" class="portfolio-empty">正在加载网站…</p>
+      <div v-else-if="!error && !visibleSites.length" class="portfolio-empty">
+        <template v-if="!websites.length">还没有网站，点击新增网站开始管理。</template>
+        <template v-else>没有符合条件的网站。<el-button text @click="clearFilters">清除筛选</el-button></template>
+      </div>
     </section>
     <p role="status" class="sr-only">
       {{
@@ -269,6 +279,7 @@ import {
   type WebsiteStage
 } from '../api/websites'
 import { getBatches, assignBatch, type Batch, type BatchAssignmentPayload } from '../api/batches'
+import { websiteQuery, type WebsiteSection } from '../utils/website-location'
 import { api } from '../utils/request'
 import { copyText } from '../utils/clipboard'
 import { confirmAction, isDismissed } from '../utils/feedback'
@@ -297,15 +308,18 @@ const batches = ref<Batch[]>([])
 const websites = ref<Website[]>([])
 const loading = ref(false)
 const error = ref('')
-const search = ref('')
+const search = computed({ get: () => String(route.query.q || ''), set: value => { const query = { ...route.query }; if (value) query.q = value; else delete query.q; void router.replace({ query }) } })
 const busy = ref(false)
 const copying = ref<number>()
 const selectedIds = reactive(new Set<number>())
 const bulkStage = ref<WebsiteStage>('待评估')
 const batchVisible = ref(false)
 const createVisible = ref(false)
-const sortKey = ref('')
-const sortDirection = ref<'asc' | 'desc'>('asc')
+const sortKey = computed({ get: () => String(route.query.sort || ''), set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
+const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')
+const filterLabels: Record<string, string> = { ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', new: '新站', view: '状态', q: '搜索' }
+const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'new' ? '是' : key === 'view' ? '停止经营' : route.query[key]}` })))
+const clearFilters = () => { const query = { ...route.query }; for (const key of Object.keys(filterLabels)) delete query[key]; void router.push({ query }) }
 const views = [
   { value: 'active', label: '经营中' },
   { value: 'stopped', label: '停止经营' }
@@ -389,16 +403,13 @@ watch(visibleSites, (sites) => {
 const filter = (key: string, value: string) => {
   const query = { ...route.query }
   delete query.site
+      delete query.section
   if (value) query[key] = value
   else delete query[key]
   void router.push({ query })
 }
 const toggleSort = (key: string) => {
-  if (sortKey.value === key) sortDirection.value = sortDirection.value === 'asc' ? 'desc' : 'asc'
-  else {
-    sortKey.value = key
-    sortDirection.value = 'asc'
-  }
+  void router.replace({ query: { ...route.query, sort: key, direction: sortKey.value === key && sortDirection.value === 'asc' ? 'desc' : 'asc' } })
 }
 const selectedSite = computed(() => websites.value.find((s) => s.id === Number(route.query.site)))
 const detailVisible = computed({
@@ -407,18 +418,20 @@ const detailVisible = computed({
     if (!value) {
       const query = { ...route.query }
       delete query.site
+      delete query.section
       void router.replace({ query })
     }
   }
 })
-const openSite = (site: Website) => {
-  void router.push({ query: { ...route.query, site: String(site.id) } })
+const openSite = (site: Website, section: WebsiteSection = 'basic') => {
+  void router.push({ query: websiteQuery(site.id, section, route.query) })
 }
 const load = async (force = false) => {
   loading.value = true
   error.value = ''
   try {
-    ;[websites.value, batches.value] = await Promise.all([getWebsites(force), getBatches(force)])
+    websites.value = await getWebsites(force)
+    try { batches.value = await getBatches(force) } catch { ElMessage.warning('批次暂时无法读取，网站仍可查看') }
   } catch (e) {
     error.value = e instanceof Error ? e.message : '网站加载失败'
   } finally {

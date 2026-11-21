@@ -11,12 +11,11 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             SELECT a.*,
                    (SELECT c.token_last4 FROM provider_credentials c WHERE c.account_id=a.id AND c.is_default=1) AS default_token_last4,
                    (SELECT CASE WHEN c.expires_at IS NOT NULL AND c.expires_at<date('now') THEN '已到期' ELSE c.status END FROM provider_credentials c WHERE c.account_id=a.id AND c.is_default=1) AS default_token_status,
-                   COUNT(DISTINCT CASE WHEN r.identifier IS NULL OR r.identifier NOT LIKE 'account:%' THEN r.id END) AS resource_count,
-                   COUNT(DISTINCT dr.website_id) AS linked_website_count,
-                   COUNT(DISTINCT CASE WHEN r.status = '正常' AND (r.identifier IS NULL OR r.identifier NOT LIKE 'account:%') THEN r.id END) AS active_resource_count
+                   COUNT(DISTINCT r.id) AS resource_count,
+                   (SELECT COUNT(*) FROM (SELECT wr.website_id FROM website_resources wr JOIN provider_resources pr ON pr.id=wr.resource_id WHERE pr.account_id=a.id UNION SELECT wa.website_id FROM website_accounts wa WHERE wa.account_id=a.id)) AS linked_website_count,
+                   COUNT(DISTINCT CASE WHEN r.status = '正常' THEN r.id END) AS active_resource_count
             FROM provider_accounts a
             LEFT JOIN provider_resources r ON r.account_id = a.id
-            LEFT JOIN website_resources dr ON dr.resource_id = r.id
             GROUP BY a.id
             ORDER BY a.provider, a.name COLLATE NOCASE
         `).all<ProviderAccount>()

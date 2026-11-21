@@ -11,8 +11,8 @@ const members = await server.ssrLoadModule('/functions/api/batches/[id]/members.
 const assign = await server.ssrLoadModule('/functions/api/batches/assign.ts')
 const reviews = await server.ssrLoadModule('/functions/api/batches/[id]/reviews.ts')
 const workQueue = await server.ssrLoadModule('/functions/api/work-queue/index.ts')
-const snapshotApi = await server.ssrLoadModule('/functions/api/export/snapshot/index.ts')
-const importData = await server.ssrLoadModule('/functions/api/domains/import.ts')
+const snapshotApi = await server.ssrLoadModule('/functions/api/backups/index.ts')
+const importData = await server.ssrLoadModule('/functions/api/backups/index.ts')
 
 const store = database()
 let session
@@ -38,11 +38,9 @@ beforeEach(async () => {
 })
 after(async () => { store.close(); await server.close() })
 
-test('website scenarios expose page count and accept custom scenario notes', async () => {
-  const site = await createSite('Astro site', { operating_scenario: 'Astro 内容站', page_count: 18, scenario_note: '内容规模待复核', content_stats_updated_date: '2026-11-17' })
-  assert.equal(site.operating_scenario, 'Astro 内容站')
+test('website content counts are independent from stack', async () => {
+  const site = await createSite('Astro site', { page_count: 18, content_stats_updated_date: '2026-11-17' })
   assert.equal(site.page_count, 18)
-  assert.equal(site.scenario_note, '内容规模待复核')
   assert.equal((await call(sites.onRequestGet, context('/api/websites')))[0].page_count, 18)
   await call(sites.onRequestPost, context('/api/websites', { name: 'Bad scenario', page_count: -1, domain: { domain: 'bad-scenario.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 400)
 })
@@ -60,7 +58,7 @@ test('batches support multiple members and preserve removed membership history',
 })
 
 test('batch review request creates an immutable summary and changed data is flagged', async () => {
-  const site = await createSite('Review site', { platform: 'WordPress', operating_scenario: 'WordPress 计算器站', wp_calculator_count: 3, wp_article_count: 8, content_stats_updated_date: '2026-11-17' })
+  const site = await createSite('Review site', { platform: 'WordPress', calculator_count: 3, article_count: 8, content_stats_updated_date: '2026-11-17' })
   await call(batchList.onRequestPost, context('/api/batches', { name: 'Review batch' }, 'POST'), 201)
   await call(members.onRequestPost, context('/api/batches/1/members', { website_ids: [site.id] }, 'POST'))
   await call(reviews.onRequestPost, context('/api/batches/1/reviews', { action: 'request' }, 'POST'))
@@ -69,7 +67,7 @@ test('batch review request creates an immutable summary and changed data is flag
   assert.equal(review.snapshot.member_count, 1)
   assert.equal(review.snapshot.content_totals.calculator_count, 3)
   assert.equal(store.sql('SELECT status FROM website_batches WHERE id=1')[0].status, '已复盘')
-  store.sql("UPDATE websites SET wp_calculator_count=4 WHERE id=1")
+  store.sql("UPDATE websites SET calculator_count=4 WHERE id=1")
   const detail = await call(batchDetail.onRequestGet, context('/api/batches/1', undefined, 'GET'))
   assert.equal(detail.review_changed, true)
 })
@@ -100,15 +98,18 @@ test('work queue groups actionable monitor, overdue action and requested review 
 })
 
 test('portfolio backup includes batches and restores their relationships', async () => {
-  const site = await createSite('Backup site', { operating_scenario: 'Astro 内容站', page_count: 12, content_stats_updated_date: '2026-11-17' })
+  const site = await createSite('Backup site', { page_count: 12, content_stats_updated_date: '2026-11-17' })
   await call(batchList.onRequestPost, context('/api/batches', { name: 'Backup batch', source: '测试' }, 'POST'), 201)
   await call(members.onRequestPost, context('/api/batches/1/members', { website_ids: [site.id], note: '保留' }, 'POST'))
-  const backup = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
+  store.sql("INSERT INTO website_batch_reviews(batch_id,reviewed_at,member_count,stage_counts,content_totals) VALUES(1,'2026-11-20T00:00:00.000Z',1,'{}','{}')")
+  const backup = await call(snapshotApi.onRequestGet, context('/api/backups'))
   assert.equal(backup.website_batches.length, 1)
   assert.equal(backup.website_batch_members.length, 1)
-  await call(importData.onRequestPost, context('/api/domains/import', backup, 'POST'))
+  await call(importData.onRequestPost, context('/api/backups', backup, 'POST'))
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_batches')[0].count, 1)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_batch_members')[0].count, 1)
+  await call(importData.onRequestPost, context('/api/backups', backup, 'POST'))
+  assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_batch_reviews')[0].count, 1)
 })
 
 
@@ -119,7 +120,7 @@ test('batch assignment creates a batch and atomically assigns websites with opti
     website_ids: [first.id, second.id],
     batch: { name: 'Bulk assignment', source: '组合筛选' },
     member_note: '同一轮导入',
-    website_fields: { stage: '验证', operating_scenario: 'Astro 内容站' }
+    website_fields: { stage: '验证', }
   }, 'POST'), 201)
   assert.equal(result.accepted, 2)
   assert.equal(result.skipped, 0)
@@ -128,9 +129,9 @@ test('batch assignment creates a batch and atomically assigns websites with opti
     { website_id: 1, member_note: '同一轮导入', membership_status: 'active' },
     { website_id: 2, member_note: '同一轮导入', membership_status: 'active' }
   ])
-  assert.deepEqual(store.sql('SELECT stage, operating_scenario FROM websites ORDER BY id'), [
-    { stage: '验证', operating_scenario: 'Astro 内容站' },
-    { stage: '验证', operating_scenario: 'Astro 内容站' }
+  assert.deepEqual(store.sql('SELECT stage FROM websites ORDER BY id'), [
+    { stage: '验证', },
+    { stage: '验证', }
   ])
 })
 

@@ -28,9 +28,9 @@ const props = defineProps<{ websiteId: number }>()
 const detail = ref<MonitorDetail>(); const loading = ref(false); const busy = ref(false); const error = ref('')
 const form = reactive({ enabled: false, hosts: '' })
 const baseline = ref(''); const dirty = computed(() => Boolean(baseline.value && baseline.value !== JSON.stringify(form)))
-const { canDiscard } = useUnsavedChanges(dirty)
+const { canDiscard } = useUnsavedChanges(dirty, { route: false, unload: false })
 const canClose = async () => { if (busy.value || loading.value) return false; if (!(await canDiscard())) return false; baseline.value = JSON.stringify(form); return true }
-defineExpose({ canClose })
+defineExpose({ canClose, dirty, busy })
 const reset = (value: MonitorDetail) => { detail.value = value; Object.assign(form, { enabled: value.monitor.enabled, hosts: value.monitor.allowed_redirect_hosts.join('\n') }); baseline.value = JSON.stringify(form) }
 let retry = () => { void load(true) }
 const load = async (force = false) => {

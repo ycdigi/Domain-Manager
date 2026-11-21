@@ -1,6 +1,6 @@
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { getBatchDetail, validateBatchFields, validateScenarioFields } from '../../domain/batches'
+import { getBatchDetail, validateBatchFields } from '../../domain/batches'
 import { validateWebsiteFields } from '../../domain/website-validation'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
@@ -26,8 +26,8 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const websiteFields = body.website_fields == null ? {} : body.website_fields
         if (typeof websiteFields !== 'object' || Array.isArray(websiteFields)) return json(null, 400, '批量网站字段格式无效')
         const fieldEntries = Object.entries(websiteFields as Record<string, unknown>)
-        if (fieldEntries.some(([key]) => key !== 'stage' && key !== 'operating_scenario')) return json(null, 400, '批量网站字段只支持阶段与经营场景')
-        const websiteFieldError = validateWebsiteFields(websiteFields as Record<string, unknown>) || validateScenarioFields(websiteFields as Record<string, unknown>)
+        if (fieldEntries.some(([key]) => key !== 'stage')) return json(null, 400, '批量网站字段只支持阶段')
+        const websiteFieldError = validateWebsiteFields(websiteFields as Record<string, unknown>)
         if (websiteFieldError) return json(null, 400, websiteFieldError)
 
         const db = context.env.DB

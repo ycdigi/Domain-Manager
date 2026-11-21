@@ -30,4 +30,4 @@
  .monitor-filters { flex-wrap: wrap; }
 .monitor-filters > .el-input { width: 320px; max-width: 100%; } }
 @media (max-width: 760px) {
- .monitor-page .workspace-heading .monitor-filters { display: none; } }
+ .monitor-page .workspace-heading .monitor-filters { width:100%; flex-wrap:wrap; } }

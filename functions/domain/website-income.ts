@@ -10,7 +10,7 @@ WITH uniquely_linked_accounts AS (
     FROM website_income
     UNION ALL
     SELECT NULL, w.id, i.income_month, 'AdSense', 'USD',
-           CASE WHEN i.amount_usd = 0 AND i.amount <> 0 THEN i.amount ELSE i.amount_usd END,
+           i.amount_usd,
            'adsense_account'
     FROM adsense_income i
     JOIN uniquely_linked_accounts u ON u.adsense_account_id = i.adsense_account_id

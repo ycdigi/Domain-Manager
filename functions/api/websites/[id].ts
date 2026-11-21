@@ -1,25 +1,23 @@
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
-import { isUnchangedLegacyIndustry, validateWebsiteFields, normalizeContentFields } from '../../domain/website-validation'
-import { validateScenarioFields } from '../../domain/batches'
+import { validateWebsiteFields } from '../../domain/website-validation'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const allowed = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count'])
+const allowed = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'page_count'])
 export const onRequestPatch: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
         const body = await context.request.json() as Record<string, unknown>
-        const aliasError = normalizeContentFields(body); if (aliasError) return json(null, 400, aliasError)
         const entries = Object.entries(body)
         if (!entries.length || entries.some(([key]) => !allowed.has(key))) return json(null, 400, '网站更新包含不支持的字段')
         const id = Number(context.params.id)
         const current = await context.env.DB.prepare('SELECT * FROM websites WHERE id=?').bind(id).first<Record<string, unknown>>()
         if (!current) return json(null, 404, '网站不存在')
-        const validation = validateWebsiteFields(body, current) || validateScenarioFields(body, current)
+        const validation = validateWebsiteFields(body, current)
         if (validation) return json(null, 400, validation)
         const accountId = body.adsense_account_id ?? current.adsense_account_id
         if (accountId != null && !await context.env.DB.prepare('SELECT id FROM adsense_accounts WHERE id=?').bind(accountId).first()) return json(null, 400, 'AdSense 账号不存在')
-        const changedEntries = entries.filter(([key, value]) => !(key === 'industry' && isUnchangedLegacyIndustry(value, current.industry)))
+        const changedEntries = entries
         if (!changedEntries.length) return json(current, 200, '网站资料没有变化')
         const assignments = changedEntries.map(([key]) => `${key}=?`).join(', ')
         const result = await context.env.DB.prepare(`UPDATE websites SET ${assignments} WHERE id=? RETURNING *`).bind(...changedEntries.map(([, value]) => value === '' ? null : value), id).first()

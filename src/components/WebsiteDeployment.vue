@@ -1,11 +1,14 @@
 <template>
   <section class="portfolio-detail-section">
     <div class="portfolio-detail-heading">
-      <h2>部署与代码</h2>
+      <h2>部署与账号</h2>
       <router-link :to="{ name: 'Resources' }">管理账号与资源</router-link>
     </div>
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load">重试</el-button></div>
     <div v-if="cloudflareMissing" class="page-muted">Cloudflare 托管尚未关联主要 GitHub 仓库，可在下方补充。</div>
+    <h3>关联账号</h3><p class="page-muted">账号归属不代表托管位置；请在下方关联实际主机、项目或仓库。</p>
+    <ul class="page-list"><li v-for="link in accountLinks" :key="link.id"><span>{{ link.account_name }} · {{ link.provider_name || link.provider }}</span><el-button text :disabled="saving" @click="unlinkAccount(link.id)">解除账号关联</el-button></li></ul>
+    <el-form label-position="top" @submit.prevent="saveAccount"><el-form-item label="服务账号"><el-select v-model="accountForm.account_id" clearable filterable><el-option v-for="account in accounts.filter(a => a.status !== '停用')" :key="account.id" :label="account.name" :value="account.id!" /></el-select></el-form-item><el-button :loading="saving" native-type="submit">关联账号</el-button></el-form>
     <div v-for="role in roles" :key="role" class="deployment-role">
       <strong>{{ role }}</strong>
       <ul class="page-list">
@@ -29,16 +32,6 @@
         </li>
       </ul>
       <p v-if="!links.some((l) => l.role === role)" class="page-muted">—</p>
-    </div>
-    <div v-if="links.some((l) => !roles.includes(l.role))" class="page-panel">
-      <h3>历史关联待核对</h3>
-      <p class="page-muted">这些关联保留了原始用途；请先确认正确用途再重新关联。</p>
-      <ul class="page-list">
-        <li v-for="link in links.filter((l) => !roles.includes(l.role))" :key="link.id">
-          <span>{{ link.resource_name }} · {{ link.role }}</span
-          ><el-button text :disabled="saving" @click="unlink(link)">解除历史关联</el-button>
-        </li>
-      </ul>
     </div>
     <el-form label-position="top" @submit.prevent="save"
       ><div class="portfolio-detail-grid">
@@ -64,7 +57,8 @@ import { ElMessage } from 'element-plus'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
 import type { Website } from '../api/websites'
-import type { ProviderResource } from '../../functions/types'
+import { resourceRoles, resourceSupportsRole } from '../../shared/resource-roles'
+import type { ProviderAccount, ProviderResource } from '../../functions/types'
 const props = defineProps<{ website: Website }>()
 const emit = defineEmits<{ changed: [] }>()
 type Link = {
@@ -78,18 +72,24 @@ type Link = {
   ip_address?: string
   provider: string
 }
-const roles = ['托管', '代码仓库', 'DNS/CDN', '其他']
+const roles = resourceRoles
+const accounts = ref<ProviderAccount[]>([])
+const accountLinks = ref<Array<{ id:number; account_name:string; provider:string; provider_name?:string }>>([])
+const accountForm = reactive({ account_id:undefined as number | undefined })
 const links = ref<Link[]>([])
 const resources = ref<ProviderResource[]>([])
 const saving = ref(false)
 const error = ref('')
 const form = reactive({ resource_id: undefined as number | undefined, role: '托管', is_primary: true })
+const baseline = ref(JSON.stringify({ form, accountForm }))
+const dirty = computed(() => JSON.stringify({ form, accountForm }) !== baseline.value)
+defineExpose({ dirty, busy: saving })
 const safeUrl = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
 const availableResources = computed(() =>
   resources.value.filter(
     (r) =>
       r.status !== '停用' &&
-      (form.role === '代码仓库' ? r.provider === 'github' : form.role === '托管' ? r.provider !== 'github' : true)
+      resourceSupportsRole(r.provider, form.role)
   )
 )
 const cloudflareMissing = computed(
@@ -100,9 +100,11 @@ const cloudflareMissing = computed(
 const load = async () => {
   error.value = ''
   try {
-    ;[links.value, resources.value] = await Promise.all([
+    ;[links.value, resources.value, accounts.value, accountLinks.value] = await Promise.all([
       api.get<Link[]>(`/api/resources/links?website_id=${props.website.id}`),
-      api.get<ProviderResource[]>('/api/resources')
+      api.get<ProviderResource[]>('/api/resources'),
+      api.get<ProviderAccount[]>('/api/resources/accounts'),
+      api.get<typeof accountLinks.value>(`/api/resources/account-links?website_id=${props.website.id}`)
     ])
   } catch (e) {
     error.value = e instanceof Error ? e.message : '资源读取失败'
@@ -113,7 +115,7 @@ const write = async (action: () => Promise<unknown>) => {
   saving.value = true
   try {
     await action()
-    invalidateData('/api/websites', '/api/resources/links', '/api/resources/accounts', '/api/resources')
+    invalidateData('/api/websites', '/api/resources/links', '/api/resources/account-links', '/api/resources/accounts', '/api/resources')
     await load()
     emit('changed')
   } catch (e) {
@@ -126,7 +128,10 @@ const save = () =>
   write(async () => {
     if (!form.resource_id) throw new Error('请选择资源')
     await api.post('/api/resources/links', { website_id: props.website.id, ...form })
+    baseline.value = JSON.stringify({ form, accountForm })
   })
+const saveAccount = () => write(async () => { if (!accountForm.account_id) throw new Error('请选择账号'); await api.post('/api/resources/account-links', { website_id:props.website.id, account_id:accountForm.account_id }); accountForm.account_id = undefined; baseline.value = JSON.stringify({ form, accountForm }) })
+const unlinkAccount = (id:number) => write(() => api.delete(`/api/resources/account-links?id=${id}`))
 const makePrimary = (link: Link) =>
   write(() =>
     api.post('/api/resources/links', {

@@ -1,6 +1,5 @@
 import { api } from '../utils/request'
 import { cachedGet, invalidateData } from '../utils/workspaceCache'
-import type { OperatingScenario } from './batches'
 
 export type WebsiteStage = '待评估' | '验证' | '增长' | '维护' | '暂停'
 export type WebsiteTaskType = 'SEO' | '内容' | '技术' | '其他' | 'SEO复查'
@@ -20,7 +19,6 @@ export interface WebsiteDomain {
   status: '在线' | '离线'
   memo?: string | null
   last_status_check_at?: string | null
-  computer_name?: string | null
 }
 
 export interface Website {
@@ -38,8 +36,6 @@ export interface Website {
   industry: '计算器' | '资讯站' | '其他' | null
   platform: 'WordPress' | 'Astro' | 'Next.js' | '其他'
   platform_other?: string | null
-  operating_scenario?: OperatingScenario | null
-  scenario_note?: string | null
   page_count?: number | null
   adsense_account_id?: number | null
   adsense_connected: '未知' | '已开通' | '未开通'
@@ -48,8 +44,6 @@ export interface Website {
   daily_clicks?: number | null
   daily_clicks_range?: string | null
   clicks_updated_date?: string | null
-  wp_calculator_count?: number | null
-  wp_article_count?: number | null
   content_stats_updated_date?: string | null
   potential?: string | null
   priority_order: number
@@ -63,11 +57,6 @@ export interface Website {
   review_count?: number
   resource_names?: string | null
   resource_ids?: number[]
-  primary_resource_id?: number | null
-  primary_resource_provider?: 'github' | 'cloudflare' | 'vhost' | 'vps' | null
-  primary_resource_name?: string | null
-  primary_resource_status?: string | null
-  primary_resource_count?: number
   provider_account_ids?: number[]
   current_income?: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }>
   latest_income?: { month: string; items: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }> } | null
@@ -96,7 +85,7 @@ export interface WebsiteTask {
 }
 
 export const getWebsites = (force = false) => cachedGet<Website[]>('/api/websites', force)
-export const createWebsite = async (body: Record<string, unknown>) => { const result = await api.post<{ website: Website; domains: WebsiteDomain[] }>('/api/websites', body); invalidateData('/api/websites', ...(body.adsense_account_id == null ? [] : ['/api/adsense/accounts', '/api/dashboard/summary'])); return result }
-export const updateWebsite = async (id: number, fields: Record<string, unknown>) => { const result = await api.patch<Website>(`/api/websites/${id}`, fields); invalidateData('/api/websites', ...(!Object.prototype.hasOwnProperty.call(fields, 'adsense_account_id') ? [] : ['/api/adsense/accounts', '/api/dashboard/summary'])); return result }
+export const createWebsite = async (body: Record<string, unknown>) => { const result = await api.post<{ website: Website; domains: WebsiteDomain[] }>('/api/websites', body); invalidateData('/api/websites', ...(body.adsense_account_id == null ? [] : ['/api/adsense/accounts'])); return result }
+export const updateWebsite = async (id: number, fields: Record<string, unknown>) => { const result = await api.patch<Website>(`/api/websites/${id}`, fields); invalidateData('/api/websites', ...(!Object.prototype.hasOwnProperty.call(fields, 'adsense_account_id') ? [] : ['/api/adsense/accounts'])); return result }
 export const bulkUpdateWebsites = async (websiteIds: number[], fields: Record<string, unknown>) => { const result = await api.patch<{ accepted: number; website_ids: number[] }>('/api/websites/batch', { website_ids: websiteIds, fields }); invalidateData('/api/websites'); return result }
-export const deleteWebsite = async (id: number) => { const result = await api.delete(`/api/websites/${id}`); invalidateData('/api/websites', '/api/adsense/accounts', '/api/dashboard/summary'); return result }
+export const deleteWebsite = async (id: number) => { const result = await api.delete(`/api/websites/${id}`); invalidateData('/api/websites', '/api/adsense/accounts'); return result }

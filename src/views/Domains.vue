@@ -1,5 +1,5 @@
 <template>
-  <div class="workspace-page domain-assets-page">
+  <div class="workspace-page">
     <WorkspaceHeading title="域名资产" subtitle="注册信息、在线状态与网站归属">
       <el-button :icon="Refresh" :loading="loading" aria-label="刷新域名" title="刷新域名" @click="load(true)" />
       <el-button type="primary" :icon="Plus" @click="openCreate">新增域名</el-button>
@@ -45,7 +45,7 @@ import { cachedGet, invalidateData } from '../utils/workspaceCache'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { getWriteQueue } from '../utils/writeQueue'
 
-interface DomainRecord { id: number; website_id: number | null; domain: string; registrar: string; registrar_link?: string | null; registrar_date: string; expiry_date: string; service_type: string; domain_role: '主域名' | '跳转域名' | '备用域名'; is_primary: number; status: '在线' | '离线'; computer_name?: string | null; memo?: string | null; last_status_check_at?: string | null }
+interface DomainRecord { id: number; website_id: number | null; domain: string; registrar: string; registrar_link?: string | null; registrar_date: string; expiry_date: string; service_type: string; domain_role: '主域名' | '跳转域名' | '备用域名'; is_primary: number; status: '在线' | '离线'; memo?: string | null; last_status_check_at?: string | null }
 const domainRoles = ['主域名', '跳转域名', '备用域名'] as const
 const queue = getWriteQueue()
 const domains = ref<DomainRecord[]>([])

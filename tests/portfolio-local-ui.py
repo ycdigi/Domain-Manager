@@ -75,14 +75,13 @@ try:
     note = call(prefix + '/ai-notes', {'kind': 'AI提示词', 'content': '保留迁移后的提示词记录'}, 'POST', 201)
     call(prefix + '/ai-notes/' + str(note['id']), {'kind': 'AI提示词', 'content': '提示词第二版'}, 'PUT')
     assert len(call(prefix + '/ai-notes/' + str(note['id']))) == 2
-    backup = call('/api/domains/export', raw=True)
+    backup = call('/api/backups')
     assert any(item['id'] == site_id for item in backup['websites'])
-    next(site for site in backup['websites'] if site['id'] == site_id)['industry'] = '电气/工程'
-    call('/api/domains/import?dry_run=1', backup, 'POST')
-    call('/api/domains/import', backup, 'POST')
+    next(site for site in backup['websites'] if site['id'] == site_id)['industry'] = '其他'
+    call('/api/backups?dry_run=1', backup, 'POST')
+    call('/api/backups', backup, 'POST')
     assert next(site for site in call('/api/websites') if site['id'] == site_id)['industry'] == '其他'
-    summary = call('/api/dashboard/summary')
-    assert summary['totals']['total_websites'] >= 2
+    assert len(call('/api/websites')) >= 2
 
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
@@ -96,7 +95,7 @@ try:
         expect(page.locator('.site-table thead')).to_contain_text('服务器 IP')
         expect(page.locator('.site-table thead')).not_to_contain_text('经营场景')
         page.get_by_role('button', name=f'验收网站 A {stamp}', exact=True).click()
-        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='基本资料', exact=True))
+        profile_section = page.locator('.website-detail-drawer')
         new_site_select = profile_section.locator('.el-form-item').filter(has_text='新站分类').locator('.el-select__wrapper')
         new_site_select.click()
         page.get_by_role('option', name='手动标记为新站', exact=True).click()
@@ -106,12 +105,14 @@ try:
         assert json.loads(new_site_response.value.request.post_data) == {'new_site_override': 1}
         profile_section.locator('.el-form-item').filter(has_text='技术栈').first.locator('.el-select__wrapper').click()
         page.get_by_role('option', name='Astro', exact=True).last.click()
+        profile_section.get_by_role('tab',name='内容与点击',exact=True).click()
         for label,value in [('总页面数','25'),('计算器数量','0'),('文章数量','12')]:
             field = profile_section.locator('.el-form-item').filter(has=page.locator('label',has_text=label))
             field.locator('input').fill(value)
             field.locator('input').press('Tab')
         date_field=profile_section.locator('.el-form-item').filter(has_text='内容统计日期').locator('input')
         date_field.fill(today.isoformat());date_field.press('Tab')
+        profile_section.get_by_role('tab',name='基本资料',exact=True).click()
         profile_section.locator('.el-form-item').filter(has_text='主要管理电脑').locator('.el-select__wrapper').click()
         page.get_by_role('option', name='Mac Mini YC', exact=True).click()
         with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as stats_response:
@@ -124,13 +125,16 @@ try:
         call('/api/domains/'+str(alternate['id']),{'is_primary':True},'PATCH')
         assert next(site for site in call('/api/websites') if site['id']==site_id)['computer_name']=='Mac Mini YC'
         expect(page.get_by_role('heading', name='外链候选', exact=True)).to_have_count(0)
+        profile_section.get_by_role('tab',name='任务与记录',exact=True).click()
         expect(page.get_by_text('标题与内链已调整', exact=True)).to_be_visible()
+        profile_section.get_by_role('tab',name='收入与投入',exact=True).click()
         expect(page.get_by_text(f'{month} · 验收收入 · USD', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · EUR', exact=True)).to_be_visible()
-        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='基本资料', exact=True))
+        profile_section = page.locator('.website-detail-drawer')
         call(prefix, {'gsc_connected': '已开通'}, 'PATCH')
         with page.expect_response(lambda response: response.url.endswith('/api/websites') and response.request.method == 'GET'):
             page.get_by_role('button', name='刷新', exact=True).evaluate('button => button.click()')
+        profile_section.get_by_role('tab',name='基本资料',exact=True).click()
         profile_section.get_by_role('textbox', name='网站名称', exact=True).fill(f'验收网站 A {stamp} 修改')
         profile_section.locator('.el-form-item').filter(has_text='阶段').locator('.el-select__wrapper').click()
         page.get_by_role('option', name='维护', exact=True).click()
@@ -142,8 +146,9 @@ try:
         latest_site = next(site for site in call('/api/websites') if site['id'] == site_id)
         assert latest_site['gsc_connected'] == '已开通'
         assert latest_site['stage'] == '维护'
-        exported_site = next(site for site in call('/api/domains/export', raw=True)['websites'] if site['id'] == site_id)
-        assert exported_site['industry'] == '电气/工程'
+        exported_site = next(site for site in call('/api/backups')['websites'] if site['id'] == site_id)
+        assert exported_site['industry'] == '其他'
+        profile_section.get_by_role('tab',name='任务与记录',exact=True).click()
         page.get_by_role('textbox', name='任务标题', exact=True).fill('浏览器新增任务')
         page.get_by_role('button', name='添加任务', exact=True).click()
         expect(page.get_by_text('浏览器新增任务', exact=True)).to_be_visible()
@@ -155,6 +160,7 @@ try:
         task_dialog.locator('textarea').nth(1).fill('浏览器中补充完成说明')
         task_dialog.get_by_role('button', name='保存任务', exact=True).click()
         expect(page.get_by_text('浏览器中补充完成说明', exact=True)).to_be_visible()
+        profile_section.get_by_role('tab',name='收入与投入',exact=True).click()
         income_form = page.locator('.portfolio-income-form')
         income_form.locator('.el-date-editor input').fill(month)
         income_form.locator('.el-date-editor input').press('Tab')

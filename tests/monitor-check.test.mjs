@@ -11,11 +11,11 @@ test('GET returns the page title and stops before reading the rest of a large pa
   let reads=0;let canceled=false
   const chunks=['<html><head><title> Domain &amp; &#x505c;&#x653e; </ti','tle></head>', 'unused body'.repeat(100000)]
   const response={status:200,headers:new Headers({'Content-Type':'text/html'}),body:{getReader:()=>({read:async()=>({done:reads>=chunks.length,value:new TextEncoder().encode(chunks[reads++])}),cancel:async()=>{canceled=true}})}}
-  const result=await check({required_text:['ignored'],baseline_title:'ignored'},async(url,options)=>{
+  const result=await check({},async(url,options)=>{
     assert.equal(String(url),'https://example.com/');assert.equal(options.method,'GET');assert.equal(options.redirect,'manual');assert.equal(new Headers(options.headers).has('Range'),false);return response
   })
   assert.equal(result.outcome,'healthy');assert.equal(result.http_status,200);assert.equal(result.title,'Domain & 停放')
-  assert.equal(reads,2);assert.equal(canceled,true);assert.equal(result.content_complete,false)
+  assert.equal(reads,2);assert.equal(canceled,true)
 })
 for(const status of [403,404,429,500])test(`HTTP ${status} reports a response error and can expose its page title`,async()=>{
   const result=await check({},async()=>new Response('<title>Expired domain</title>',{status,headers:{'Content-Type':'text/html'}}))

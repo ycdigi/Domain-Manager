@@ -19,9 +19,8 @@ const notes = await server.ssrLoadModule('/functions/api/websites/[id]/ai-notes/
 const note = await server.ssrLoadModule('/functions/api/websites/[id]/ai-notes/[note_id]/index.ts')
 const operations = await server.ssrLoadModule('/functions/api/websites/[id]/operations/index.ts')
 const sync = await server.ssrLoadModule('/functions/api/ai/sync/index.ts')
-const monitor = await server.ssrLoadModule('/functions/api/monitor/status.ts')
-const importData = await server.ssrLoadModule('/functions/api/domains/import.ts')
-const snapshotApi = await server.ssrLoadModule('/functions/api/export/snapshot/index.ts')
+const importData = await server.ssrLoadModule('/functions/api/backups/index.ts')
+const snapshotApi = await server.ssrLoadModule('/functions/api/backups/index.ts')
 const context = (url, body, method = 'GET', apiToken = false, id = '1') => ({
   env: { DB: store.db, USER: 'test', PASS: 'secret', API_TOKEN: 'sync-token' },
   params: { id, task_id: '1', note_id: '1', operation_id: '1' },
@@ -52,21 +51,21 @@ test('website creation requires and stores its first domain', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'No domain' }, 'POST'), 400)
 })
 
-test('website portfolio exposes the primary resource while preserving legacy links', async () => {
+test('website portfolio exposes the primary repository and all actual resource links', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Resource site', domain: { domain: 'resource.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   store.sql(`
     INSERT INTO provider_accounts (provider, name) VALUES ('github', 'main');
     INSERT INTO provider_resources (account_id, provider, name, status) VALUES (1, 'github', 'legacy-repo', '正常');
     INSERT INTO provider_resources (account_id, provider, name, status) VALUES (1, 'github', 'primary-repo', '正常');
-    INSERT INTO website_resources (website_id, resource_id, role, is_primary) VALUES (1, 1, '历史关联', 0);
+    INSERT INTO website_resources (website_id, resource_id, role, is_primary) VALUES (1, 1, '其他', 0);
     INSERT INTO website_resources (website_id, resource_id, role, is_primary) VALUES (1, 2, '代码仓库', 1);
   `)
   const [site] = await call(sites.onRequestGet, context('/api/websites'))
   assert.deepEqual(site.resource_ids, [1, 2])
-  assert.equal(site.primary_resource_id, 2)
-  assert.equal(site.primary_resource_provider, 'github')
-  assert.equal(site.primary_resource_name, 'primary-repo')
-  assert.equal(site.primary_resource_count, 2)
+  assert.equal(site.repository.id, 2)
+  assert.equal(site.repository.account_id,1)
+  assert.equal(site.repository.name, 'primary-repo')
+  assert.equal(site.resource_ids.length, 2)
 })
 
 test('website newness uses the primary domain registration date and supports manual override', async () => {
@@ -107,34 +106,8 @@ test('website profile accepts known service status while protecting click date r
   assert.deepEqual(store.sql('SELECT name, daily_clicks FROM websites;'), [{ name: 'Profile', daily_clicks: 12 }])
 })
 
-test('legacy website types display as other without changing stored values', async () => {
-  await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy type', industry: '其他', domain: { domain: 'legacy-type.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
-  store.sql("UPDATE websites SET industry='电气/工程' WHERE id=1;")
-  const portfolio = await call(sites.onRequestGet, context('/api/websites'))
-  const aiContext = await call(sync.onRequestGet, context('/api/ai/sync?website_id=1', undefined, 'GET', true))
-  assert.equal(portfolio[0].industry, '其他')
-  assert.equal(aiContext.website.industry, '其他')
-  assert.equal(store.sql('SELECT industry FROM websites WHERE id=1;')[0].industry, '电气/工程')
-})
 
-test('editing a legacy website without changing its type succeeds and preserves the original value', async () => {
-  await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy edit', industry: '其他', domain: { domain: 'legacy-edit.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
-  store.sql("UPDATE websites SET industry='电气/工程' WHERE id=1;")
-  await call(siteEdit.onRequestPatch, context('/api/websites/1', { name: 'Renamed legacy site', industry: '其他' }, 'PATCH'))
-  assert.deepEqual(store.sql('SELECT name, industry FROM websites WHERE id=1;'), [{ name: 'Renamed legacy site', industry: '电气/工程' }])
-  await call(siteEdit.onRequestPatch, context('/api/websites/1', { industry: '新无效分类' }, 'PATCH'), 400)
-  await call(sync.onRequestPost, context('/api/ai/sync', { website_id: 1, fields: { industry: '其他', gsc_connected: '已开通' } }, 'POST', true))
-  assert.deepEqual(store.sql('SELECT industry, gsc_connected FROM websites WHERE id=1;'), [{ industry: '电气/工程', gsc_connected: '已开通' }])
-})
 
-test('portfolio backup round-trip accepts and preserves legacy website types', async () => {
-  await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy backup', industry: '其他', domain: { domain: 'legacy-backup.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
-  store.sql("UPDATE websites SET industry='电气/工程' WHERE id=1;")
-  const backup = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
-  assert.equal(backup.websites[0].industry, '电气/工程')
-  await call(importData.onRequestPost, context('/api/domains/import', backup, 'POST'))
-  assert.equal(store.sql('SELECT industry FROM websites WHERE id=1;')[0].industry, '电气/工程')
-})
 
 test('the offline status queue only writes validated domain status fields', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Status', domain: { domain: 'status.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
@@ -143,13 +116,6 @@ test('the offline status queue only writes validated domain status fields', asyn
   await call(domainBatch.onRequestPost, context('/api/domains/batch', { operations: [{ type: 'domain_patch', id: 1, fields: { registrar: 'changed' } }] }, 'POST'), 400)
 })
 
-test('scheduled monitor reads primary domains and writes only status checks', async () => {
-  await call(sites.onRequestPost, context('/api/websites', { name: 'Monitor', domain: { domain: 'monitor.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
-  const targets = await call(monitor.onRequestGet, context('/api/monitor/status', undefined, 'GET', true))
-  assert.deepEqual(targets.map(({ id, domain }) => ({ id, domain })), [{ id: 1, domain: 'monitor.test' }])
-  await call(monitor.onRequestPost, context('/api/monitor/status', { checks: [{ id: 1, domain: 'monitor.test', status: '在线' }] }, 'POST', true))
-  assert.deepEqual(store.sql('SELECT status, last_status_check_at FROM domains WHERE id=1;'), [{ status: '在线', last_status_check_at: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai' }).format(new Date()) }])
-})
 
 test('domain assets include unassigned domains and keep domain-only fields separate', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Domains', domain: { domain: 'assigned.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
@@ -159,14 +125,12 @@ test('domain assets include unassigned domains and keep domain-only fields separ
   assert.equal(rows.find(row => row.domain === 'unassigned.test').website_id, null)
 })
 
-test('legacy import attaches an existing unassigned domain and retains asset fields', async () => {
-  const asset = { domain: 'legacy.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站', computer_name: 'Workstation', industry: '电气/工程' }
+test('legacy domain arrays are rejected before changing asset data', async () => {
+  const asset = { domain: 'legacy.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' }
   await call(domains.onRequestPost, context('/api/domains', asset, 'POST'), 201)
-  await call(importData.onRequestPost, context('/api/domains/import', [{ ...asset, site_name: 'Legacy website' }], 'POST'))
-  assert.deepEqual(store.sql('SELECT name, stage, industry FROM websites;'), [{ name: 'Legacy website', stage: '待评估', industry: '电气/工程' }])
-  assert.deepEqual(store.sql('SELECT website_id, computer_name FROM domains;'), [{ website_id: 1, computer_name: 'Workstation' }])
-  await call(importData.onRequestPost, context('/api/domains/import', [{ ...asset, site_name: 'Legacy website' }], 'POST'))
-  assert.equal(store.sql('SELECT COUNT(*) AS count FROM websites;')[0].count, 1)
+  await call(importData.onRequestPost, context('/api/backups', [asset], 'POST'), 400)
+  assert.equal(store.sql('SELECT COUNT(*) AS n FROM websites')[0].n, 0)
+  assert.equal(store.sql('SELECT website_id FROM domains')[0].website_id,null)
 })
 
 test('an unassigned domain can be attached, but a website keeps at least one domain', async () => {
@@ -250,7 +214,7 @@ test('portfolio does not allocate one AdSense account total to multiple linked w
     await call(sites.onRequestPost, context('/api/websites', { name, adsense_account_id: 1, adsense_connected: '已开通', domain: { domain, registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   }
   const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
-  store.sql(`INSERT INTO adsense_income (adsense_account_id, income_month, amount, amount_usd, amount_cny) VALUES (1, '${currentMonth}', 100, 100, 600);`)
+  store.sql(`INSERT INTO adsense_income (adsense_account_id, income_month, amount_usd, amount_cny) VALUES (1, '${currentMonth}', 100, 600);`)
   store.sql(`INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '${currentMonth}', 'AdSense', 'USD', 45);`)
 
   const portfolio = await call(sites.onRequestGet, context('/api/websites'))
@@ -264,7 +228,7 @@ test('legacy AdSense allocations match account rows without relying on capitaliz
   store.sql("INSERT INTO adsense_accounts (name, owner) VALUES ('Legacy Publisher', 'Owner');")
   await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy allocation', adsense_account_id: 1, domain: { domain: 'legacy-allocation.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit' }).format(new Date())
-  store.sql(`INSERT INTO adsense_income (adsense_account_id, income_month, amount, amount_usd, amount_cny) VALUES (1, '${currentMonth}', 100, 100, 600);
+  store.sql(`INSERT INTO adsense_income (adsense_account_id, income_month, amount_usd, amount_cny) VALUES (1, '${currentMonth}', 100, 600);
     INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '${currentMonth}', 'adsense', 'usd', 75);`)
 
   const site = (await call(sites.onRequestGet, context('/api/websites')))[0]
@@ -278,7 +242,7 @@ test('legacy AdSense allocations match account rows without relying on capitaliz
 test('portfolio separates current-month emptiness from the latest recorded month', async () => {
   store.sql("INSERT INTO adsense_accounts (name, owner) VALUES ('Previous Month Publisher', 'Owner');")
   await call(sites.onRequestPost, context('/api/websites', { name: 'Previous Month site', adsense_account_id: 1, adsense_connected: '已开通', domain: { domain: 'previous-month.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
-  store.sql("INSERT INTO adsense_income (adsense_account_id, income_month, amount, amount_usd, amount_cny) VALUES (1, '2026-10', 574, 574, 3440); INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '2026-10', 'AdSense', 'USD', 574);")
+  store.sql("INSERT INTO adsense_income (adsense_account_id, income_month, amount_usd, amount_cny) VALUES (1, '2026-10', 574, 3440); INSERT INTO website_income (website_id, income_month, source, currency, amount) VALUES (1, '2026-10', 'AdSense', 'USD', 574);")
 
   const site = (await call(sites.onRequestGet, context('/api/websites')))[0]
   assert.deepEqual(site.current_income, [])
@@ -342,16 +306,16 @@ test('AI sync rejects removed external-link fields before writing website fields
   assert.equal(store.sql('SELECT gsc_connected FROM websites WHERE id=1;')[0].gsc_connected, '未知')
 })
 
-test('legacy portfolio backups ignore retired external-link fields', async () => {
+test('versioned backups reject retired data collections', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Legacy backup', domain: { domain: 'legacy-backup.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
-  const backup = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
+  const backup = await call(snapshotApi.onRequestGet, context('/api/backups'))
   backup.link_sources = [{ id: 1, name: 'Retired', source_url: 'https://source.example' }]
   backup.link_source_reviews = [{ source_id: 1, check_status: '可访问' }]
   backup.link_source_review_runs = [{ id: 1, status: '已完成' }]
   backup.website_link_opportunities = [{ id: 1, website_id: 1, source_id: 1, target_url: 'https://legacy-backup.test' }]
   backup.link_attempts = [{ id: 1, opportunity_id: 1, request_status: '已完成' }]
-  await call(importData.onRequestPost, context('/api/domains/import', backup, 'POST'))
-  const restored = await call(snapshotApi.onRequestGet, context('/api/export/snapshot'))
+  await call(importData.onRequestPost, context('/api/backups', backup, 'POST'),400)
+  const restored = await call(snapshotApi.onRequestGet, context('/api/backups'))
   for (const key of ['link_sources', 'link_source_reviews', 'link_source_review_runs', 'website_link_opportunities', 'link_attempts']) assert.equal(Object.hasOwn(restored, key), false)
   assert.equal(restored.websites.length, 1)
   assert.equal(restored.domains.length, 1)
@@ -404,11 +368,14 @@ test('portfolio backup snapshot restores websites, domains, tasks, income and ef
   store.sql("INSERT INTO provider_accounts (provider,name) VALUES ('github','Backup account'); INSERT INTO provider_resources (account_id,provider,name,identifier) VALUES (1,'github','Backup repo','account:1'); INSERT INTO website_resources(website_id,resource_id,role,is_primary) VALUES(1,1,'代码仓库',1);")
   await call(income.onRequestPost, context('/api/websites/1/income', { income_month: '2026-10', source: 'AdSense', currency: 'USD', amount: 10 }, 'POST'), 201)
   await call(effort.onRequestPost, context('/api/websites/1/effort', { week_start: '2026-10-26', hours: 3 }, 'POST'), 201)
-  const backup = await call(snapshotApi.onRequestGet, context('/api/export/snapshot', undefined, 'GET'))
+  for (const table of ['websites','domains','website_tasks','website_income','website_effort','website_ai_notes','provider_accounts','provider_resources','website_resources','adsense_accounts']) store.sql(`UPDATE ${table} SET created_at='2025-01-02 03:04:05'`)
+  const backup = await call(snapshotApi.onRequestGet, context('/api/backups', undefined, 'GET'))
+  backup.provider_accounts[0].login_email='restored@example.test'
+  backup.provider_resources[0].resource_url='https://github.com/restored/repo'
   backup.websites[0].adsense_account_id = 99
   backup.adsense_accounts[0].id = 99
   store.sql('DELETE FROM websites;')
-  await call(importData.onRequestPost, context('/api/domains/import', backup, 'POST'))
+  await call(importData.onRequestPost, context('/api/backups', backup, 'POST'))
   assert.equal(store.sql("SELECT name FROM websites WHERE name='Backup';")[0].name, 'Backup')
   assert.equal(store.sql("SELECT domain FROM domains WHERE domain='backup.test';")[0].domain, 'backup.test')
   assert.equal(store.sql("SELECT website_id FROM domains WHERE domain='free-backup.test';")[0].website_id, null)
@@ -420,7 +387,10 @@ test('portfolio backup snapshot restores websites, domains, tasks, income and ef
   assert.equal(store.sql('SELECT content FROM website_ai_notes;')[0].content, 'Backup note')
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_ai_note_versions;')[0].count, 1)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_resources WHERE website_id=1;')[0].count, 1)
-  await call(importData.onRequestPost, context('/api/domains/import', backup, 'POST'))
+  for (const table of ['websites','domains','website_tasks','website_income','website_effort','website_ai_notes','provider_accounts','provider_resources','website_resources','adsense_accounts']) assert.equal(store.sql(`SELECT created_at FROM ${table} LIMIT 1`)[0].created_at,'2025-01-02 03:04:05',table)
+  assert.equal(store.sql('SELECT login_email FROM provider_accounts')[0].login_email,'restored@example.test')
+  assert.equal(store.sql('SELECT resource_url FROM provider_resources')[0].resource_url,'https://github.com/restored/repo')
+  await call(importData.onRequestPost, context('/api/backups', backup, 'POST'))
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_tasks;')[0].count, 2)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_ai_note_versions;')[0].count, 1)
 })
@@ -431,8 +401,57 @@ test('a backup failure rolls back every website and history write in that import
     domains: [{ id: 10, website_id: 10, domain: 'atomic.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站', status: '在线' }],
     website_income: [{ website_id: 10, income_month: '2026-11', source: 'Bad', currency: 'USD', amount: -1 }]
   }
-  const response = await importData.onRequestPost(context('/api/domains/import', data, 'POST'))
+  const response = await importData.onRequestPost(context('/api/backups', data, 'POST'))
   assert.ok(response.status >= 400)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM websites;')[0].count, 0)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM domains;')[0].count, 0)
+})
+
+test('domain role promotion switches the actual primary atomically and demotes its old role', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Primary site', domain: { domain: 'first.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  store.sql("INSERT INTO domains (website_id, domain, registrar, registrar_date, expiry_date, service_type, domain_role, is_primary) VALUES (1,'second.test','r','2026-01-01','2027-01-01','网站','备用域名',0)")
+  await call(domainEdit.onRequestPut, context('/api/domains/2', { domain_role: '主域名' }, 'PUT', false, '2'))
+  const rows = store.sql('SELECT id, is_primary, domain_role FROM domains ORDER BY id')
+  assert.deepEqual(rows, [{ id: 1, is_primary: 0, domain_role: '备用域名' }, { id: 2, is_primary: 1, domain_role: '主域名' }])
+})
+
+test('finance read returns the same website income sources as the detail without exporting unrelated data', async () => {
+  const finance = await server.ssrLoadModule('/functions/api/finance/index.ts')
+  store.sql("INSERT INTO adsense_accounts(name,owner,currency) VALUES('account','owner','USD'); INSERT INTO websites(name,adsense_account_id) VALUES('site',1); INSERT INTO adsense_income(adsense_account_id,income_month,amount_usd,amount_cny) VALUES(1,'2026-10',12.5,88); INSERT INTO website_income(website_id,income_month,source,currency,amount) VALUES(1,'2026-10','Direct','USD',0);")
+  const data = await call(finance.onRequestGet, context('/api/finance'))
+  const detail = await call(income.onRequestGet, context('/api/websites/1/income'))
+  assert.deepEqual(data.website_income.map(({ website_id, ...row }) => row), detail)
+  assert.deepEqual(Object.keys(data).sort(), ['website_effort','website_income','websites'])
+  assert.equal(data.website_income.find(row => row.source === 'Direct').amount,0)
+})
+
+test('canonical APIs reject obsolete website fields instead of translating aliases', async () => {
+  store.sql("INSERT INTO websites(name) VALUES('site')")
+  await call(siteEdit.onRequestPatch,context('/api/websites/1',{wp_article_count:3,content_stats_updated_date:'2026-11-21'},'PATCH'),400)
+  await call(siteEdit.onRequestPatch,context('/api/websites/1',{operating_scenario:'通用网站'},'PATCH'),400)
+})
+
+test('backup endpoint requires the explicit current format version', async () => {
+  const backups = await server.ssrLoadModule('/functions/api/backups/index.ts')
+  await call(backups.onRequestPost,context('/api/backups',[],'POST'),400)
+  await call(backups.onRequestPost,context('/api/backups',{websites:[],domains:[]},'POST'),400)
+  const exported = await call(backups.onRequestGet,context('/api/backups'))
+  assert.equal(exported.format_version,1)
+  assert.ok(Array.isArray(exported.website_accounts))
+  assert.equal(exported.provider_credentials,undefined)
+})
+
+test('creating a domain with the primary role promotes it and demotes the existing primary consistently',async()=>{
+ await call(sites.onRequestPost,context('/api/websites',{name:'domain site',domain:{domain:'oldprimary.test',registrar:'r',registrar_date:'2026-01-01',expiry_date:'2027-01-01',service_type:'网站'}},'POST'),201)
+ await call(domains.onRequestPost,context('/api/domains',{website_id:1,domain:'newprimary.test',domain_role:'主域名',registrar:'r',registrar_date:'2026-01-01',expiry_date:'2027-01-01',service_type:'网站'},'POST'),201)
+ assert.deepEqual(store.sql('SELECT domain_role,is_primary FROM domains ORDER BY id'),[{domain_role:'备用域名',is_primary:0},{domain_role:'主域名',is_primary:1}])
+})
+
+
+test('versioned backups reject contradictory primary domains before any writes', async () => {
+  await call(sites.onRequestPost, context('/api/websites', { name: 'Primary backup', domain: { domain: 'primary-backup.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
+  const backup = await call(snapshotApi.onRequestGet, context('/api/backups'))
+  backup.domains[0].is_primary = 0
+  await call(importData.onRequestPost, context('/api/backups', backup, 'POST'), 400)
+  assert.equal(store.sql('SELECT is_primary FROM domains')[0].is_primary, 1)
 })

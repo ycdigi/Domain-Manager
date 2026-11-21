@@ -20,8 +20,6 @@ CREATE TABLE IF NOT EXISTS websites (
     calculator_count INTEGER CHECK (calculator_count IS NULL OR calculator_count >= 0),
     article_count INTEGER CHECK (article_count IS NULL OR article_count >= 0),
     computer_name TEXT,
-    wp_calculator_count INTEGER,
-    wp_article_count INTEGER,
     content_stats_updated_date TEXT,
     potential TEXT,
     priority_order INTEGER NOT NULL DEFAULT 0,
@@ -29,8 +27,6 @@ CREATE TABLE IF NOT EXISTS websites (
     next_action_due_date TEXT,
     next_action_status TEXT NOT NULL DEFAULT '待做' CHECK (next_action_status IN ('待做', '处理中', '已完成')),
     new_site_override INTEGER CHECK (new_site_override IN (0, 1)),
-    operating_scenario TEXT,
-    scenario_note TEXT,
     page_count INTEGER CHECK (page_count IS NULL OR page_count >= 0),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (adsense_account_id) REFERENCES adsense_accounts(id)
@@ -50,7 +46,6 @@ CREATE TABLE IF NOT EXISTS domains (
     status TEXT NOT NULL DEFAULT '离线' CHECK (status IN ('在线', '离线')),
     memo TEXT,
     last_status_check_at DATETIME,
-    computer_name TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (website_id) REFERENCES websites(id) ON DELETE CASCADE
 );
@@ -95,7 +90,6 @@ CREATE TABLE IF NOT EXISTS adsense_income (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     adsense_account_id INTEGER NOT NULL,
     income_month TEXT NOT NULL,
-    amount REAL NOT NULL DEFAULT 0,
     amount_usd REAL NOT NULL DEFAULT 0,
     amount_cny REAL,
     transfer_date TEXT,
@@ -175,7 +169,6 @@ CREATE TABLE IF NOT EXISTS provider_credentials (
     FOREIGN KEY (account_id) REFERENCES provider_accounts(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_provider_resources_provider ON provider_resources(provider);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_resources_account_ownership ON provider_resources(account_id, identifier) WHERE account_id IS NOT NULL AND identifier LIKE 'account:%';
 CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_default ON provider_credentials(account_id) WHERE is_default=1;
 CREATE INDEX IF NOT EXISTS idx_credentials_account ON provider_credentials(account_id);
 
@@ -269,11 +262,8 @@ CREATE TABLE IF NOT EXISTS website_monitors (
     domain_id INTEGER,
     domain TEXT,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
-    required_text TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(required_text)),
-    forbidden_text TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(forbidden_text)),
     allowed_redirect_hosts TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(allowed_redirect_hosts)),
-    baseline_title TEXT,
-    status TEXT NOT NULL DEFAULT 'unchecked' CHECK (status IN ('healthy','pending','failure','review','incomplete','unchecked')),
+    status TEXT NOT NULL DEFAULT 'unchecked' CHECK (status IN ('healthy','pending','failure','unchecked')),
     reason TEXT,
     http_status INTEGER,
     response_ms INTEGER,
@@ -293,13 +283,12 @@ CREATE TABLE IF NOT EXISTS website_monitor_checks (
     website_id INTEGER NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
     domain TEXT NOT NULL,
     checked_at TEXT NOT NULL,
-    outcome TEXT NOT NULL CHECK (outcome IN ('healthy','failure','review','incomplete')),
+    outcome TEXT NOT NULL CHECK (outcome IN ('healthy','failure')),
     reason TEXT NOT NULL,
     http_status INTEGER,
     response_ms INTEGER NOT NULL,
     final_url TEXT NOT NULL,
-    title TEXT,
-    content_complete INTEGER NOT NULL CHECK (content_complete IN (0,1))
+    title TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_site ON website_monitor_checks(website_id, checked_at DESC);
 CREATE INDEX IF NOT EXISTS idx_monitor_checks_retention ON website_monitor_checks(checked_at);
@@ -343,7 +332,7 @@ BEGIN
     UPDATE website_monitors SET
         domain_id=(SELECT d.id FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1),
         domain=(SELECT d.domain FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1),
-        baseline_title=NULL,status='unchecked',reason=NULL,http_status=NULL,response_ms=NULL,final_url=NULL,title=NULL,checked_at=NULL,
+        status='unchecked',reason=NULL,http_status=NULL,response_ms=NULL,final_url=NULL,title=NULL,checked_at=NULL,
         next_check_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),consecutive_failures=0,lease_token=NULL,lease_until=NULL,config_version=config_version+1
     WHERE website_id IN (NEW.website_id) AND (
         domain_id IS NOT (SELECT d.id FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1)
@@ -358,7 +347,7 @@ BEGIN
     UPDATE website_monitors SET
         domain_id=(SELECT d.id FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1),
         domain=(SELECT d.domain FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1),
-        baseline_title=NULL,status='unchecked',reason=NULL,http_status=NULL,response_ms=NULL,final_url=NULL,title=NULL,checked_at=NULL,
+        status='unchecked',reason=NULL,http_status=NULL,response_ms=NULL,final_url=NULL,title=NULL,checked_at=NULL,
         next_check_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),consecutive_failures=0,lease_token=NULL,lease_until=NULL,config_version=config_version+1
     WHERE website_id IN (OLD.website_id,NEW.website_id) AND (
         domain_id IS NOT (SELECT d.id FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1)
@@ -373,7 +362,7 @@ BEGIN
     UPDATE website_monitors SET
         domain_id=(SELECT d.id FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1),
         domain=(SELECT d.domain FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1),
-        baseline_title=NULL,status='unchecked',reason=NULL,http_status=NULL,response_ms=NULL,final_url=NULL,title=NULL,checked_at=NULL,
+        status='unchecked',reason=NULL,http_status=NULL,response_ms=NULL,final_url=NULL,title=NULL,checked_at=NULL,
         next_check_at=strftime('%Y-%m-%dT%H:%M:%fZ','now'),consecutive_failures=0,lease_token=NULL,lease_until=NULL,config_version=config_version+1
     WHERE website_id IN (OLD.website_id) AND (
         domain_id IS NOT (SELECT d.id FROM domains d WHERE d.website_id=website_monitors.website_id AND d.is_primary=1 LIMIT 1)
@@ -417,7 +406,6 @@ CREATE TABLE IF NOT EXISTS website_batch_reviews (
     batch_id INTEGER NOT NULL REFERENCES website_batches(id) ON DELETE CASCADE,
     reviewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     member_count INTEGER NOT NULL CHECK (member_count >= 0),
-    scenario_counts TEXT NOT NULL DEFAULT '{}',
     stage_counts TEXT NOT NULL DEFAULT '{}',
     content_totals TEXT NOT NULL DEFAULT '{}',
     conclusion TEXT,
@@ -439,19 +427,13 @@ CREATE TABLE IF NOT EXISTS domain_favicons (
     retry_after TEXT,
     last_error TEXT
 );
-CREATE TRIGGER IF NOT EXISTS trg_counts_calculator_count_canonical AFTER UPDATE OF calculator_count ON websites
-WHEN NEW.calculator_count IS NOT NEW.wp_calculator_count
-BEGIN UPDATE websites SET wp_calculator_count=NEW.calculator_count WHERE id=NEW.id; END;
-CREATE TRIGGER IF NOT EXISTS trg_counts_calculator_count_legacy AFTER UPDATE OF wp_calculator_count ON websites
-WHEN NEW.wp_calculator_count IS NOT NEW.calculator_count
-BEGIN UPDATE websites SET calculator_count=NEW.wp_calculator_count WHERE id=NEW.id; END;
-CREATE TRIGGER IF NOT EXISTS trg_counts_calculator_count_insert AFTER INSERT ON websites
-BEGIN UPDATE websites SET calculator_count=COALESCE(NEW.calculator_count,NEW.wp_calculator_count), wp_calculator_count=COALESCE(NEW.calculator_count,NEW.wp_calculator_count) WHERE id=NEW.id; END;
-CREATE TRIGGER IF NOT EXISTS trg_counts_article_count_canonical AFTER UPDATE OF article_count ON websites
-WHEN NEW.article_count IS NOT NEW.wp_article_count
-BEGIN UPDATE websites SET wp_article_count=NEW.article_count WHERE id=NEW.id; END;
-CREATE TRIGGER IF NOT EXISTS trg_counts_article_count_legacy AFTER UPDATE OF wp_article_count ON websites
-WHEN NEW.wp_article_count IS NOT NEW.article_count
-BEGIN UPDATE websites SET article_count=NEW.wp_article_count WHERE id=NEW.id; END;
-CREATE TRIGGER IF NOT EXISTS trg_counts_article_count_insert AFTER INSERT ON websites
-BEGIN UPDATE websites SET article_count=COALESCE(NEW.article_count,NEW.wp_article_count), wp_article_count=COALESCE(NEW.article_count,NEW.wp_article_count) WHERE id=NEW.id; END;
+
+CREATE TABLE IF NOT EXISTS website_accounts (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ website_id INTEGER NOT NULL REFERENCES websites(id) ON DELETE CASCADE,
+ account_id INTEGER NOT NULL REFERENCES provider_accounts(id) ON DELETE CASCADE,
+ memo TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE(website_id, account_id)
+);
+CREATE INDEX IF NOT EXISTS idx_website_accounts_account ON website_accounts(account_id);

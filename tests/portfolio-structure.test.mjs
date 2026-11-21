@@ -71,11 +71,10 @@ test('generic counts survive stack and domain changes, legacy writes share the s
     )
   )
   await call(edit.onRequestPatch, ctx({ platform: 'Next.js' }, 'PATCH'))
-  await call(edit.onRequestPatch, ctx({ wp_article_count: 14, content_stats_updated_date: '2026-11-21' }, 'PATCH'))
+  await call(edit.onRequestPatch, ctx({ article_count: 14, content_stats_updated_date: '2026-11-21' }, 'PATCH'))
   const [site] = await call(sites.onRequestGet, ctx())
   assert.equal(site.calculator_count, 0)
   assert.equal(site.article_count, 14)
-  assert.equal(site.wp_article_count, 14)
   assert.equal(site.computer_name, 'Mac Mini YC')
   await call(edit.onRequestPatch, ctx({ article_count: 15, wp_article_count: 16 }, 'PATCH'), 400)
   assert.equal(store.sql('SELECT article_count FROM websites')[0].article_count, 14)
@@ -132,18 +131,18 @@ test('changing primary resources preserves relation notes and invalid roles cann
   assert.equal(store.sql('SELECT memo FROM website_resources')[0].memo, 'keep my note')
   await call(links.onRequestPost, ctx({ website_id: 1, resource_id: 1, role: '托管', is_primary: true }, 'POST'), 400)
 })
-test('backup roundtrip preserves colliding legacy resource roles and new account fields', async () => {
+test('backup roundtrip preserves distinct resource purposes and new account fields', async () => {
   await create()
   store.sql(
-    `INSERT INTO provider_accounts(provider,name,provider_name,github_username) VALUES('github','main','GitHub','user'); INSERT INTO provider_resources(account_id,provider,name) VALUES(1,'github','repo'); INSERT INTO website_resources(website_id,resource_id,role,memo) VALUES(1,1,'代码仓库','canonical note'),(1,1,'历史关联','legacy note');`
+    `INSERT INTO provider_accounts(provider,name,provider_name,github_username) VALUES('github','main','GitHub','user'); INSERT INTO provider_resources(account_id,provider,name) VALUES(1,'github','repo'); INSERT INTO website_resources(website_id,resource_id,role,memo) VALUES(1,1,'代码仓库','canonical note'),(1,1,'其他','legacy note');`
   )
-  const exports = await server.ssrLoadModule('/functions/api/export/snapshot/index.ts')
-  const imports = await server.ssrLoadModule('/functions/api/domains/import.ts')
+  const exports = await server.ssrLoadModule('/functions/api/backups/index.ts')
+  const imports = await server.ssrLoadModule('/functions/api/backups/index.ts')
   const backup = await call(exports.onRequestGet, ctx())
   await call(imports.onRequestPost, ctx(backup, 'POST'))
   assert.deepEqual(store.sql('SELECT role,memo FROM website_resources ORDER BY id'), [
     { role: '代码仓库', memo: 'canonical note' },
-    { role: '历史关联', memo: 'legacy note' }
+    { role: '其他', memo: 'legacy note' }
   ])
 })
 test('legacy review comparison ignores retired scenarios and maps old count totals', async () => {
@@ -152,7 +151,7 @@ test('legacy review comparison ignores retired scenarios and maps old count tota
     member_count: 1,
     scenario_counts: '{"WordPress 计算器站":1}',
     stage_counts: '{"验证":1}',
-    content_totals: '{"page_count":20,"wp_article_count":8,"wp_calculator_count":3}'
+    content_totals: '{"page_count":20,"article_count":8,"calculator_count":3}'
   }
   assert.equal(snapshotMatches(old, [{ stage: '验证', page_count: 20, article_count: 8, calculator_count: 3 }]), true)
   assert.equal(snapshotMatches(old, [{ stage: '验证', page_count: 20, article_count: 9, calculator_count: 3 }]), false)

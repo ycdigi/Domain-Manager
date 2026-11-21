@@ -27,3 +27,6 @@ wrangler.toml
 # Local database backups and visual verification artifacts
 /backups/
 /.hallmark/
+
+# Wrangler local runtime and generated bundles
+/.wrangler/

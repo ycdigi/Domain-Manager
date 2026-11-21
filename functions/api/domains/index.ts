@@ -33,12 +33,17 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (!['主域名', '跳转域名', '备用域名'].includes(String(body.domain_role || '备用域名'))) return json(null, 400, '域名用途无效')
         const normalized = normalizeDomain(String(body.domain))
         if (await context.env.DB.prepare("SELECT id FROM domains WHERE lower(rtrim(domain, '.'))=?").bind(normalized).first()) return json(null, 409, '该域名已存在')
-        const isPrimary = websiteId !== null && (body.is_primary === true || body.is_primary === 1)
-        if (isPrimary) await context.env.DB.prepare('UPDATE domains SET is_primary=0 WHERE website_id=?').bind(websiteId).run()
-        const result = await context.env.DB.prepare(`INSERT INTO domains
-            (website_id, domain, registrar, registrar_link, registrar_date, expiry_date, service_type, status, memo, domain_role, is_primary, computer_name)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
-            .bind(websiteId, body.domain, body.registrar, body.registrar_link || null, body.registrar_date, body.expiry_date, body.service_type, domain.status, body.memo || null, body.domain_role || '备用域名', isPrimary ? 1 : 0, body.computer_name || null).first()
+        if (body.domain_role === '主域名' && websiteId === null) return json(null,400,'主域名必须先关联网站')
+        const firstDomain = websiteId !== null && !(await context.env.DB.prepare('SELECT id FROM domains WHERE website_id=? LIMIT 1').bind(websiteId).first())
+        const isPrimary = websiteId !== null && (firstDomain || body.domain_role === '主域名' || body.is_primary === true || body.is_primary === 1)
+        const writes: D1PreparedStatement[] = []
+        if (isPrimary) writes.push(context.env.DB.prepare("UPDATE domains SET is_primary=0,domain_role=CASE WHEN domain_role='主域名' THEN '备用域名' ELSE domain_role END WHERE website_id=?").bind(websiteId))
+        writes.push(context.env.DB.prepare(`INSERT INTO domains
+            (website_id, domain, registrar, registrar_link, registrar_date, expiry_date, service_type, status, memo, domain_role, is_primary)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
+            .bind(websiteId, normalized, body.registrar, body.registrar_link || null, body.registrar_date, body.expiry_date, body.service_type, domain.status, body.memo || null, isPrimary ? '主域名' : body.domain_role || '备用域名', isPrimary ? 1 : 0))
+        const results = await context.env.DB.batch(writes)
+        const result = results[results.length - 1].results[0]
         if (context.waitUntil) context.waitUntil(cacheDomainFavicon(context.env.DB, Number((result as {id:number})?.id)))
         return json(result, 201, '域名已关联')
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '添加域名失败') }

@@ -26,7 +26,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
 
         // 如果是 API 请求，继续处理
         if (url.pathname.startsWith('/api/')) {
-            // 外部检查和 AI 同步接口使用 API_TOKEN
+            // AI 同步接口使用 API_TOKEN
             if (url.pathname.startsWith('/api/ai/')) {
                 const authError = await checkApiToken(context)
                 if (authError) return authError
@@ -56,18 +56,7 @@ export const onRequest: PagesFunction<Env> = async (context) => {
             return response
         }
 
-        // 如果是 OPTIONS 请求，返回 CORS 头
-        if (context.request.method === 'OPTIONS') {
-            const headers = new Headers({
-                'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization'
-            })
-            applySecurityHeaders(headers, true)
-            return new Response(null, {
-                headers
-            })
-        }
+
 
         // 如果是静态资源请求，直接返回资源
         if (url.pathname.startsWith('/assets/')) {

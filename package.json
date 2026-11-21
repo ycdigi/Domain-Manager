@@ -53,7 +53,9 @@
     "db:migrate:v1.22.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.22.0.sql --yes",
     "db:migrate:v1.23.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.23.0.sql --yes",
     "typecheck:monitor": "tsc --project tsconfig.monitor.json",
-    "db:migrate:v1.24.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.24.0.sql --yes"
+    "db:migrate:v1.24.0": "wrangler d1 execute domains-db --remote --file=./schema-migration-v1.24.0.sql --yes",
+    "db:migrate:v1.25.0": "wrangler d1 execute domains-db --remote --config wrangler.monitor.jsonc --env production --file=./schema-migration-v1.25.0.sql --yes",
+    "db:migrate:v1.26.0": "wrangler d1 execute domains-db --remote --config wrangler.monitor.jsonc --env production --file=./schema-migration-v1.26.0.sql --yes"
   },
   "dependencies": {
     "element-plus": "^2.9.7",

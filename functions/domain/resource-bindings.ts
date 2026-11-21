@@ -1,29 +1,19 @@
+import { resourceSupportsRole } from '../../shared/resource-roles'
 import type { ProviderType } from '../types'
 
-export type ResourceBindingInput = { websiteId: number; resourceId?: number; accountId?: number; role: string; isPrimary?: boolean | number; memo?: string | null }
+export type ResourceBindingInput = { websiteId: number; resourceId: number; role: string; isPrimary?: boolean | number; memo?: string | null }
 export type ResolvedResource = { id: number; provider: ProviderType; status: string; identifier: string | null; account_id: number | null }
 export class ResourceBindingError extends Error {}
-export const isAccountOwnershipResource = (identifier: unknown) => typeof identifier === 'string' && /^account:\d+$/.test(identifier)
 const isPrimary = (value: unknown) => value === true || value === 1 || value === '1'
 
 export const resolveBindingResource = async (db: D1Database, input: ResourceBindingInput, allowDisabled = false): Promise<ResolvedResource> => {
-    if (!Number.isInteger(input.websiteId) || !input.role?.trim() || (!Number.isInteger(input.resourceId) && !Number.isInteger(input.accountId))) throw new ResourceBindingError('网站、账号或资源和角色不能为空')
+    if (!Number.isInteger(input.websiteId) || !input.role?.trim() || !Number.isInteger(input.resourceId)) throw new ResourceBindingError('网站、实际资源和用途不能为空')
     if (!await db.prepare('SELECT id FROM websites WHERE id=?').bind(input.websiteId).first()) throw new ResourceBindingError('网站不存在')
-    let resourceId = input.resourceId
-    if (!resourceId && input.accountId) {
-        const account = await db.prepare('SELECT id, provider, name, status FROM provider_accounts WHERE id=?').bind(input.accountId).first<{ id: number; provider: ProviderType; name: string; status: string }>()
-        if (!account) throw new ResourceBindingError('服务商账号不存在')
-        if (!allowDisabled && account.status === '停用') throw new ResourceBindingError('停用的账号不能新增网站关联')
-        const existing = await db.prepare("SELECT id FROM provider_resources WHERE account_id=? AND identifier=?").bind(account.id, `account:${account.id}`).first<{ id: number }>()
-        if (existing) resourceId = existing.id
-        else {
-            const created = await db.prepare(`INSERT INTO provider_resources (account_id, provider, name, identifier, status, memo) VALUES (?, ?, ?, ?, '正常', ?) RETURNING id`).bind(account.id, account.provider, `${account.name}（账号归属）`, `account:${account.id}`, '由账号绑定自动生成，可继续关联具体资源').run<{ id: number }>()
-            resourceId = created.results?.[0]?.id
-        }
-    }
+    const resourceId = input.resourceId
     const resource = await db.prepare(`SELECT r.id, r.provider, r.status, r.identifier, r.account_id, a.status AS account_status FROM provider_resources r LEFT JOIN provider_accounts a ON a.id=r.account_id WHERE r.id=?`).bind(resourceId).first<ResolvedResource & { account_status: string | null }>()
     if (!resource) throw new ResourceBindingError('资源不存在')
     if (!allowDisabled && (resource.status === '停用' || resource.account_status === '停用')) throw new ResourceBindingError('停用的账号或资源不能新增关联')
+    if (!resourceSupportsRole(resource.provider, input.role)) throw new ResourceBindingError('资源类型与用途不匹配')
     if (!allowDisabled && input.role === '托管' && resource.provider === 'github') throw new ResourceBindingError('GitHub 仓库不能作为托管资源')
     if (!allowDisabled && input.role === '代码仓库' && resource.provider !== 'github') throw new ResourceBindingError('代码仓库必须关联 GitHub 资源')
     return resource
@@ -34,5 +24,3 @@ export const bindingWrite = (db: D1Database, input: ResourceBindingInput, resour
     INSERT INTO website_resources (website_id, resource_id, role, is_primary, memo) VALUES (?, ?, ?, ?, ?)
     ON CONFLICT(website_id, resource_id, role) DO UPDATE SET is_primary=excluded.is_primary, memo=CASE WHEN ?=1 THEN excluded.memo ELSE website_resources.memo END RETURNING *
 `).bind(input.websiteId, resourceId, input.role.trim(), isPrimary(input.isPrimary) ? 1 : 0, input.memo?.trim() || '', input.memo === undefined ? 0 : 1)
-
-export const normalizeResourceRole = (role: string) => ['部署平台','虚拟主机','VPS'].includes(role) ? '托管' : ['托管','代码仓库','DNS/CDN'].includes(role) ? role : '其他'

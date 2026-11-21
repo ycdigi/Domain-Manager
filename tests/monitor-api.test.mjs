@@ -20,11 +20,11 @@ test('monitor endpoints require a login, not an API token or anonymous access',a
 test('configuration validates rules, updates them and releases old leases',async()=>{
  const api=await module('/functions/api/websites/[id]/monitor/index.ts')
  await api.onRequestGet(ctx())
- store.sql("UPDATE website_monitors SET lease_token='old',lease_until='2099-01-01',baseline_title='Old'")
- const response=await api.onRequestPatch(ctx({required_text:['Welcome'],forbidden_text:['Hacked'],allowed_redirect_hosts:['example.com'],enabled:false}))
+ store.sql("UPDATE website_monitors SET lease_token='old',lease_until='2099-01-01'")
+ const response=await api.onRequestPatch(ctx({allowed_redirect_hosts:['example.com'],enabled:false}))
  assert.equal(response.status,200)
  const data=(await response.json()).data.monitor
- assert.deepEqual(data.required_text,['Welcome']);assert.equal(data.status,'disabled')
+ assert.deepEqual(data.allowed_redirect_hosts,['example.com']);assert.equal(data.status,'disabled')
  assert.equal(store.sql('SELECT lease_token FROM website_monitors')[0].lease_token,null)
  for (const body of [{enabled:1},{required_text:'bad'},{allowed_redirect_hosts:['http://example.com']},{baseline_title:'x'.repeat(1001)},{unexpected:true}]) assert.equal((await api.onRequestPatch(ctx(body))).status,400)
  assert.equal((await api.onRequestGet(ctx(undefined,'999'))).status,404)
@@ -38,9 +38,8 @@ test('marking an incident read preserves its open fault state',async()=>{
  assert.equal(data.unread_count,0);assert.equal(data.monitors[0].status,'failure');assert.equal(data.incidents[0].resolved_at,null)
 })
 
-test('legacy content checks are shown as awaiting a lightweight recheck',async()=>{
- store.sql("UPDATE website_monitors SET status='incomplete',reason='content_extraction_limit',http_status=200,checked_at='2026-11-12T00:00:00.000Z'")
- const response=await (await module('/functions/api/monitor/index.ts')).onRequestGet(ctx())
- const item=(await response.json()).data.monitors[0]
- assert.equal(item.status,'unchecked');assert.equal(item.reason,null)
+test('obsolete monitor rule writes are rejected without changing current state',async()=>{
+ const api=await module('/functions/api/websites/[id]/monitor/index.ts')
+ for (const body of [{required_text:['old']},{forbidden_text:['old']},{baseline_title:'Old'}]) assert.equal((await api.onRequestPatch(ctx(body))).status,400)
+ assert.equal(store.sql('SELECT status FROM website_monitors')[0].status,'unchecked')
 })

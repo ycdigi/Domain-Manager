@@ -1,6 +1,6 @@
 import type { Env } from '../../../types'
 import { checkAuth } from '../../../utils/auth'
-import { bindingWrite, primaryClearWrite, ResourceBindingError, resolveBindingResource, normalizeResourceRole } from '../../../domain/resource-bindings'
+import { bindingWrite, primaryClearWrite, ResourceBindingError, resolveBindingResource } from '../../../domain/resource-bindings'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
 
@@ -23,7 +23,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
     try {
         const data = await context.request.json() as { website_id?: number; resource_id?: number; account_id?: number; role?: string; is_primary?: boolean | number; memo?: string | null }
         const websiteId = data.website_id as number
-        const input = { websiteId, resourceId: data.resource_id, accountId: data.account_id, role: normalizeResourceRole(data.role || ''), isPrimary: data.is_primary, memo: data.memo }
+        const input = { websiteId, resourceId: data.resource_id as number, role: data.role || '', isPrimary: data.is_primary, memo: data.memo }
         const resource = await resolveBindingResource(context.env.DB, input)
         const statements = [] as D1PreparedStatement[]
         if (data.is_primary) statements.push(primaryClearWrite(context.env.DB, websiteId, input.role))

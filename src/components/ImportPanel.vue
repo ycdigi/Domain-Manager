@@ -11,7 +11,7 @@
                 </div>
                 <template #tip>
                     <div class="el-upload__tip">
-                        支持网站组合 JSON 备份，也可导入旧版域名对象数组。
+                        支持当前版本导出的网站管理 JSON 备份。旧版文件需在升级前完成转换与核验。
                     </div>
                 </template>
             </el-upload>
@@ -148,7 +148,7 @@ const sendImport = async (dryRun: boolean) => {
     const formData = new FormData()
     formData.append('file', selectedFile.value!)
     if (batchId.value) formData.append('batch_id', String(batchId.value))
-    const result = await api.upload<ImportResult>(`/api/domains/import${dryRun ? '?dry_run=1' : ''}`, formData)
+    const result = await api.upload<ImportResult>(`/api/backups${dryRun ? '?dry_run=1' : ''}`, formData)
     importResult.value = result
     return result
 }
@@ -179,7 +179,7 @@ const handleImport = async () => {
         imported.value = true
         previewReady.value = false
         if (result.success > 0) {
-            invalidateData('/api/websites', '/api/domains', '/api/resources', '/api/adsense/accounts', '/api/adsense/income', '/api/dashboard/summary', '/api/batches', '/api/work-queue')
+            invalidateData('/api/websites', '/api/domains', '/api/resources', '/api/adsense/accounts', '/api/adsense/income', '/api/batches', '/api/work-queue')
             emit('success')
         }
     } catch (error: unknown) {

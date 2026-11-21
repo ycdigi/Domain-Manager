@@ -7,7 +7,6 @@ const server = await createServer({ configFile: false, optimizeDeps: { noDiscove
 const links = await server.ssrLoadModule('/functions/api/resources/links/index.ts')
 const resources = await server.ssrLoadModule('/functions/api/resources/index.ts')
 const accounts = await server.ssrLoadModule('/functions/api/resources/accounts/index.ts')
-const bindings = await server.ssrLoadModule('/functions/domain/resource-bindings.ts')
 const store = database()
 let token
 const ctx = (url, body, method = 'GET') => ({ env: { DB: store.db, USER: 'test', PASS: 'secret' }, params: {}, request: new Request(`https://example.test${url}`, { method, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }) })
@@ -43,15 +42,6 @@ test('disabled accounts and resources reject new website bindings while old link
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_resources WHERE website_id=?', [websiteId])[0].count, 1)
 })
 
-test('account ownership resource is created once and remains managed by the binding helper', async () => {
-  const websiteId = site('site'); const accountId = await account('main')
-  const input = { websiteId, accountId, role: '账号归属' }
-  const first = await bindings.resolveBindingResource(store.db, input)
-  const second = await bindings.resolveBindingResource(store.db, input)
-  assert.equal(first.id, second.id)
-  assert.equal(store.sql("SELECT COUNT(*) AS count FROM provider_resources WHERE identifier='account:1'")[0].count, 1)
-})
-
 test('resource listing and account counts report associated websites', async () => {
   const websiteId = site('site'); const accountId = await account('main'); const resourceId = await resource(accountId, 'repo')
   store.sql('INSERT INTO website_resources(website_id,resource_id,role) VALUES (?,?,?)', [websiteId, resourceId, '代码仓库'])
@@ -59,4 +49,15 @@ test('resource listing and account counts report associated websites', async () 
   assert.equal(listed[0].linked_website_count, 1)
   const accountRows = await call(accounts.onRequestGet, ctx('/api/resources/accounts'))
   assert.equal(accountRows[0].linked_website_count, 1)
+})
+
+test('explicit website account link preserves ownership without inventing deployment resources', async () => {
+  const accountLinks = await server.ssrLoadModule('/functions/api/resources/account-links/index.ts')
+  const websiteId = site('account-linked'); const accountId = await account('main')
+  const linked = await call(accountLinks.onRequestPost, ctx('/api/resources/account-links', { website_id: websiteId, account_id: accountId, memo: '归属' }, 'POST'), 201)
+  assert.equal(linked.account_id, accountId)
+  await call(accountLinks.onRequestPost, ctx('/api/resources/account-links', { website_id: websiteId, account_id: accountId, memo: '更新' }, 'POST'), 201)
+  assert.equal(store.sql('SELECT COUNT(*) AS n FROM website_accounts')[0].n, 1)
+  assert.equal(store.sql('SELECT COUNT(*) AS n FROM provider_resources')[0].n, 0)
+  assert.equal((await call(accounts.onRequestGet, ctx('/api/resources/accounts')))[0].linked_website_count, 1)
 })
