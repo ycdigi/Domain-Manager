@@ -7,8 +7,18 @@
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load">重试</el-button></div>
     <div v-if="cloudflareMissing" class="page-muted">Cloudflare 托管尚未关联主要 GitHub 仓库，可在下方补充。</div>
     <h3>关联账号</h3><p class="page-muted">账号归属不代表托管位置；请在下方关联实际主机、项目或仓库。</p>
-    <ul class="page-list"><li v-for="link in accountLinks" :key="link.id"><span>{{ link.account_name }} · {{ link.provider_name || link.provider }}</span><el-button text :disabled="saving" @click="unlinkAccount(link.id)">解除账号关联</el-button></li></ul>
-    <el-form label-position="top" @submit.prevent="saveAccount"><el-form-item label="服务账号"><el-select v-model="accountForm.account_id" clearable filterable><el-option v-for="account in accounts.filter(a => a.status !== '停用')" :key="account.id" :label="account.name" :value="account.id!" /></el-select></el-form-item><el-button :loading="saving" native-type="submit">关联账号</el-button></el-form>
+    <ul class="page-list"><li v-for="link in accountLinks" :key="link.id"><ProviderIdentity :provider="link.provider" :provider-name="link.provider_name" :name="link.account_name" /><el-button text :disabled="saving" @click="unlinkAccount(link.id)">解除账号关联</el-button></li></ul>
+    <el-form label-position="top" @submit.prevent="saveAccount">
+      <el-form-item label="服务账号">
+        <el-select v-model="accountForm.account_id" clearable filterable placeholder="选择平台账号">
+          <template #label><ProviderIdentity v-if="selectedAccount" :provider="selectedAccount.provider" :provider-name="selectedAccount.provider_name" :name="selectedAccount.name" /></template>
+          <el-option v-for="account in accounts.filter(a => a.status !== '停用')" :key="account.id" :label="accountLabel(account)" :value="account.id!">
+            <ProviderIdentity :provider="account.provider" :provider-name="account.provider_name" :name="account.name" />
+          </el-option>
+        </el-select>
+      </el-form-item>
+      <el-button :loading="saving" native-type="submit">关联账号</el-button>
+    </el-form>
     <div v-for="role in roles" :key="role" class="deployment-role">
       <strong>{{ role }}</strong>
       <ul class="page-list">
@@ -54,6 +64,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import ProviderIdentity from './ProviderIdentity.vue'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
 import type { Website } from '../api/websites'
@@ -76,6 +87,9 @@ const roles = resourceRoles
 const accounts = ref<ProviderAccount[]>([])
 const accountLinks = ref<Array<{ id:number; account_name:string; provider:string; provider_name?:string }>>([])
 const accountForm = reactive({ account_id:undefined as number | undefined })
+const selectedAccount = computed(() => accounts.value.find(account => account.id === accountForm.account_id))
+const providerLabels: Record<string, string> = { github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }
+const accountLabel = (account: ProviderAccount) => `${account.provider_name?.trim() || providerLabels[account.provider] || account.provider} · ${account.name}`
 const links = ref<Link[]>([])
 const resources = ref<ProviderResource[]>([])
 const saving = ref(false)
