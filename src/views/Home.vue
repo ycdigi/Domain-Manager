@@ -1,62 +1,66 @@
 <template>
   <div class="workspace-page">
-    <WorkspaceHeading title="网站总表" subtitle="网站、部署位置与开发资料"
-      ><el-button :loading="loading" @click="load(true)">刷新</el-button
-      ><el-button type="primary" @click="createVisible = true">新增网站</el-button></WorkspaceHeading
-    >
+    <WorkspaceHeading title="网站总表" subtitle="网站、部署位置与开发资料">
+      <template #context>
+        <nav class="portfolio-stage-tabs site-view-tabs" aria-label="网站状态">
+          <button
+            v-for="tab in views"
+            :key="tab.value"
+            class="portfolio-stage-tab"
+            :class="{ 'is-active': view === tab.value }"
+            :aria-pressed="view === tab.value"
+            @click="filter('view', tab.value === 'active' ? '' : tab.value)"
+          >
+            {{ tab.label }}</button
+          ><button v-if="sortKey" class="portfolio-sort-reset" @click="sortKey = ''">恢复默认排序</button>
+        </nav>
+      </template>
+      <el-button :loading="loading" @click="load(true)">刷新</el-button>
+      <el-button type="primary" @click="createVisible = true">新增网站</el-button>
+    </WorkspaceHeading>
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load(true)">重试</el-button></div>
-    <div class="site-filters">
-      <el-input v-model="search" clearable placeholder="搜索网站或域名" aria-label="搜索网站或域名" />
-      <el-select
-        :model-value="String(route.query.ownership || '')"
-        clearable
-        placeholder="全部归属"
-        aria-label="网站归属筛选"
-        @change="(value) => filter('ownership', value)"
-        ><el-option v-for="value in ownerships" :key="value" :label="value" :value="value"
-      /></el-select>
-      <el-select
-        :model-value="String(route.query.platform || '')"
-        clearable
-        placeholder="全部技术栈"
-        aria-label="技术栈筛选"
-        @change="(value) => filter('platform', value)"
-        ><el-option v-for="value in platforms" :key="value" :label="value" :value="value"
-      /></el-select>
-      <el-select
-        :model-value="String(route.query.stage || '')"
-        clearable
-        placeholder="全部阶段"
-        aria-label="阶段筛选"
-        @change="(value) => filter('stage', value)"
-        ><el-option v-for="value in stages" :key="value" :label="value" :value="value"
-      /></el-select>
-      <el-select
-        :model-value="String(route.query.provider || '')"
-        clearable
-        placeholder="全部托管服务商"
-        aria-label="服务商筛选"
-        @change="(value) => filter('provider', value)"
-        ><el-option v-for="value in providerNames" :key="value" :label="value" :value="value"
-      /></el-select>
+    <div class="site-toolbar">
+      <div class="site-filters">
+        <el-input v-model="search" clearable placeholder="搜索网站或域名" aria-label="搜索网站或域名" />
+        <el-select
+          :model-value="String(route.query.ownership || '')"
+          clearable
+          placeholder="全部归属"
+          aria-label="网站归属筛选"
+          @change="(value) => filter('ownership', value)"
+          ><el-option v-for="value in ownerships" :key="value" :label="value" :value="value"
+        /></el-select>
+        <el-select
+          :model-value="String(route.query.platform || '')"
+          clearable
+          placeholder="全部技术栈"
+          aria-label="技术栈筛选"
+          @change="(value) => filter('platform', value)"
+          ><el-option v-for="value in platforms" :key="value" :label="value" :value="value"
+        /></el-select>
+        <el-select
+          :model-value="String(route.query.stage || '')"
+          clearable
+          placeholder="全部阶段"
+          aria-label="阶段筛选"
+          @change="(value) => filter('stage', value)"
+          ><el-option v-for="value in stages" :key="value" :label="value" :value="value"
+        /></el-select>
+        <el-select
+          :model-value="String(route.query.provider || '')"
+          clearable
+          placeholder="全部托管服务商"
+          aria-label="服务商筛选"
+          @change="(value) => filter('provider', value)"
+          ><el-option v-for="value in providerNames" :key="value" :label="value" :value="value"
+        /></el-select>
+      </div>
+      <div class="site-results">
+        <span role="status">{{ visibleSites.length }} / {{ websites.length }} 个网站</span>
+        <el-tag v-for="condition in activeFilters" :key="condition.key" closable @close="filter(condition.key, '')">{{ condition.label }}</el-tag>
+        <el-button v-if="activeFilters.length" text @click="clearFilters">清除全部条件</el-button>
+      </div>
     </div>
-    <div class="site-results">
-      <span role="status">{{ visibleSites.length }} / {{ websites.length }} 个网站</span>
-      <el-tag v-for="condition in activeFilters" :key="condition.key" closable @close="filter(condition.key, '')">{{ condition.label }}</el-tag>
-      <el-button v-if="activeFilters.length" text @click="clearFilters">清除全部条件</el-button>
-    </div>
-    <nav class="portfolio-stage-tabs site-view-tabs" aria-label="网站状态">
-      <button
-        v-for="tab in views"
-        :key="tab.value"
-        class="portfolio-stage-tab"
-        :class="{ 'is-active': view === tab.value }"
-        :aria-pressed="view === tab.value"
-        @click="filter('view', tab.value === 'active' ? '' : tab.value)"
-      >
-        {{ tab.label }}</button
-      ><button v-if="sortKey" class="portfolio-sort-reset" @click="sortKey = ''">恢复默认排序</button>
-    </nav>
     <div v-if="selectedIds.size" class="portfolio-bulk-toolbar">
       <strong>已选 {{ selectedIds.size }} 个网站</strong
       ><el-select v-model="bulkStage" aria-label="批量设置阶段"

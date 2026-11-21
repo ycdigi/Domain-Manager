@@ -30,6 +30,14 @@ with sync_playwright() as p:
  expect(page.locator('.site-table tbody tr')).to_have_count(2)
  page.goto('http://127.0.0.1:5173/home');page.wait_for_load_state('networkidle')
  table=page.locator('.site-table');expect(table.locator('thead th')).to_have_count(12)
+ # Primary controls share the header; result metadata uses spare filter-row space.
+ tabs=page.get_by_role('navigation',name='网站状态',exact=True)
+ heading=page.locator('.workspace-heading')
+ assert abs(tabs.bounding_box()['y']-heading.get_by_role('button',name='刷新',exact=True).bounding_box()['y'])<12
+ filters=page.locator('.site-filters');results=page.locator('.site-results')
+ assert abs(results.bounding_box()['y']-filters.bounding_box()['y'])<12
+ assert table.bounding_box()['y']<190
+
  expect(table.locator('thead th')).to_have_text(['网站 / 主域名','技术栈','总页面数','计算器数量','文章数量','日点击','服务商','GitHub','服务器 IP','电脑','阶段','操作'])
  row=table.locator('tbody tr').filter(has=page.get_by_role('button',name='Astro site',exact=True))
  expect(row.locator('td').nth(3)).to_have_text('0');expect(row).to_contain_text('Cloudflare');expect(row.get_by_role('link',name='org/repo')).to_have_attribute('href','https://github.com/org/repo')

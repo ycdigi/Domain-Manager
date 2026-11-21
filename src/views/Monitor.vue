@@ -1,6 +1,6 @@
 <template>
   <div class="workspace-page monitor-page">
-    <WorkspaceHeading title="网站监控" :subtitle="monitorSubtitle"><div class="monitor-filters"><el-input v-model="search" placeholder="搜索网站或域名" clearable /><el-select v-model="status" aria-label="监控状态" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option v-for="(label, key) in monitorLabels" :key="key" :label="label" :value="key" /></el-select></div><el-button :loading="loading" @click="load(true)">刷新</el-button></WorkspaceHeading>
+    <WorkspaceHeading title="网站监控" :subtitle="monitorSubtitle"><div class="monitor-filters"><el-input v-model="search" placeholder="搜索网站或域名" clearable /><el-select v-model="status" aria-label="监控状态" placeholder="全部状态"><el-option label="全部状态" value="" /><el-option v-for="(label, key) in monitorLabels" :key="key" :label="label" :value="key" /></el-select><el-button :loading="loading" @click="load(true)">刷新</el-button></div></WorkspaceHeading>
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load(true)">重试</el-button></div>
     <template v-if="overview">
       <el-alert v-if="staleRunner" title="超过 10 分钟未完成巡检" type="warning" :closable="false" />
