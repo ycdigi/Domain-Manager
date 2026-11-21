@@ -13,7 +13,7 @@ const choices: Record<string, Array<string | number>> = {
     new_site_override: [0, 1]
 }
 const dates = ['adsense_opened_date', 'seo_last_date', 'clicks_updated_date', 'content_stats_updated_date', 'next_action_due_date']
-const counts = ['daily_clicks', 'wp_calculator_count', 'wp_article_count', 'page_count', 'priority_order']
+const counts = ['calculator_count', 'article_count', 'daily_clicks', 'wp_calculator_count', 'wp_article_count', 'page_count', 'priority_order']
 
 export const isUnchangedLegacyIndustry = (value: unknown, current: unknown) =>
     typeof current === 'string' && !isWebsiteIndustry(current) && value === normalizeWebsiteIndustry(current)
@@ -33,12 +33,18 @@ export const validateWebsiteFields = (fields: Record<string, unknown>, current: 
     if (fields.daily_clicks_range != null && !dailyClicksRanges.includes(fields.daily_clicks_range as typeof dailyClicksRanges[number])) return 'daily_clicks_range 无效'
     for (const key of dates) if (fields[key] != null && fields[key] !== '' && !isValidDate(fields[key])) return `${key} 必须是有效的 YYYY-MM-DD 日期`
     const next = { ...current, ...fields }
-    if (fields.wp_calculator_count != null || fields.wp_article_count != null) {
-        if (next.platform !== 'WordPress') return '只有 WordPress 网站可以填写内容数量'
-        if (!isValidDate(fields.content_stats_updated_date)) return '更新 WordPress 内容数量时必须填写统计日期'
-    }
+    if (['calculator_count','article_count','page_count','wp_calculator_count','wp_article_count'].some(key => fields[key] != null) && !isValidDate(fields.content_stats_updated_date || current.content_stats_updated_date)) return '更新内容数量时必须填写统计日期'
+    if (fields.computer_name != null && (typeof fields.computer_name !== 'string' || fields.computer_name.length > 120)) return '电脑名称不能超过 120 个字符'
     const clicksChanged = fields.daily_clicks !== undefined || fields.daily_clicks_range !== undefined
     if (clicksChanged && (next.daily_clicks != null || next.daily_clicks_range != null) && !isValidDate(fields.clicks_updated_date)) return '更新点击数据时必须填写统计日期'
     if (fields.clicks_updated_date !== undefined && fields.clicks_updated_date != null && !isValidDate(fields.clicks_updated_date)) return 'clicks_updated_date 必须是有效日期'
+    return null
+}
+
+export const normalizeContentFields = (fields: Record<string, unknown>) => {
+    for (const [key, legacy] of [['calculator_count','wp_calculator_count'],['article_count','wp_article_count']]) {
+        if (fields[key] !== undefined && fields[legacy] !== undefined && fields[key] !== fields[legacy]) return `${key} 与旧字段值冲突`
+        if (fields[key] !== undefined || fields[legacy] !== undefined) fields[key] = fields[legacy] = fields[key] !== undefined ? fields[key] : fields[legacy]
+    }
     return null
 }

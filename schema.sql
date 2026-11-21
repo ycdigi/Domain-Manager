@@ -17,6 +17,9 @@ CREATE TABLE IF NOT EXISTS websites (
     daily_clicks INTEGER,
     daily_clicks_range TEXT,
     clicks_updated_date TEXT,
+    calculator_count INTEGER CHECK (calculator_count IS NULL OR calculator_count >= 0),
+    article_count INTEGER CHECK (article_count IS NULL OR article_count >= 0),
+    computer_name TEXT,
     wp_calculator_count INTEGER,
     wp_article_count INTEGER,
     content_stats_updated_date TEXT,
@@ -131,6 +134,8 @@ CREATE TABLE IF NOT EXISTS provider_accounts (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     provider TEXT NOT NULL CHECK (provider IN ('github', 'cloudflare', 'vhost', 'vps')),
     name TEXT NOT NULL,
+    provider_name TEXT,
+    github_username TEXT,
     login_email TEXT,
     status TEXT NOT NULL DEFAULT '正常',
     memo TEXT,
@@ -160,6 +165,7 @@ CREATE TABLE IF NOT EXISTS provider_credentials (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     account_id INTEGER NOT NULL,
     label TEXT NOT NULL,
+    is_default INTEGER NOT NULL DEFAULT 0 CHECK (is_default IN (0,1)),
     ciphertext TEXT NOT NULL,
     token_last4 TEXT,
     expires_at TEXT,
@@ -170,6 +176,7 @@ CREATE TABLE IF NOT EXISTS provider_credentials (
 );
 CREATE INDEX IF NOT EXISTS idx_provider_resources_provider ON provider_resources(provider);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_provider_resources_account_ownership ON provider_resources(account_id, identifier) WHERE account_id IS NOT NULL AND identifier LIKE 'account:%';
+CREATE UNIQUE INDEX IF NOT EXISTS idx_credentials_default ON provider_credentials(account_id) WHERE is_default=1;
 CREATE INDEX IF NOT EXISTS idx_credentials_account ON provider_credentials(account_id);
 
 CREATE TABLE IF NOT EXISTS website_resources (
@@ -184,7 +191,7 @@ CREATE TABLE IF NOT EXISTS website_resources (
     FOREIGN KEY (website_id) REFERENCES websites(id) ON DELETE CASCADE,
     FOREIGN KEY (resource_id) REFERENCES provider_resources(id) ON DELETE RESTRICT
 );
-CREATE UNIQUE INDEX IF NOT EXISTS idx_website_resources_one_primary ON website_resources(website_id) WHERE is_primary = 1;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_website_resources_one_primary ON website_resources(website_id, role) WHERE is_primary = 1;
 CREATE INDEX IF NOT EXISTS idx_website_resources_resource ON website_resources(resource_id);
 
 CREATE TABLE IF NOT EXISTS website_ai_notes (
@@ -417,3 +424,34 @@ CREATE TABLE IF NOT EXISTS website_batch_reviews (
     next_action TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_website_batch_reviews_batch ON website_batch_reviews(batch_id, reviewed_at DESC, id DESC);
+
+
+CREATE TABLE IF NOT EXISTS domain_favicons (
+    domain_id INTEGER PRIMARY KEY REFERENCES domains(id) ON DELETE CASCADE,
+    source_domain TEXT NOT NULL,
+    source_url TEXT,
+    image_data TEXT,
+    mime_type TEXT,
+    content_hash TEXT,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','success','failure')),
+    fetched_at TEXT,
+    last_attempt_at TEXT,
+    retry_after TEXT,
+    last_error TEXT
+);
+CREATE TRIGGER IF NOT EXISTS trg_counts_calculator_count_canonical AFTER UPDATE OF calculator_count ON websites
+WHEN NEW.calculator_count IS NOT NEW.wp_calculator_count
+BEGIN UPDATE websites SET wp_calculator_count=NEW.calculator_count WHERE id=NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_counts_calculator_count_legacy AFTER UPDATE OF wp_calculator_count ON websites
+WHEN NEW.wp_calculator_count IS NOT NEW.calculator_count
+BEGIN UPDATE websites SET calculator_count=NEW.wp_calculator_count WHERE id=NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_counts_calculator_count_insert AFTER INSERT ON websites
+BEGIN UPDATE websites SET calculator_count=COALESCE(NEW.calculator_count,NEW.wp_calculator_count), wp_calculator_count=COALESCE(NEW.calculator_count,NEW.wp_calculator_count) WHERE id=NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_counts_article_count_canonical AFTER UPDATE OF article_count ON websites
+WHEN NEW.article_count IS NOT NEW.wp_article_count
+BEGIN UPDATE websites SET wp_article_count=NEW.article_count WHERE id=NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_counts_article_count_legacy AFTER UPDATE OF wp_article_count ON websites
+WHEN NEW.wp_article_count IS NOT NEW.article_count
+BEGIN UPDATE websites SET article_count=NEW.wp_article_count WHERE id=NEW.id; END;
+CREATE TRIGGER IF NOT EXISTS trg_counts_article_count_insert AFTER INSERT ON websites
+BEGIN UPDATE websites SET article_count=COALESCE(NEW.article_count,NEW.wp_article_count), wp_article_count=COALESCE(NEW.article_count,NEW.wp_article_count) WHERE id=NEW.id; END;

@@ -1,3 +1,6 @@
+> 网站结构与界面说明：[docs/website-structure.md](docs/website-structure.md)；数据库关系与数据字典：[docs/database-structure.md](docs/database-structure.md)。
+> v1.23 数据库升级本版需要先备份并执行 `npm run db:migrate:v1.24.0`，再部署 Pages 和监控 Worker。不要对旧库执行初始 schema。
+
 [English](./README.en.md)
 
 <p align = "center">    

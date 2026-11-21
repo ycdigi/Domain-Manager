@@ -24,11 +24,15 @@ export const resolveBindingResource = async (db: D1Database, input: ResourceBind
     const resource = await db.prepare(`SELECT r.id, r.provider, r.status, r.identifier, r.account_id, a.status AS account_status FROM provider_resources r LEFT JOIN provider_accounts a ON a.id=r.account_id WHERE r.id=?`).bind(resourceId).first<ResolvedResource & { account_status: string | null }>()
     if (!resource) throw new ResourceBindingError('资源不存在')
     if (!allowDisabled && (resource.status === '停用' || resource.account_status === '停用')) throw new ResourceBindingError('停用的账号或资源不能新增关联')
+    if (!allowDisabled && input.role === '托管' && resource.provider === 'github') throw new ResourceBindingError('GitHub 仓库不能作为托管资源')
+    if (!allowDisabled && input.role === '代码仓库' && resource.provider !== 'github') throw new ResourceBindingError('代码仓库必须关联 GitHub 资源')
     return resource
 }
 
-export const primaryClearWrite = (db: D1Database, websiteId: number) => db.prepare('UPDATE website_resources SET is_primary=0 WHERE website_id=?').bind(websiteId)
+export const primaryClearWrite = (db: D1Database, websiteId: number, role: string) => db.prepare('UPDATE website_resources SET is_primary=0 WHERE website_id=? AND role=?').bind(websiteId, role)
 export const bindingWrite = (db: D1Database, input: ResourceBindingInput, resourceId: number) => db.prepare(`
     INSERT INTO website_resources (website_id, resource_id, role, is_primary, memo) VALUES (?, ?, ?, ?, ?)
-    ON CONFLICT(website_id, resource_id, role) DO UPDATE SET is_primary=excluded.is_primary, memo=excluded.memo RETURNING *
-`).bind(input.websiteId, resourceId, input.role.trim(), isPrimary(input.isPrimary) ? 1 : 0, input.memo?.trim() || '')
+    ON CONFLICT(website_id, resource_id, role) DO UPDATE SET is_primary=excluded.is_primary, memo=CASE WHEN ?=1 THEN excluded.memo ELSE website_resources.memo END RETURNING *
+`).bind(input.websiteId, resourceId, input.role.trim(), isPrimary(input.isPrimary) ? 1 : 0, input.memo?.trim() || '', input.memo === undefined ? 0 : 1)
+
+export const normalizeResourceRole = (role: string) => ['部署平台','虚拟主机','VPS'].includes(role) ? '托管' : ['托管','代码仓库','DNS/CDN'].includes(role) ? role : '其他'

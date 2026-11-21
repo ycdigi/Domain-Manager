@@ -1,14 +1,15 @@
+import { cacheDomainFavicon } from '../../domain/favicons'
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
-import { validateWebsiteFields } from '../../domain/website-validation'
+import { validateWebsiteFields, normalizeContentFields } from '../../domain/website-validation'
 import { websiteIncomeRowsCte } from '../../domain/website-income'
 import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
 import { isWebsiteNew } from '../../../shared/website-newness'
 import { validateScenarioFields } from '../../domain/batches'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count'])
+const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count'])
 
 const validSiteFields = (fields: Record<string, unknown>) => {
     return validateWebsiteFields(fields)
@@ -26,6 +27,10 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         if (params.has('lifecycle')) { where.push('w.lifecycle = ?'); values.push(params.get('lifecycle') || '') }
         const [rows, incomeRows, incomeTotals] = await Promise.all([context.env.DB.prepare(`
             SELECT w.*,
+                (SELECT json_object('id',r.id,'provider',r.provider,'provider_name',COALESCE(a.provider_name,CASE r.provider WHEN 'cloudflare' THEN 'Cloudflare' WHEN 'vhost' THEN '虚拟主机' ELSE 'VPS' END),'name',r.name,'ip_address',r.ip_address,'resource_url',r.resource_url,'status',r.status)
+                 FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id LEFT JOIN provider_accounts a ON a.id=r.account_id WHERE wr.website_id=w.id AND wr.role='托管' AND wr.is_primary=1) AS hosting_json,
+                (SELECT json_object('id',r.id,'name',r.name,'resource_url',r.resource_url,'account_id',r.account_id,'status',r.status)
+                 FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND wr.role='代码仓库' AND wr.is_primary=1 AND r.provider='github') AS repository_json,
                 (SELECT json_group_array(json_object('id', d.id, 'domain', d.domain, 'domain_role', d.domain_role, 'is_primary', d.is_primary, 'registrar', d.registrar, 'registrar_link', d.registrar_link, 'registrar_date', d.registrar_date, 'expiry_date', d.expiry_date, 'service_type', d.service_type, 'status', d.status, 'memo', d.memo, 'last_status_check_at', d.last_status_check_at, 'computer_name', d.computer_name))
                  FROM domains d WHERE d.website_id = w.id ORDER BY d.is_primary DESC, d.domain) AS domains_json,
                 (SELECT COUNT(*) FROM website_tasks t WHERE t.website_id = w.id AND t.task_type <> 'SEO复查' AND t.status <> '已完成') AS open_task_count,
@@ -70,7 +75,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         }
         for (const item of incomeTotals.results || []) incomeTotalsByWebsite.set(item.website_id, [...(incomeTotalsByWebsite.get(item.website_id) || []), { currency: item.currency, amount: Number(item.amount) }])
         return json((rows.results || []).map(row => {
-            const { domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, primary_resource_json: primaryResourceJson, ...site } = row
+            const { hosting_json: hostingJson, repository_json: repositoryJson, domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, primary_resource_json: primaryResourceJson, ...site } = row
             const domains = JSON.parse(String(domainsJson || '[]'))
             const primaryResource = primaryResourceJson ? JSON.parse(String(primaryResourceJson)) as { id: number; provider: string; name: string; status: string } : null
             const siteIncomes = incomeByWebsite.get(Number(site.id)) || []
@@ -80,6 +85,8 @@ export const onRequestGet: PagesFunction<Env> = async context => {
             const presentIncome = ({ income_month: _month, website_id: _websiteId, ...item }: typeof siteIncomes[number]) => item
             return {
                 ...site,
+                hosting: hostingJson ? JSON.parse(String(hostingJson)) : null,
+                repository: repositoryJson ? JSON.parse(String(repositoryJson)) : null,
                 industry: normalizeWebsiteIndustry(site.industry),
                 domains,
                 is_new_site: isWebsiteNew(site.new_site_override as number | null | undefined, domains.find((domain: { is_primary?: number }) => domain.is_primary)?.registrar_date || domains[0]?.registrar_date, today),
@@ -104,6 +111,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const body = await context.request.json() as Record<string, unknown>
         const domain = body.domain as Record<string, unknown> | undefined
         const fields = Object.fromEntries(Object.entries(body).filter(([key]) => siteFields.has(key)))
+        const aliasError = normalizeContentFields(fields); if (aliasError) return json(null, 400, aliasError)
         const fieldError = validSiteFields(fields) || validateScenarioFields(fields)
         if (fieldError) return json(null, 400, fieldError)
         if (!domain || typeof domain !== 'object') return json(null, 400, '新建网站必须同时提供一个域名')
@@ -132,6 +140,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         if (!websiteId) return json(null, 500, '网站创建失败')
         const created = await db.prepare('SELECT * FROM websites WHERE id = ?').bind(websiteId).first()
         const domains = await db.prepare('SELECT * FROM domains WHERE website_id = ?').bind(websiteId).all()
+        if (context.waitUntil) context.waitUntil(cacheDomainFavicon(context.env.DB, Number((domains.results?.[0] as {id:number})?.id)))
         return json({ website: created, domains: domains.results || [] }, 201, '网站已创建')
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '网站创建失败') }
 }

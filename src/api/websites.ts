@@ -24,6 +24,12 @@ export interface WebsiteDomain {
 }
 
 export interface Website {
+  calculator_count?: number | null
+  article_count?: number | null
+  computer_name?: string | null
+  hosting?: { id:number; provider:string; provider_name:string; name:string; ip_address?:string|null; resource_url?:string|null; status:string } | null
+  repository?: { id:number; name:string; resource_url?:string|null; account_id?:number|null; status:string } | null
+
   id: number
   name: string
   stage: WebsiteStage

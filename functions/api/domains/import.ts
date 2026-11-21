@@ -1,13 +1,14 @@
+import { normalizeResourceRole } from '../../domain/resource-bindings'
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
-import { validateWebsiteFields } from '../../domain/website-validation'
+import { validateWebsiteFields, normalizeContentFields } from '../../domain/website-validation'
 import { validateMonitorPatch } from '../../domain/monitor'
 import { normalizeWebsiteIndustry } from '../../../shared/website-classification'
 import { validateBatchFields, validateScenarioFields } from '../../domain/batches'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const websiteColumns = ['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count']
+const websiteColumns = ['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'wp_calculator_count', 'wp_article_count', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'operating_scenario', 'scenario_note', 'page_count']
 const domainColumns = ['domain', 'registrar', 'registrar_link', 'registrar_date', 'expiry_date', 'service_type', 'domain_role', 'is_primary', 'status', 'memo', 'last_status_check_at', 'computer_name']
 type Row = Record<string, any>
 
@@ -129,6 +130,8 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             }
             for (const site of websites) {
                 const name = String(site.name || '未知网站')
+                const aliasError = normalizeContentFields(site); if (aliasError) errors.push({ domain: name, error: aliasError })
+                if (site.computer_name === undefined) site.computer_name = domains.find(d => d.website_id === site.id && d.is_primary)?.computer_name ?? null
                 if (typeof site.name !== 'string' || !site.name.trim()) errors.push({ domain: name, error: '网站名称必填' })
                 const validation = validateWebsiteFields({ ...site, industry: normalizeWebsiteIndustry(site.industry) }) || validateScenarioFields(site)
                 if (validation) errors.push({ domain: name, error: validation })
@@ -210,6 +213,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
                     websiteId = createdSite?.id || null
                 }
                 if (!websiteId) continue
+                if (old.computer_name) await db.prepare('UPDATE websites SET computer_name=COALESCE(computer_name,?) WHERE id=?').bind(old.computer_name, websiteId).run()
                 siteMap.set(websiteId, websiteId)
                 if (existing) {
                     await db.prepare(`UPDATE domains SET website_id=?, registrar=?, registrar_link=?, registrar_date=?, expiry_date=?, service_type=?, status=?, memo=?, computer_name=? WHERE id=?`)
@@ -364,7 +368,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             for (const providerAccount of input.provider_accounts || []) {
                 const existing = await db.prepare('SELECT id FROM provider_accounts WHERE provider=? AND name=?').bind(providerAccount.provider, providerAccount.name).first<{ id: number }>()
                 const id = existing?.id || await allocateId('provider_accounts')
-                if (!existing) write(db.prepare('INSERT INTO provider_accounts (id,provider,name,login_email,status,memo) VALUES (?,?,?,?,?,?)').bind(id,providerAccount.provider,providerAccount.name,providerAccount.login_email || null,providerAccount.status || '正常',providerAccount.memo || ''))
+                if (!existing) write(db.prepare('INSERT INTO provider_accounts (id,provider,name,login_email,status,memo,provider_name,github_username) VALUES (?,?,?,?,?,?,?,?)').bind(id,providerAccount.provider,providerAccount.name,providerAccount.login_email || null,providerAccount.status || '正常',providerAccount.memo || '',providerAccount.provider_name || null,providerAccount.github_username || null))
                 resourceMap.set(-Number(providerAccount.id), id)
             }
             for (const oldResource of input.provider_resources || []) {
@@ -377,8 +381,11 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             }
             for (const link of input.website_resources || []) {
                 const websiteId = siteMap.get(Number(link.website_id)); const resourceId = resourceMap.get(Number(link.resource_id)); if (!websiteId || !resourceId) continue
-                if (link.is_primary) write(db.prepare('UPDATE website_resources SET is_primary=0 WHERE website_id=?').bind(websiteId))
-                write(db.prepare('INSERT INTO website_resources (website_id, resource_id, role, is_primary, memo) VALUES (?, ?, ?, ?, ?) ON CONFLICT(website_id, resource_id, role) DO UPDATE SET is_primary=excluded.is_primary, memo=excluded.memo').bind(websiteId, resourceId, link.role, link.is_primary || 0, link.memo || null))
+                const normalizedRole = normalizeResourceRole(link.role)
+                const collides = (input.website_resources || []).some((other: Row) => other !== link && other.website_id === link.website_id && other.resource_id === link.resource_id && normalizeResourceRole(other.role) === normalizedRole)
+                const role = collides || !['部署平台','虚拟主机','VPS','托管','代码仓库','DNS/CDN','其他'].includes(link.role) ? link.role : normalizedRole
+                if (link.is_primary) write(db.prepare('UPDATE website_resources SET is_primary=0 WHERE website_id=? AND role=?').bind(websiteId, role))
+                write(db.prepare('INSERT INTO website_resources (website_id, resource_id, role, is_primary, memo) VALUES (?, ?, ?, ?, ?) ON CONFLICT(website_id, resource_id, role) DO UPDATE SET is_primary=excluded.is_primary, memo=excluded.memo').bind(websiteId, resourceId, role, link.is_primary || 0, link.memo || null))
             }
             const restoreTime = new Date().toISOString()
             for (const row of input.website_monitors || []) {

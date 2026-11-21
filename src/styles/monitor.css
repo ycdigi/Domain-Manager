@@ -23,8 +23,11 @@
 .monitor-facts dd { margin: 0; overflow-wrap: anywhere; }
 .monitor-config { margin: var(--space-lg) 0; }
 .monitor-unread { color: var(--color-error); font-size: var(--text-xs); margin-left: auto; }
-/* Compact monitor status is intentionally smaller than surrounding table text. */
-.portfolio-identity .portfolio-monitor-status { grid-column: 3 / -1; justify-self: start; padding: 0; border: 0; background: none; cursor: pointer; font: inherit; font-size: 11px; color: var(--color-accent); }
-@media (max-width: 600px) { .monitor-facts { grid-template-columns: 1fr; } .monitor-table { min-width: 780px; } }
-@media (max-width: 1023px) { .monitor-filters { flex-wrap: wrap; } .monitor-filters > .el-input { width: 320px; max-width: 100%; } }
-@media (max-width: 760px) { .monitor-page .workspace-heading .monitor-filters { display: none; } }
+@media (max-width: 600px) {
+ .monitor-facts { grid-template-columns: 1fr; }
+.monitor-table { min-width: 780px; } }
+@media (max-width: 1023px) {
+ .monitor-filters { flex-wrap: wrap; }
+.monitor-filters > .el-input { width: 320px; max-width: 100%; } }
+@media (max-width: 760px) {
+ .monitor-page .workspace-heading .monitor-filters { display: none; } }

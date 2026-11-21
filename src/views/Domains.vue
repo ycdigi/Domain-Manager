@@ -7,20 +7,12 @@
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load(true)">重试</el-button></div>
     <section class="page-panel" v-loading="loading">
       <div class="panel-heading"><h2>全部域名</h2><span class="page-muted">{{ domains.length }} 个</span></div>
-      <div v-if="domains.length" class="domain-asset-list">
-        <article v-for="domain in domains" :key="domain.id" class="domain-asset-row">
-          <div class="domain-asset-identity"><strong>{{ domain.domain }}</strong><span>{{ domain.registrar }} · {{ domain.domain_role }} · 到期 {{ domain.expiry_date }}</span></div>
-          <el-select :model-value="domain.website_id || undefined" clearable placeholder="未分配网站" :aria-label="`${domain.domain} 所属网站`" @change="value => assignWebsite(domain, value)">
-            <el-option v-for="site in websites" :key="site.id" :label="site.name" :value="site.id" />
-          </el-select>
-          <div class="domain-asset-state"><el-tag :type="domain.status === '在线' ? 'success' : 'info'">{{ domain.status }}</el-tag><small v-if="domain.last_status_check_at">检查于 {{ domain.last_status_check_at.slice(0, 10) }}</small><small v-else>尚未检查</small></div>
-          <div class="domain-asset-actions">
-            <el-button text :loading="checkingId === domain.id" :aria-label="`检查域名 ${domain.domain}`" @click="checkDomain(domain)">检查</el-button>
-            <el-button text :aria-label="`编辑域名 ${domain.domain}`" @click="openEdit(domain)">编辑</el-button>
-            <el-button text type="danger" :aria-label="`删除域名 ${domain.domain}`" @click="removeDomain(domain)"><Delete /></el-button>
-          </div>
-        </article>
-      </div>
+      <el-table v-if="domains.length" :data="domains" empty-text="暂无域名">
+        <el-table-column prop="domain" label="域名" min-width="190" />
+        <el-table-column label="所属网站" min-width="180"><template #default="{row}"><el-select :model-value="row.website_id || undefined" clearable placeholder="未分配" :aria-label="`${row.domain} 所属网站`" @change="value=>assignWebsite(row,value)"><el-option v-for="site in websites" :key="site.id" :value="site.id" :label="site.name" /></el-select></template></el-table-column>
+        <el-table-column prop="domain_role" label="用途" /><el-table-column prop="registrar" label="注册商" /><el-table-column prop="registrar_date" label="注册日期" min-width="110" /><el-table-column prop="expiry_date" label="到期日期" min-width="110" /><el-table-column prop="status" label="状态" />
+        <el-table-column label="操作" width="200"><template #default="{row}"><el-button text :loading="checkingId===row.id" @click="checkDomain(row)">检查</el-button><el-button text @click="openEdit(row)">编辑</el-button><el-button text type="danger" @click="removeDomain(row)">删除</el-button></template></el-table-column>
+      </el-table>
       <p v-else-if="!loading" class="page-empty">还没有域名资产。</p>
     </section>
 
@@ -35,7 +27,6 @@
         <el-form-item label="服务类型" required><el-input v-model="form.service_type" /></el-form-item>
         <el-form-item label="域名用途"><el-select v-model="form.domain_role"><el-option v-for="role in domainRoles" :key="role" :label="role" :value="role" /></el-select></el-form-item>
         <el-form-item label="状态"><el-select v-model="form.status"><el-option label="在线" value="在线" /><el-option label="离线" value="离线" /></el-select></el-form-item>
-        <el-form-item label="管理电脑"><el-select v-model="form.computer_name" filterable allow-create clearable default-first-option placeholder="选择或输入电脑"><el-option v-for="name in computerNames" :key="name" :value="name" :label="name" /></el-select></el-form-item>
         <el-form-item label="备注"><el-input v-model="form.memo" type="textarea" :rows="2" maxlength="2000" /></el-form-item>
       </el-form>
       <template #footer><div class="dialog-footer"><el-button :disabled="saving" @click="dialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveDomain">保存</el-button></div></template>
@@ -44,16 +35,15 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
+import { reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
-import { Delete, Plus, Refresh } from '@element-plus/icons-vue'
+import { Plus, Refresh } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import type { Website } from '../api/websites'
 import { api } from '../utils/request'
 import { cachedGet, invalidateData } from '../utils/workspaceCache'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { getWriteQueue } from '../utils/writeQueue'
-import { sortComputerNames } from '../utils/computer-options'
 
 interface DomainRecord { id: number; website_id: number | null; domain: string; registrar: string; registrar_link?: string | null; registrar_date: string; expiry_date: string; service_type: string; domain_role: '主域名' | '跳转域名' | '备用域名'; is_primary: number; status: '在线' | '离线'; computer_name?: string | null; memo?: string | null; last_status_check_at?: string | null }
 const domainRoles = ['主域名', '跳转域名', '备用域名'] as const
@@ -61,9 +51,8 @@ const queue = getWriteQueue()
 const domains = ref<DomainRecord[]>([])
 const websites = ref<Website[]>([])
 const loading = ref(false); const saving = ref(false); const error = ref(''); const dialogVisible = ref(false); const editingId = ref<number>(); const checkingId = ref<number | null>(null)
-const emptyForm = () => ({ website_id: undefined as number | undefined, domain: '', registrar: '', registrar_link: '', registrar_date: '', expiry_date: '', service_type: '网站', domain_role: '备用域名', status: '离线', computer_name: '', memo: '' })
+const emptyForm = () => ({ website_id: undefined as number | undefined, domain: '', registrar: '', registrar_link: '', registrar_date: '', expiry_date: '', service_type: '网站', domain_role: '备用域名', status: '离线', memo: '' })
 const form = reactive(emptyForm())
-const computerNames = computed(() => sortComputerNames(domains.value.map(domain => domain.computer_name)))
 const load = async (force = false) => {
   loading.value = true; error.value = ''
   try {
@@ -74,7 +63,7 @@ const load = async (force = false) => {
 }
 const resetForm = () => { Object.assign(form, emptyForm()); editingId.value = undefined }
 const openCreate = () => { resetForm(); dialogVisible.value = true }
-const openEdit = (item: DomainRecord) => { resetForm(); editingId.value = item.id; Object.assign(form, { website_id: item.website_id || undefined, domain: item.domain, registrar: item.registrar, registrar_link: item.registrar_link || '', registrar_date: item.registrar_date, expiry_date: item.expiry_date, service_type: item.service_type, domain_role: item.domain_role, status: item.status, computer_name: item.computer_name || '', memo: item.memo || '' }); dialogVisible.value = true }
+const openEdit = (item: DomainRecord) => { resetForm(); editingId.value = item.id; Object.assign(form, { website_id: item.website_id || undefined, domain: item.domain, registrar: item.registrar, registrar_link: item.registrar_link || '', registrar_date: item.registrar_date, expiry_date: item.expiry_date, service_type: item.service_type, domain_role: item.domain_role, status: item.status, memo: item.memo || '' }); dialogVisible.value = true }
 const saveDomain = async () => {
   if (saving.value) return
   saving.value = true
@@ -109,5 +98,3 @@ const removeDomain = async (item: DomainRecord) => {
 }
 void load()
 </script>
-
-<style scoped src="../styles/domain-assets/domain-assets.css"></style>

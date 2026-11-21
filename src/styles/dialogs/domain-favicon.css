@@ -1,0 +1,11 @@
+.domain-favicon,
+.domain-favicon-placeholder {
+  width: 20px;
+  height: 20px;
+  object-fit: contain;
+  flex: none;
+}
+.domain-favicon-placeholder {
+  color: var(--color-muted);
+  text-align: center;
+}

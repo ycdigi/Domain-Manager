@@ -2,7 +2,7 @@
 
 ## 状态
 
-已接受
+部分被 [ADR 0010](0010-website-table-and-deployment-resources.md) 替代（2026-11-21）：经营场景与优先导航退出当前设计，批次历史继续保留。
 
 ## 背景
 

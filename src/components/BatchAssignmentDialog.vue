@@ -13,18 +13,17 @@
           <el-select v-model="ownership" clearable placeholder="网站归属" aria-label="按网站归属筛选"><el-option v-for="item in ownershipOptions" :key="item" :label="item" :value="item" /></el-select>
           <el-select v-model="platform" clearable placeholder="技术栈" aria-label="按技术栈筛选"><el-option v-for="item in platformOptions" :key="item" :label="item" :value="item" /></el-select>
           <el-select v-model="stage" clearable placeholder="阶段" aria-label="按阶段筛选"><el-option v-for="item in stageOptions" :key="item" :label="item" :value="item" /></el-select>
-          <el-select v-model="scenario" clearable filterable placeholder="经营场景" aria-label="按经营场景筛选"><el-option v-for="item in scenarioOptions" :key="item" :label="item" :value="item" /></el-select>
         </div>
         <div class="batch-assignment-table-wrap">
           <table class="batch-assignment-table">
-            <thead><tr><th><el-checkbox :model-value="allFilteredSelected" :indeterminate="someFilteredSelected" aria-label="选择当前筛选结果" @change="toggleFiltered(Boolean($event))" /></th><th>网站 / 域名</th><th>归属</th><th>技术栈</th><th>阶段</th><th>经营场景</th></tr></thead>
+            <thead><tr><th><el-checkbox :model-value="allFilteredSelected" :indeterminate="someFilteredSelected" aria-label="选择当前筛选结果" @change="toggleFiltered(Boolean($event))" /></th><th>网站 / 域名</th><th>归属</th><th>技术栈</th><th>阶段</th></tr></thead>
             <tbody>
               <tr v-for="site in filteredWebsites" :key="site.id">
                 <td><el-checkbox :model-value="selectedIds.has(site.id)" :aria-label="`选择网站：${site.name}`" @change="toggleSite(site.id, Boolean($event))" /></td>
                 <td><strong>{{ site.name }}</strong><small>{{ primaryDomain(site) || '未设置域名' }}</small></td>
-                <td>{{ site.ownership }}</td><td>{{ platformLabel(site) }}</td><td>{{ site.stage }}</td><td>{{ site.operating_scenario || '未设置场景' }}</td>
+                <td>{{ site.ownership }}</td><td>{{ platformLabel(site) }}</td><td>{{ site.stage }}</td>
               </tr>
-              <tr v-if="!filteredWebsites.length"><td colspan="6" class="batch-assignment-empty">没有符合条件的可加入网站。</td></tr>
+              <tr v-if="!filteredWebsites.length"><td colspan="5" class="batch-assignment-empty">没有符合条件的可加入网站。</td></tr>
             </tbody>
           </table>
         </div>
@@ -46,7 +45,6 @@
         <div class="batch-assignment-section-heading"><h3>批量设置（可选）</h3><span>默认保留网站现有值</span></div>
         <div class="batch-assignment-fields">
           <div class="batch-assignment-field"><el-checkbox v-model="stageEnabled">统一设置阶段</el-checkbox><el-select v-model="stageValue" :disabled="!stageEnabled" placeholder="选择阶段" aria-label="统一设置阶段"><el-option v-for="item in stageOptions" :key="item" :label="item" :value="item" /></el-select></div>
-          <div class="batch-assignment-field"><el-select v-model="scenarioMode" aria-label="经营场景处理"><el-option label="经营场景：保持原值" value="keep" /><el-option label="经营场景：统一设置" value="set" /><el-option label="经营场景：清除场景" value="clear" /></el-select><el-select v-if="scenarioMode === 'set'" v-model="scenarioValue" filterable allow-create default-first-option placeholder="选择或填写场景" aria-label="统一设置经营场景"><el-option v-for="item in scenarioOptions" :key="item" :label="item" :value="item" /></el-select></div>
         </div>
         <el-input v-model="memberNote" maxlength="500" placeholder="共同成员备注（可选）" aria-label="共同成员备注" />
       </section>
@@ -77,16 +75,14 @@ const emit = defineEmits<{
 
 const visible = computed({ get: () => props.modelValue, set: value => emit('update:modelValue', value) })
 const isMobile = ref(false)
-const search = ref(''); const ownership = ref(''); const platform = ref(''); const stage = ref(''); const scenario = ref('')
+const search = ref(''); const ownership = ref(''); const platform = ref(''); const stage = ref('')
 const targetMode = ref<'existing' | 'new'>('existing'); const batchId = ref<number>(); const newBatchName = ref('')
-const stageEnabled = ref(false); const stageValue = ref<WebsiteStage>('待评估'); const scenarioMode = ref<'keep' | 'set' | 'clear'>('keep'); const scenarioValue = ref(''); const memberNote = ref('')
+const stageEnabled = ref(false); const stageValue = ref<WebsiteStage>('待评估'); const memberNote = ref('')
 const selectedIds = reactive(new Set<number>())
 const stageOptions: WebsiteStage[] = ['待评估', '验证', '增长', '维护', '暂停']
-const fixedScenarioOptions = ['Astro 内容站', 'WordPress 计算器站', 'WordPress 资讯站', '通用网站']
 const ownershipOptions = ['未分类', '自营网站', '企业客户网站']
 const platformOptions = ['WordPress', 'Astro', 'Next.js', '其他']
 const activeBatches = computed(() => props.batches.filter(batch => batch.status !== '已归档'))
-const scenarioOptions = computed(() => [...new Set([...fixedScenarioOptions, ...props.websites.map(site => site.operating_scenario).filter((value): value is string => Boolean(value))])])
 const selectableWebsites = computed(() => {
   const excluded = new Set(props.excludeWebsiteIds)
   return props.websites.filter(site => !excluded.has(site.id))
@@ -95,7 +91,7 @@ const filteredWebsites = computed(() => {
   const query = search.value.trim().toLowerCase()
   return selectableWebsites.value.filter(site => {
     const domainText = site.domains.map(domain => domain.domain).join(' ')
-    return (!query || `${site.name} ${domainText}`.toLowerCase().includes(query)) && (!ownership.value || site.ownership === ownership.value) && (!platform.value || site.platform === platform.value) && (!stage.value || site.stage === stage.value) && (!scenario.value || site.operating_scenario === scenario.value)
+    return (!query || `${site.name} ${domainText}`.toLowerCase().includes(query)) && (!ownership.value || site.ownership === ownership.value) && (!platform.value || site.platform === platform.value) && (!stage.value || site.stage === stage.value)
   })
 })
 const allFilteredSelected = computed(() => filteredWebsites.value.length > 0 && filteredWebsites.value.every(site => selectedIds.has(site.id)))
@@ -108,9 +104,9 @@ const platformLabel = (site: Website) => site.platform === '其他' ? site.platf
 const syncMobile = () => { isMobile.value = window.matchMedia('(max-width: 760px)').matches }
 const reset = () => {
   selectedIds.clear(); for (const id of props.selectedWebsiteIds) if (!props.excludeWebsiteIds.includes(id)) selectedIds.add(id)
-  search.value = ''; ownership.value = ''; platform.value = ''; stage.value = ''; scenario.value = ''
+  search.value = ''; ownership.value = ''; platform.value = ''; stage.value = ''
   targetMode.value = props.fixedBatchId ? 'existing' : 'existing'; batchId.value = props.fixedBatchId || undefined; newBatchName.value = ''
-  stageEnabled.value = false; stageValue.value = '待评估'; scenarioMode.value = 'keep'; scenarioValue.value = ''; memberNote.value = ''
+  stageEnabled.value = false; stageValue.value = '待评估'; memberNote.value = ''
 }
 const pruneSelection = () => { const visibleIds = new Set(filteredWebsites.value.map(site => site.id)); for (const id of [...selectedIds]) if (!visibleIds.has(id)) selectedIds.delete(id) }
 const toggleSite = (id: number, value: boolean) => value ? selectedIds.add(id) : selectedIds.delete(id)
@@ -119,8 +115,6 @@ const submit = () => {
   if (!canSubmit.value) return
   const websiteFields: Record<string, unknown> = {}
   if (stageEnabled.value) websiteFields.stage = stageValue.value
-  if (scenarioMode.value === 'set') websiteFields.operating_scenario = scenarioValue.value.trim()
-  if (scenarioMode.value === 'clear') websiteFields.operating_scenario = null
   emit('submit', { websiteIds: [...selectedIds], batchId: targetMode.value === 'existing' ? batchId.value : undefined, batch: targetMode.value === 'new' ? { name: newBatchName.value.trim() } : undefined, memberNote: memberNote.value.trim() || undefined, websiteFields })
 }
 watch(() => props.modelValue, value => { if (value) reset() })

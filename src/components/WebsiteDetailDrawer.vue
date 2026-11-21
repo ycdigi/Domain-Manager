@@ -3,8 +3,8 @@
     <template v-if="website">
       <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="loadAll">重试</el-button></div>
       <section class="portfolio-detail-section">
-        <div class="portfolio-detail-heading"><h2>经营信息</h2><el-button type="primary" :disabled="!profileDirty" :loading="saving" @click="saveProfile">保存</el-button></div>
-        <div class="portfolio-detail-grid">
+        <div class="portfolio-detail-heading"><h2>基本资料</h2><el-button type="primary" :disabled="!profileDirty" :loading="saving" @click="saveProfile">保存</el-button></div>
+        <el-form label-position="top" class="portfolio-detail-grid">
           <el-form-item label="网站名称"><el-input v-model="profile.name" maxlength="200" /></el-form-item>
           <el-form-item label="阶段"><el-select v-model="profile.stage"><el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" /></el-select></el-form-item>
           <el-form-item label="新站分类"><el-select v-model="profile.new_site_mode"><el-option label="自动判断" value="auto" /><el-option label="手动标记为新站" value="new" /><el-option label="手动设为普通站" value="regular" /></el-select></el-form-item>
@@ -12,10 +12,7 @@
           <el-form-item label="网站归属"><el-select v-model="profile.ownership"><el-option v-for="item in ownerships" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item label="技术栈"><el-select v-model="profile.platform"><el-option v-for="item in platforms" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item label="网站类型"><el-select v-model="profile.industry" clearable placeholder="未设置"><el-option v-for="item in industries" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-          <el-form-item label="经营场景"><el-select v-model="profile.operating_scenario" clearable filterable allow-create default-first-option placeholder="未设置场景"><el-option v-for="item in scenarios" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-          <el-form-item v-if="profile.operating_scenario === 'Astro 内容站'" label="页面数量"><el-input-number v-model="profile.page_count" :min="0" :precision="0" :controls="false" /></el-form-item>
-          <el-form-item v-if="profile.operating_scenario === 'Astro 内容站'" label="内容统计日期"><el-date-picker v-model="profile.content_stats_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
-          <el-form-item v-if="profile.operating_scenario" label="场景说明"><el-input v-model="profile.scenario_note" maxlength="500" /></el-form-item>
+          <el-form-item label="主要管理电脑"><el-select v-model="profile.computer_name" filterable allow-create clearable default-first-option><el-option v-for="name in computerNames" :key="name" :label="name" :value="name" /></el-select></el-form-item>
           <el-form-item v-if="profile.platform === '其他'" label="其他技术栈"><el-input v-model="profile.platform_other" maxlength="100" /></el-form-item>
           <el-form-item label="AdSense"><el-select v-model="profile.adsense_connected"><el-option v-for="item in serviceStates" :key="item" :label="item" :value="item" /></el-select></el-form-item>
           <el-form-item v-if="profile.adsense_connected === '已开通' || profile.adsense_account_id" label="AdSense 账号"><el-select v-model="profile.adsense_account_id" clearable placeholder="请选择账号"><el-option v-for="account in adsenseAccounts" :key="account.id" :label="account.name" :value="account.id" /></el-select></el-form-item>
@@ -24,18 +21,19 @@
           <el-form-item label="日点击量"><el-input-number v-model="profile.daily_clicks" :min="0" :precision="0" :controls="false" @change="profile.daily_clicks_range = ''" /></el-form-item>
           <el-form-item label="日点击区间"><el-select v-model="profile.daily_clicks_range" clearable placeholder="未记录" @change="clearExactClicks"><el-option label="10 次以下" value="under10" /><el-option label="10–29 次" value="10to29" /><el-option label="30–49 次" value="30to49" /><el-option label="50–99 次" value="50to99" /><el-option label="100 次以上" value="over100" /></el-select></el-form-item>
           <el-form-item label="点击数据日期"><el-date-picker v-model="profile.clicks_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
-          <template v-if="profile.platform === 'WordPress'">
-            <el-form-item label="WordPress 计算器数量"><el-input-number v-model="profile.wp_calculator_count" :min="0" :precision="0" :controls="false" /></el-form-item>
-            <el-form-item label="WordPress 文章数量"><el-input-number v-model="profile.wp_article_count" :min="0" :precision="0" :controls="false" /></el-form-item>
+          <el-form-item label="总页面数"><el-input-number v-model="profile.page_count" :min="0" :precision="0" :controls="false" /></el-form-item>
+            <el-form-item label="计算器数量"><el-input-number v-model="profile.calculator_count" :min="0" :precision="0" :controls="false" /></el-form-item>
+            <el-form-item label="文章数量"><el-input-number v-model="profile.article_count" :min="0" :precision="0" :controls="false" /></el-form-item>
             <el-form-item label="内容统计日期"><el-date-picker v-model="profile.content_stats_updated_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
-          </template>
           <el-form-item class="portfolio-detail-full" label="潜力判断"><el-input v-model="profile.potential" type="textarea" :rows="2" maxlength="2000" /></el-form-item>
           <el-form-item label="当前下一步"><el-input v-model="profile.next_action" maxlength="300" /></el-form-item>
           <el-form-item label="截止日期"><el-date-picker v-model="profile.next_action_due_date" type="date" value-format="YYYY-MM-DD" clearable /></el-form-item>
           <el-form-item label="下一步状态"><el-select v-model="profile.next_action_status"><el-option label="待做" value="待做" /><el-option label="处理中" value="处理中" /><el-option label="已完成" value="已完成" /></el-select></el-form-item>
-        </div>
+        </el-form>
       </section>
 
+      <section class="portfolio-detail-section"><div class="portfolio-detail-heading"><h2>网站图标</h2><el-button :loading="refreshingIcon" @click="refreshIcon">刷新图标</el-button></div><DomainFavicon :domain-id="domains.find(d=>d.is_primary)?.id" :revision="iconRevision" /><p class="page-muted">使用已保存的图标，刷新列表不会重复获取。</p></section>
+      <WebsiteDeployment :key="website.id" :website="website" @changed="notifyChanged" />
       <WebsiteMonitorPanel v-if="visible" :key="website.id" ref="monitorPanel" :website-id="website.id" />
 
       <section class="portfolio-detail-section">
@@ -140,6 +138,9 @@
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import DomainFavicon from './DomainFavicon.vue'
+import WebsiteDeployment from './WebsiteDeployment.vue'
+import { sortComputerNames } from '../utils/computer-options'
 import WebsiteMonitorPanel from './WebsiteMonitorPanel.vue'
 import { Delete } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
@@ -165,12 +166,15 @@ const stages = ['待评估', '验证', '增长', '维护', '暂停']
 const ownerships = ['未分类', '自营网站', '企业客户网站']
 const platforms = ['WordPress', 'Astro', 'Next.js', '其他']
 const industries = ['计算器', '资讯站', '其他']
-const scenarios = ['Astro 内容站', 'WordPress 计算器站', 'WordPress 资讯站', '通用网站']
 const serviceStates = ['未知', '已开通', '未开通']
 const taskTypes: WebsiteTaskType[] = ['SEO', '内容', '技术', '其他']
-const profile = reactive<{ name: string; stage: string; new_site_mode: 'auto' | 'new' | 'regular'; lifecycle: string; ownership: string; platform: string; platform_other: string; industry: string; operating_scenario: string; scenario_note: string; page_count?: number; adsense_connected: string; adsense_account_id?: number; adsense_opened_date: string; gsc_connected: string; daily_clicks?: number; daily_clicks_range: string; clicks_updated_date: string; wp_calculator_count?: number; wp_article_count?: number; content_stats_updated_date: string; potential: string; next_action: string; next_action_due_date: string; next_action_status: string }>({ name: '', stage: '待评估', new_site_mode: 'auto', lifecycle: 'active', ownership: '自营网站', platform: '其他', platform_other: '', industry: '', operating_scenario: '', scenario_note: '', page_count: undefined, adsense_connected: '未知', adsense_account_id: undefined, adsense_opened_date: '', gsc_connected: '未知', daily_clicks: undefined, daily_clicks_range: '', clicks_updated_date: '', wp_calculator_count: undefined, wp_article_count: undefined, content_stats_updated_date: '', potential: '', next_action: '', next_action_due_date: '', next_action_status: '待做' })
+const profile = reactive<{ name: string; stage: string; new_site_mode: 'auto' | 'new' | 'regular'; lifecycle: string; ownership: string; platform: string; platform_other: string; industry: string; computer_name: string; page_count?: number; adsense_connected: string; adsense_account_id?: number; adsense_opened_date: string; gsc_connected: string; daily_clicks?: number; daily_clicks_range: string; clicks_updated_date: string; calculator_count?: number; article_count?: number; content_stats_updated_date: string; potential: string; next_action: string; next_action_due_date: string; next_action_status: string }>({ name: '', stage: '待评估', new_site_mode: 'auto', lifecycle: 'active', ownership: '自营网站', platform: '其他', platform_other: '', industry: '', computer_name: '', page_count: undefined, adsense_connected: '未知', adsense_account_id: undefined, adsense_opened_date: '', gsc_connected: '未知', daily_clicks: undefined, daily_clicks_range: '', clicks_updated_date: '', calculator_count: undefined, article_count: undefined, content_stats_updated_date: '', potential: '', next_action: '', next_action_due_date: '', next_action_status: '待做' })
 const adsenseAccounts = ref<Array<{ id: number; name: string }>>([])
 const domains = ref<WebsiteDomain[]>([])
+const computerNames=computed(()=>sortComputerNames([profile.computer_name]))
+const refreshingIcon=ref(false);const iconRevision=ref(0)
+const refreshIcon=async()=>{const id=domains.value.find(d=>d.is_primary)?.id;if(!id)return;refreshingIcon.value=true;try{const result=await api.post<{status:string;last_error?:string}>(`/api/domains/${id}/favicon`,{});iconRevision.value++;if(result.last_error)ElMessage.warning(result.last_error);else ElMessage.success('图标已更新')}catch(e){ElMessage.error(e instanceof Error?e.message:'图标刷新失败')}finally{refreshingIcon.value=false}}
+
 const tasks = ref<WebsiteTask[]>([])
 const incomes = ref<IncomeRow[]>([])
 const efforts = ref<EffortRow[]>([])
@@ -211,7 +215,7 @@ const loadAll = async () => {
   const version = ++loadVersion
   error.value = ''
   if (profileWebsiteId !== props.website.id) {
-  Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', operating_scenario: props.website.operating_scenario || '', scenario_note: props.website.scenario_note || '', page_count: props.website.page_count ?? undefined, adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', wp_calculator_count: props.website.wp_calculator_count ?? undefined, wp_article_count: props.website.wp_article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
+  Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: normalizeWebsiteIndustry(props.website.industry) || '', computer_name: props.website.computer_name || '', page_count: props.website.page_count ?? undefined, adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', calculator_count: props.website.calculator_count ?? undefined, article_count: props.website.article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
     profileWebsiteId = props.website.id
     markProfileClean()
     tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []
@@ -237,8 +241,7 @@ const saveProfile = async () => {
     addIfChanged('lifecycle', profile.lifecycle, original.lifecycle)
     addIfChanged('ownership', profile.ownership, original.ownership)
     addIfChanged('industry', profile.industry || null, original.industry || null)
-    addIfChanged('operating_scenario', profile.operating_scenario || null, original.operating_scenario || null)
-    addIfChanged('scenario_note', profile.scenario_note || null, original.scenario_note || null)
+    addIfChanged('computer_name', profile.computer_name || null, original.computer_name || null)
     addIfChanged('page_count', profile.page_count ?? null, original.page_count ?? null)
     addIfChanged('gsc_connected', profile.gsc_connected, original.gsc_connected)
     addIfChanged('potential', profile.potential || null, original.potential || null)
@@ -266,13 +269,8 @@ const saveProfile = async () => {
       Object.assign(patch, { daily_clicks: nextClicks, daily_clicks_range: nextClicksRange, clicks_updated_date: nextClicksDate })
     }
 
-    const nextWpStats = profile.platform === 'WordPress' ? {
-      wp_calculator_count: profile.wp_calculator_count ?? null,
-      wp_article_count: profile.wp_article_count ?? null
-    } : { wp_calculator_count: null, wp_article_count: null }
-    const nextContentStatsDate = profile.platform === 'WordPress' || profile.operating_scenario === 'Astro 内容站' ? profile.content_stats_updated_date || null : null
-    const contentStatsChanged = nextWpStats.wp_calculator_count !== (original.wp_calculator_count ?? null) || nextWpStats.wp_article_count !== (original.wp_article_count ?? null) || nextContentStatsDate !== (original.content_stats_updated_date || null)
-    if (contentStatsChanged) Object.assign(patch, { ...nextWpStats, content_stats_updated_date: nextContentStatsDate })
+    const nextStats = { calculator_count: profile.calculator_count ?? null, article_count: profile.article_count ?? null }
+    if (nextStats.calculator_count !== (original.calculator_count ?? null) || nextStats.article_count !== (original.article_count ?? null) || profile.page_count !== original.page_count || profile.content_stats_updated_date !== original.content_stats_updated_date) Object.assign(patch, {...nextStats, content_stats_updated_date: profile.content_stats_updated_date || null})
     if (!Object.keys(patch).length) return
     await api.patch(`/api/websites/${props.website.id}`, patch)
     if (Object.prototype.hasOwnProperty.call(patch, 'adsense_account_id')) {

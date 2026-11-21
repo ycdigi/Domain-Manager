@@ -24,13 +24,13 @@ test('invalid website does not leave an auto-generated account resource', async 
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM provider_resources;')[0].count, 0)
 })
 
-test('website resources keep a single primary binding across direct writes', async () => {
+test('website resources keep a single primary binding per role across direct writes', async () => {
   const websiteId = site('site')
   const accountId = await account('main')
   const first = await resource(accountId, 'repo-a')
   const second = await resource(accountId, 'repo-b')
   await call(links.onRequestPost, ctx('/api/resources/links', { website_id: websiteId, resource_id: first, role: '代码仓库', is_primary: true }, 'POST'), 201)
-  await call(links.onRequestPost, ctx('/api/resources/links', { website_id: websiteId, resource_id: second, role: '部署平台', is_primary: true }, 'POST'), 201)
+  await call(links.onRequestPost, ctx('/api/resources/links', { website_id: websiteId, resource_id: second, role: '代码仓库', is_primary: true }, 'POST'), 201)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_resources WHERE website_id=? AND is_primary=1', [websiteId])[0].count, 1)
 })
 

@@ -1,0 +1,9 @@
+.deployment-role {
+  margin: 16px 0;
+}
+.deployment-role p {
+  margin: 4px 0;
+}
+.deployment-role a {
+  overflow-wrap: anywhere;
+}

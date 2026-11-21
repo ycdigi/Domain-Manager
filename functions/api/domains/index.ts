@@ -1,3 +1,4 @@
+import { cacheDomainFavicon } from '../../domain/favicons'
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
@@ -38,6 +39,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             (website_id, domain, registrar, registrar_link, registrar_date, expiry_date, service_type, status, memo, domain_role, is_primary, computer_name)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING *`)
             .bind(websiteId, body.domain, body.registrar, body.registrar_link || null, body.registrar_date, body.expiry_date, body.service_type, domain.status, body.memo || null, body.domain_role || '备用域名', isPrimary ? 1 : 0, body.computer_name || null).first()
+        if (context.waitUntil) context.waitUntil(cacheDomainFavicon(context.env.DB, Number((result as {id:number})?.id)))
         return json(result, 201, '域名已关联')
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '添加域名失败') }
 }

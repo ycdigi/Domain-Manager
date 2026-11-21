@@ -94,6 +94,10 @@ export interface AdsenseIncome {
 export type ProviderType = 'github' | 'cloudflare' | 'vhost' | 'vps'
 
 export interface ProviderAccount {
+    default_token_last4?: string | null
+    default_token_status?: string | null
+    provider_name?: string | null
+    github_username?: string | null
     id?: number
     provider: ProviderType
     name: string
@@ -137,6 +141,7 @@ export interface WebsiteResourceLink {
 }
 
 export interface ProviderCredential {
+    is_default?: number
     id?: number
     account_id: number
     label: string

@@ -67,7 +67,7 @@ test('batch review request creates an immutable summary and changed data is flag
   assert.equal(store.sql('SELECT status FROM website_batches WHERE id=1')[0].status, '待复盘')
   const review = await call(reviews.onRequestPost, context('/api/batches/1/reviews', { action: 'complete', conclusion: '计算器批次值得继续', next_action: '扩大样本' }, 'POST'))
   assert.equal(review.snapshot.member_count, 1)
-  assert.equal(review.snapshot.content_totals.wp_calculator_count, 3)
+  assert.equal(review.snapshot.content_totals.calculator_count, 3)
   assert.equal(store.sql('SELECT status FROM website_batches WHERE id=1')[0].status, '已复盘')
   store.sql("UPDATE websites SET wp_calculator_count=4 WHERE id=1")
   const detail = await call(batchDetail.onRequestGet, context('/api/batches/1', undefined, 'GET'))

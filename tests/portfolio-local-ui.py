@@ -20,6 +20,8 @@ def call(path, body=None, method='GET', status=200, ai=False, raw=False):
     headers = {'Content-Type': 'application/json'}
     if SESSION or ai:
         headers['Authorization'] = f'Bearer {SYNC_TOKEN if ai else SESSION}'
+    if method == 'GET' and path.startswith('/api/websites/') and path.count('/')==3 and path.rsplit('/',1)[-1].isdigit():
+        return next(site for site in call('/api/websites') if site['id']==int(path.rsplit('/',1)[-1]))
     request = urllib.request.Request(BASE + path, method=method, headers=headers,
                                      data=None if body is None else json.dumps(body).encode())
     try:
@@ -90,21 +92,11 @@ try:
         page.add_init_script(f"localStorage.setItem('auth_token', {json.dumps(token)})")
         page.goto(BASE + '/home')
         page.wait_for_load_state('networkidle')
-        expect(page.locator('.portfolio-table thead').first).to_contain_text('网站归属')
-        expect(page.locator('.portfolio-table thead').first).to_contain_text('服务商 / 资源')
-        sidebar = page.locator('.workspace-navigation')
-        expect(sidebar.get_by_text('网站归属', exact=True)).to_be_visible()
-        expect(sidebar.get_by_text('技术栈', exact=True)).to_be_visible()
-        page.locator('.portfolio-stage-tabs [data-filter="待评估"]').click()
-        expect(page.locator('.portfolio-table thead')).to_contain_text('潜力说明')
-        page.locator('.portfolio-stage-tabs [data-filter="验证"]').click()
-        expect(page.locator('.portfolio-table thead')).to_contain_text('验证下一步')
-        expect(page.locator('.portfolio-table thead')).to_contain_text('任务 / 复查')
-        page.locator('.portfolio-stage-tabs [data-filter="增长"]').click()
-        expect(page.locator('.portfolio-table thead')).to_contain_text('最近每周投入')
-        page.locator('.portfolio-stage-tabs [data-filter="all"]').click()
-        page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}').click()
-        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='经营信息', exact=True))
+        expect(page.locator('.site-table thead th')).to_have_count(12)
+        expect(page.locator('.site-table thead')).to_contain_text('服务器 IP')
+        expect(page.locator('.site-table thead')).not_to_contain_text('经营场景')
+        page.get_by_role('button', name=f'验收网站 A {stamp}', exact=True).click()
+        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='基本资料', exact=True))
         new_site_select = profile_section.locator('.el-form-item').filter(has_text='新站分类').locator('.el-select__wrapper')
         new_site_select.click()
         page.get_by_role('option', name='手动标记为新站', exact=True).click()
@@ -112,65 +104,33 @@ try:
             profile_section.get_by_role('button', name='保存', exact=True).click()
         assert new_site_response.value.ok, new_site_response.value.text()
         assert json.loads(new_site_response.value.request.post_data) == {'new_site_override': 1}
-        page.wait_for_timeout(300)
-        page.locator('.website-detail-drawer .el-drawer__close-btn').click()
-        expect(page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}')).to_be_visible()
-        expect(page.get_by_role('button', name=f'查看详情：验收网站 B {stamp}')).to_be_visible()
-        site_row = page.locator('.portfolio-stage[aria-label="经营中的网站"] .portfolio-row').filter(has=page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}'))
-        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as platform_response:
-            site_row.locator('.el-select:has(input[aria-label="技术栈：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
-            page.get_by_role('option', name='Astro', exact=True).last.click()
-        assert json.loads(platform_response.value.request.post_data) == {'platform': 'Astro', 'platform_other': None}
-        available_resources = [resource for resource in call('/api/resources') if resource['status'] != '停用']
-        selected_resource_id = None
-        if available_resources:
-            resource = available_resources[0]
-            selected_resource_id = resource['id']
-            with page.expect_response(lambda response: response.url.endswith('/api/resources') and response.request.method == 'GET'):
-                site_row.locator('.el-select:has(input[aria-label="服务商 / 资源：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
-            with page.expect_response(lambda response: response.url.endswith('/api/resources/links') and response.request.method == 'POST') as resource_response:
-                page.get_by_role('option', name=resource['name'], exact=True).click()
-            assert json.loads(resource_response.value.request.post_data) == {'website_id': site_id, 'resource_id': resource['id'], 'role': {'github': '代码仓库', 'cloudflare': '部署平台', 'vhost': '虚拟主机', 'vps': 'VPS'}[resource['provider']], 'is_primary': True}
-        local_sites = call('/api/websites')
-        machines = {domain.get('computer_name') for site in local_sites for domain in site['domains'] if domain.get('computer_name')}
-        current_machine = next(domain.get('computer_name') for site in local_sites if site['id'] == site_id for domain in site['domains'] if domain['is_primary'])
-        target_machine = next((name for name in sorted(machines) if name != current_machine), f'验收电脑 {stamp}')
-        computer_combo = site_row.locator('.el-select:has(input[aria-label="电脑：验收网站 A ' + stamp + '"]) .el-select__wrapper')
-        with page.expect_response(lambda response: response.url.endswith('/api/domains/' + str(primary['id'])) and response.request.method == 'PATCH') as computer_response:
-            computer_combo.click()
-            if target_machine in machines:
-                page.get_by_role('option', name=target_machine, exact=True).click()
-            else:
-                input_box = site_row.get_by_role('combobox', name=f'电脑：验收网站 A {stamp}')
-                input_box.fill(target_machine)
-                input_box.press('Enter')
-        assert json.loads(computer_response.value.request.post_data) == {'computer_name': target_machine}
-        site_row.get_by_role('button', name=f'编辑下一步：验收网站 A {stamp}').click()
-        page.get_by_role('textbox', name='下一步行动').fill('本地表格快速更新')
-        call(prefix, {'next_action_status': '已完成'}, 'PATCH')
-        page.locator('.portfolio-next-editor:visible .el-date-editor input').fill('2026-12-01')
-        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as action_response:
-            page.get_by_role('button', name='保存下一步').click()
-        assert json.loads(action_response.value.request.post_data) == {'next_action': '本地表格快速更新', 'next_action_due_date': '2026-12-01'}
-        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as stage_response:
-            site_row.locator('.el-select:has(input[aria-label="网站阶段：验收网站 A ' + stamp + '"]) .el-select__wrapper').click()
-            page.get_by_role('option', name='增长', exact=True).last.click()
-        assert json.loads(stage_response.value.request.post_data) == {'stage': '增长'}
-        saved_site = next(site for site in call('/api/websites') if site['id'] == site_id)
-        assert saved_site['platform'] == 'Astro'
-        assert selected_resource_id is None or selected_resource_id in saved_site['resource_ids']
-        assert next(domain for domain in saved_site['domains'] if domain['is_primary'])['computer_name'] == target_machine
-        assert (saved_site['next_action'], saved_site['next_action_status'], saved_site['next_action_due_date']) == ('本地表格快速更新', '已完成', '2026-12-01')
-        assert saved_site['stage'] == '增长'
-        page.get_by_role('button', name=f'查看网站：验收网站 A {stamp}').click()
+        profile_section.locator('.el-form-item').filter(has_text='技术栈').first.locator('.el-select__wrapper').click()
+        page.get_by_role('option', name='Astro', exact=True).last.click()
+        for label,value in [('总页面数','25'),('计算器数量','0'),('文章数量','12')]:
+            field = profile_section.locator('.el-form-item').filter(has=page.locator('label',has_text=label))
+            field.locator('input').fill(value)
+            field.locator('input').press('Tab')
+        date_field=profile_section.locator('.el-form-item').filter(has_text='内容统计日期').locator('input')
+        date_field.fill(today.isoformat());date_field.press('Tab')
+        profile_section.locator('.el-form-item').filter(has_text='主要管理电脑').locator('.el-select__wrapper').click()
+        page.get_by_role('option', name='Mac Mini YC', exact=True).click()
+        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as stats_response:
+            profile_section.get_by_role('button', name='保存', exact=True).click()
+        assert stats_response.value.ok,stats_response.value.text()
+        saved=next(site for site in call('/api/websites') if site['id']==site_id)
+        assert (saved['page_count'],saved['calculator_count'],saved['article_count'],saved['computer_name'])==(25,0,12,'Mac Mini YC')
+        # Changing the primary domain cannot move the website's computer.
+        alternate=call('/api/domains',{'website_id':site_id,'domain':f'other-{stamp}.test','registrar':'r','registrar_date':'2026-01-01','expiry_date':'2027-01-01','service_type':'网站'},'POST',201)
+        call('/api/domains/'+str(alternate['id']),{'is_primary':True},'PATCH')
+        assert next(site for site in call('/api/websites') if site['id']==site_id)['computer_name']=='Mac Mini YC'
         expect(page.get_by_role('heading', name='外链候选', exact=True)).to_have_count(0)
         expect(page.get_by_text('标题与内链已调整', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · USD', exact=True)).to_be_visible()
         expect(page.get_by_text(f'{month} · 验收收入 · EUR', exact=True)).to_be_visible()
-        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='经营信息', exact=True))
+        profile_section = page.locator('.portfolio-detail-section').filter(has=page.get_by_role('heading', name='基本资料', exact=True))
         call(prefix, {'gsc_connected': '已开通'}, 'PATCH')
         with page.expect_response(lambda response: response.url.endswith('/api/websites') and response.request.method == 'GET'):
-            page.get_by_role('button', name='刷新网站', exact=True).evaluate('button => button.click()')
+            page.get_by_role('button', name='刷新', exact=True).evaluate('button => button.click()')
         profile_section.get_by_role('textbox', name='网站名称', exact=True).fill(f'验收网站 A {stamp} 修改')
         profile_section.locator('.el-form-item').filter(has_text='阶段').locator('.el-select__wrapper').click()
         page.get_by_role('option', name='维护', exact=True).click()
@@ -225,7 +185,7 @@ try:
         expect(page.get_by_role('heading', name='域名资产', exact=True)).to_be_visible()
         call(f'/api/websites/{site_ids[1]}', {'lifecycle': 'stopped'}, 'PATCH')
         page.goto(BASE + '/home?view=stopped')
-        expect(page.get_by_role('button', name=f'查看网站：验收网站 B {stamp}')).to_be_visible()
+        expect(page.get_by_role('button', name=f'验收网站 B {stamp}', exact=True)).to_be_visible()
         page.goto(BASE + '/data')
         with page.expect_download() as download:
             page.get_by_role('button', name='导出网站组合 JSON', exact=True).click()

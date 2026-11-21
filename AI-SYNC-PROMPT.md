@@ -127,3 +127,8 @@ Content-Type: application/json
 - `404`：网站、域名关联或当前网站下的任务不存在；不要创建替代记录。
 - `409`：复查未到期；保留其他已完成的更新，不报告任何效果结论。
 - `500`/`503`：不要猜测写入成功，报告同步失败。
+
+
+## 通用内容数量（v1.24）
+
+所有技术栈使用 `page_count`、`calculator_count`、`article_count` 及 `content_stats_updated_date`。未知不覆盖，确定为零写入 0；统计指公开内容页面，不是已收录页面。旧 `wp_calculator_count` / `wp_article_count` 仍可读写，与新字段冲突时请求失败。`computer_name` 属于网站。经营场景只作历史兼容，不需补充，不用于决定数量字段。

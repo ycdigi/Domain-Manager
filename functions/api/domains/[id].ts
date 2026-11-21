@@ -1,3 +1,4 @@
+import { cacheDomainFavicon } from '../../domain/favicons'
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
@@ -55,6 +56,7 @@ export const onRequestPut: PagesFunction<Env> = async context => {
         const result = await db.prepare(`UPDATE domains SET ${Object.keys(changes).map(key => `${key}=?`).join(', ')} WHERE id=? RETURNING *`).bind(...Object.entries(changes).map(([key, value]) => key === 'is_primary' ? (isPrimary ? 1 : 0) : value), id).first()
         if (moving) await ensurePrimary(db, oldWebsiteId)
         await ensurePrimary(db, nextWebsiteId)
+        if (context.waitUntil) context.waitUntil(cacheDomainFavicon(context.env.DB, id))
         return json(result, 200, '域名已更新')
     } catch (error) { if (error instanceof Error && error.message.includes('website_requires_domain')) return json(null, 409, '网站至少需要一个域名'); return json(null, 500, error instanceof Error ? error.message : '域名更新失败') }
 }
