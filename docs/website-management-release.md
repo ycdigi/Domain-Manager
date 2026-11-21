@@ -19,6 +19,6 @@
 
 ## Pages 与验收边界
 
-发布提交及部署编号完成后补录。原 Pages 生产基线为 `095b4579-c1c2-482c-a689-2ed211c29850`（提交 `6279f33`）。
+应用提交 `6adb5dc2c78ba2921a16178b17a413e7476c1368` 已推送 GitHub main，Pages 生产部署 `b3abcf1a` 完成。生产 `/website-management` 返回 200，入口文件 `/assets/index-DSlDNvu8.js` 与本地构建一致，包含新路由；网站管理、GSC、工作历史、备份四个接口未登录均返回 401。原 Pages 生产基线为 `095b4579-c1c2-482c-a689-2ed211c29850`（提交 `6279f33`）。
 
 生产没有可用登录凭据，不修改远端密钥；登录后操作由本地真实 Pages＋D1 副本验证。生产只读检查页面、发布静态资源、登录保护及数据库保留。仓库 Issues 关闭，规格保存在 `docs/specs/website-management.md`。
