@@ -65,6 +65,7 @@
 import { computed, reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import ProviderIdentity from './ProviderIdentity.vue'
+import { providerIdentity } from '../utils/provider-identity'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
 import type { Website } from '../api/websites'
@@ -88,8 +89,7 @@ const accounts = ref<ProviderAccount[]>([])
 const accountLinks = ref<Array<{ id:number; account_name:string; provider:string; provider_name?:string }>>([])
 const accountForm = reactive({ account_id:undefined as number | undefined })
 const selectedAccount = computed(() => accounts.value.find(account => account.id === accountForm.account_id))
-const providerLabels: Record<string, string> = { github: 'GitHub', cloudflare: 'Cloudflare', vhost: '虚拟主机', vps: 'VPS' }
-const accountLabel = (account: ProviderAccount) => `${account.provider_name?.trim() || providerLabels[account.provider] || account.provider} · ${account.name}`
+const accountLabel = (account: ProviderAccount) => { const identity = providerIdentity(account.provider, account.provider_name, account.name); return identity.label + (identity.accountName ? ` · ${identity.accountName}` : '') }
 const links = ref<Link[]>([])
 const resources = ref<ProviderResource[]>([])
 const saving = ref(false)
