@@ -3,7 +3,7 @@ import base64
 import json
 from playwright.sync_api import sync_playwright, expect
 
-sites=[dict(id=1,name='Astro site',stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=dict(id=2,provider='cloudflare',provider_name='Cloudflare',name='Pages',status='正常'),repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=1,status='正常')),dict(id=2,name='WordPress site',stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=20,next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
+sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=dict(id=2,provider='cloudflare',provider_name='Cloudflare',name='Pages',status='正常'),repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=1,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=20,next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
 state=dict(fail=False,copy_fail=False,empty=False,copies=0)
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
@@ -15,6 +15,7 @@ with sync_playwright() as p:
   path=route.request.url.split('?')[0].split('/api/')[-1];code=200;data=[];message='成功'
   if path=='websites':
    code=503 if state['fail'] else 200;message='模拟读取失败' if state['fail'] else '成功';data=[] if state['empty'] else sites
+  elif path=='batches':data=[dict(id=7,name='第一批',status='进行中'),dict(id=8,name='历史批次',status='已归档')]
   elif path=='monitor':data=dict(monitors=[],incidents=[],unread_count=0,runner=None)
   elif path.startswith('websites/') and path.endswith('/monitor'):
    site=next(s for s in sites if s['id']==int(path.split('/')[1]));data=dict(monitor=dict(website_id=site['id'],enabled=True,effective_enabled=True,status='unchecked',allowed_redirect_hosts=[],title=None),history=[],incidents=[])
@@ -39,6 +40,29 @@ with sync_playwright() as p:
  assert table.bounding_box()['y']<190
 
  expect(table.locator('thead th')).to_have_text(['网站 / 主域名','技术栈','总页面数','计算器数量','文章数量','日点击','服务商','GitHub','服务器 IP','电脑','阶段','操作'])
+ # The /home batch filter starts empty, survives reload and combines with other filters.
+ batch_filter=filters.locator('.el-select').filter(has=page.get_by_role('combobox',name='网站批次筛选',exact=True))
+ expect(batch_filter).to_contain_text('全部批次')
+ def choose_filter(name,label):
+  filters.locator('.el-select').filter(has=page.get_by_role('combobox',name=name,exact=True)).locator('.el-select__wrapper').click()
+  page.get_by_role('option',name=label,exact=True).click()
+ choose_filter('网站批次筛选','第一批');expect(table.locator('tbody tr')).to_have_count(1)
+ expect(table.locator('tbody tr')).to_contain_text('Astro site');expect(results.get_by_text('批次：第一批',exact=True)).to_be_visible()
+ expect(page).to_have_url(__import__('re').compile('batch=7'))
+ page.reload();page.wait_for_load_state('networkidle');expect(table.locator('tbody tr')).to_have_count(1)
+ expect(batch_filter).to_contain_text('第一批')
+ choose_filter('阶段筛选','增长');expect(table.locator('tbody tr')).to_have_count(0)
+ page.get_by_role('button',name='清除全部条件',exact=True).click();expect(table.locator('tbody tr')).to_have_count(2)
+ choose_filter('网站批次筛选','历史批次');expect(table.locator('tbody tr')).to_have_count(1)
+ batch_filter.hover();batch_filter.locator('.el-select__clear').click();expect(table.locator('tbody tr')).to_have_count(2)
+ expect(page).not_to_have_url(__import__('re').compile('batch='))
+ table.locator('thead .el-checkbox').click()
+ expect(page.get_by_role('checkbox',name='选择当前结果中的全部网站',exact=True)).to_be_checked()
+ expect(page.locator('.portfolio-bulk-toolbar')).to_contain_text('已选 2 个网站')
+ choose_filter('网站批次筛选','第一批');expect(page.locator('.portfolio-bulk-toolbar')).to_contain_text('已选 1 个网站')
+ page.get_by_role('button',name='取消选择',exact=True).click()
+ results.locator('.el-tag').filter(has_text='批次：第一批').locator('.el-tag__close').click()
+ expect(table.locator('tbody tr')).to_have_count(2);expect(batch_filter).to_contain_text('全部批次')
  row=table.locator('tbody tr').filter(has=page.get_by_role('button',name='Astro site',exact=True))
  expect(row.locator('td').nth(3)).to_have_text('0');expect(row).to_contain_text('Cloudflare');expect(row.get_by_role('link',name='org/repo')).to_have_attribute('href','https://github.com/org/repo')
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('Astro site')

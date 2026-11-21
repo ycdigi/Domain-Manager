@@ -23,6 +23,15 @@
       <div class="site-filters">
         <el-input v-model="search" clearable placeholder="搜索网站或域名" aria-label="搜索网站或域名" />
         <el-select
+          :model-value="String(route.query.batch || '')"
+          clearable
+          filterable
+          placeholder="全部批次"
+          aria-label="网站批次筛选"
+          @change="(value) => filter('batch', value)"
+          ><el-option v-for="batch in batches" :key="batch.id" :label="batch.name" :value="String(batch.id)"
+        /></el-select>
+        <el-select
           :model-value="String(route.query.ownership || '')"
           clearable
           placeholder="全部归属"
@@ -321,8 +330,8 @@ const batchVisible = ref(false)
 const createVisible = ref(false)
 const sortKey = computed({ get: () => String(route.query.sort || ''), set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
 const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')
-const filterLabels: Record<string, string> = { ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', new: '新站', view: '状态', q: '搜索' }
-const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'new' ? '是' : key === 'view' ? '停止经营' : route.query[key]}` })))
+const filterLabels: Record<string, string> = { batch: '批次', ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', new: '新站', view: '状态', q: '搜索' }
+const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'new' ? '是' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : route.query[key]}` })))
 const clearFilters = () => { const query = { ...route.query }; for (const key of Object.keys(filterLabels)) delete query[key]; void router.push({ query }) }
 const views = [
   { value: 'active', label: '经营中' },
@@ -370,6 +379,7 @@ const visibleSites = computed(() =>
     .filter(
       (s) =>
         s.lifecycle === view.value &&
+        (!route.query.batch || s.batch_ids?.includes(Number(route.query.batch))) &&
         (!route.query.stage || s.stage === route.query.stage) &&
         (!route.query.ownership || s.ownership === route.query.ownership) &&
         (!route.query.platform || s.platform === route.query.platform) &&

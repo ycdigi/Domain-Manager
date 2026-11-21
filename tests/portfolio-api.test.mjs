@@ -51,6 +51,14 @@ test('website creation requires and stores its first domain', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'No domain' }, 'POST'), 400)
 })
 
+test('website list exposes only current batch memberships, including archived batches, without duplicating sites', async () => {
+  store.sql("INSERT INTO websites(id,name) VALUES(1,'Member'),(2,'Unassigned'); INSERT INTO website_batches(id,name,status) VALUES(7,'First','进行中'),(8,'Archived','已归档'),(9,'Removed','进行中'); INSERT INTO website_batch_members(batch_id,website_id,membership_status) VALUES(7,1,'active'),(7,1,'removed'),(8,1,'active'),(9,1,'removed')")
+  const rows = await call(sites.onRequestGet, context('/api/websites'))
+  assert.equal(rows.length, 2)
+  assert.deepEqual(rows.find(site => site.id === 1).batch_ids, [7,8])
+  assert.deepEqual(rows.find(site => site.id === 2).batch_ids, [])
+})
+
 test('website portfolio exposes the primary repository and all actual resource links', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Resource site', domain: { domain: 'resource.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   store.sql(`

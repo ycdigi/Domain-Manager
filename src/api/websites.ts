@@ -30,6 +30,7 @@ export interface Website {
 
   id: number
   name: string
+  batch_ids?: number[]
   stage: WebsiteStage
   lifecycle: 'active' | 'stopped'
   ownership: '未分类' | '自营网站' | '企业客户网站'

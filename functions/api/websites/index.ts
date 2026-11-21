@@ -35,6 +35,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 (SELECT COUNT(*) FROM website_tasks t WHERE t.website_id = w.id AND t.task_type = 'SEO复查' AND t.status IN ('待做', '待跟进')) AS review_count,
                 (SELECT json_object('week_start', e.week_start, 'hours', e.hours) FROM website_effort e WHERE e.website_id=w.id ORDER BY e.week_start DESC LIMIT 1) AS latest_effort_json,
                 (SELECT json_group_array(DISTINCT wr.resource_id) FROM website_resources wr WHERE wr.website_id=w.id) AS resource_ids_json,
+                (SELECT json_group_array(batch_id) FROM (SELECT batch_id FROM website_batch_members WHERE website_id=w.id AND membership_status='active' ORDER BY batch_id)) AS batch_ids_json,
                 (SELECT json_group_array(account_id) FROM (SELECT r.account_id FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND r.account_id IS NOT NULL UNION SELECT wa.account_id FROM website_accounts wa WHERE wa.website_id=w.id)) AS provider_account_ids_json,
                 (SELECT GROUP_CONCAT(DISTINCT r.provider || ': ' || r.name) FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id WHERE wr.website_id = w.id) AS resource_names
             FROM websites w ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
@@ -69,7 +70,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         }
         for (const item of incomeTotals.results || []) incomeTotalsByWebsite.set(item.website_id, [...(incomeTotalsByWebsite.get(item.website_id) || []), { currency: item.currency, amount: Number(item.amount) }])
         return json((rows.results || []).map(row => {
-            const { hosting_json: hostingJson, repository_json: repositoryJson, domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, provider_account_ids_json: accountIds, ...site } = row
+            const { hosting_json: hostingJson, repository_json: repositoryJson, domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, batch_ids_json: batchIds, provider_account_ids_json: accountIds, ...site } = row
             const domains = JSON.parse(String(domainsJson || '[]'))
             const siteIncomes = incomeByWebsite.get(Number(site.id)) || []
             const currentIncome = siteIncomes.filter(item => item.income_month === currentMonth)
@@ -88,6 +89,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 income_totals: incomeTotalsByWebsite.get(Number(site.id)) || [],
                 latest_effort: effortJson ? JSON.parse(String(effortJson)) : null,
                 resource_ids: JSON.parse(String(resourceIds || '[]')),
+                batch_ids: JSON.parse(String(batchIds || '[]')),
                 provider_account_ids: JSON.parse(String(accountIds || '[]')),
             }
         }))
