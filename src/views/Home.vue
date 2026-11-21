@@ -75,6 +75,7 @@
       ><el-select v-model="bulkStage" aria-label="批量设置阶段"
         ><el-option v-for="stage in stages" :key="stage" :value="stage" /></el-select
       ><el-button :loading="busy" @click="bulk({ stage: bulkStage })">设置阶段</el-button
+      ><el-button :disabled="busy" @click="openBulkSettings">批量设置</el-button
       ><el-button @click="batchVisible = true">加入批次</el-button
       ><el-button v-if="view !== 'stopped'" :loading="busy" @click="bulk({ lifecycle: 'stopped' })">停止经营</el-button
       ><el-button v-else :loading="busy" @click="bulk({ lifecycle: 'active' })">恢复经营</el-button
@@ -255,6 +256,7 @@
       }}
     </p>
     <WebsiteDetailDrawer v-model:visible="detailVisible" :website="selectedSite" @changed="load(true)" />
+    <WebsiteBulkSettingsDialog v-model:visible="bulkSettingsVisible" :websites="bulkSettingsSites" :computer-names="websites.map(site=>site.computer_name || '')" @saved="bulkSettingsSaved" />
     <BatchAssignmentDialog
       v-model="batchVisible"
       :websites="websites"
@@ -280,6 +282,7 @@ import { View, CopyDocument, MoreFilled } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
+import WebsiteBulkSettingsDialog from '../components/WebsiteBulkSettingsDialog.vue'
 import DomainFavicon from '../components/DomainFavicon.vue'
 import TechStackIcon from '../components/TechStackIcon.vue'
 import {
@@ -326,6 +329,14 @@ const busy = ref(false)
 const copying = ref<number>()
 const selectedIds = reactive(new Set<number>())
 const bulkStage = ref<WebsiteStage>('待评估')
+const bulkSettingsVisible = ref(false)
+const bulkSettingsSites = ref<Website[]>([])
+const openBulkSettings = () => {
+  if (selectedIds.size > 200) { ElMessage.error('每次最多设置 200 个网站'); return }
+  bulkSettingsSites.value = websites.value.filter(site=>selectedIds.has(site.id))
+  bulkSettingsVisible.value = true
+}
+const bulkSettingsSaved = () => { selectedIds.clear(); void load(true) }
 const batchVisible = ref(false)
 const createVisible = ref(false)
 const sortKey = computed({ get: () => String(route.query.sort || ''), set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
