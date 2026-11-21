@@ -47,6 +47,20 @@ with sync_playwright() as p:
  page.goto('http://127.0.0.1:5173/website-management');page.wait_for_load_state('networkidle')
  expect(page.get_by_role('heading',name='网站管理',exact=True)).to_be_visible()
  expect(page.locator('.management-table tbody tr')).to_have_count(2)
+ # Wide screens keep the domain column compact and each row on a single line.
+ page.set_viewport_size(dict(width=2560,height=1000))
+ first=page.locator('.management-table tbody tr').first
+ assert page.locator('.management-table-wrap').evaluate('e=>{const p=e.parentElement,s=getComputedStyle(p);return Math.abs(e.getBoundingClientRect().width-(p.clientWidth-parseFloat(s.paddingLeft)-parseFloat(s.paddingRight)))<2}')
+ assert page.locator('.management-table').evaluate('e=>Math.abs(e.getBoundingClientRect().width-e.parentElement.clientWidth)<2')
+ assert first.locator('th').bounding_box()['width']<=260
+ expect(first).not_to_contain_text('否 · 尚无记录')
+ expect(first.locator('th')).to_have_text('example.test')
+ header_size=page.locator('.management-table thead th').first.evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
+ button_size=first.locator('.work-capsule').first.evaluate('e=>parseFloat(getComputedStyle(e).fontSize)')
+ assert header_size>button_size,(header_size,button_size)
+ assert first.bounding_box()['height']<=56
+ page.set_viewport_size(dict(width=1600,height=1000))
+ assert page.locator('.management-table').evaluate('e=>Math.abs(e.getBoundingClientRect().width-e.parentElement.clientWidth)<2')
  row=page.locator('.management-table tbody tr').filter(has=page.get_by_text('example.test',exact=True))
  count=row.get_by_role('button',name='查看TDK调整记录：example.test',exact=True)
  expect(count).to_have_text('0');count.hover();expect(page.get_by_role('tooltip').filter(has_text='尚无记录')).to_be_visible()
@@ -69,6 +83,15 @@ with sync_playwright() as p:
  page.reload();page.wait_for_load_state('networkidle');expect(count).to_have_text('1');expect(row).to_contain_text('Google main')
  page.get_by_role('textbox',name='搜索网站或域名',exact=True).fill('other');expect(page.locator('.management-table tbody tr')).to_have_count(1);expect(page).to_have_url(re.compile('q=other'))
  page.get_by_role('button',name='清除全部条件',exact=True).click();expect(page.locator('.management-table tbody tr')).to_have_count(2)
+ rows[1]['domain']='a-very-long-domain-name-that-must-stay-on-one-line.example.test'
+ page.get_by_role('button',name='刷新',exact=True).click()
+ long_link=page.get_by_role('link',name=rows[1]['domain'],exact=True)
+ expect(long_link).to_be_visible()
+ assert long_link.evaluate('e=>getComputedStyle(e).whiteSpace')=='nowrap'
+ assert long_link.evaluate('e=>e.scrollWidth>e.clientWidth')
+ long_link.hover();expect(page.get_by_role('tooltip').filter(has_text=rows[1]['domain'])).to_be_visible()
+ page.get_by_role('heading',name='网站管理',exact=True).hover()
+ expect(page.get_by_role('tooltip').filter(has_text=rows[1]['domain'])).not_to_be_visible()
  page.screenshot(path='/tmp/domain-management-desktop.png',full_page=True)
  for width in [1280,1024,768,390,320]:
   page.set_viewport_size(dict(width=width,height=900));assert page.evaluate('document.documentElement.scrollWidth <= innerWidth+1')

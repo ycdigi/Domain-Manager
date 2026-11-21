@@ -12,16 +12,16 @@
       <el-select :model-value="query('gsc')" aria-label="GSC 账号筛选" @change="value=>filter('gsc',String(value))"><el-option label="全部 GSC 账号" value="" /><el-option label="未关联" value="none" /><el-option v-for="account in accounts" :key="account.id" :label="account.name" :value="String(account.id)" /></el-select>
       <el-select :model-value="query('sort')" aria-label="记录排序" @change="value=>filter('sort',value)"><el-option label="默认顺序" value="" /><el-option label="最近登记优先" value="recent" /><el-option label="最久未登记优先" value="oldest" /></el-select>
     </div>
-    <div class="management-results"><span role="status">{{ visibleRows.length }} / {{ rows.length }} 个网站</span><el-button v-if="hasFilters" text @click="clearFilters">清除全部条件</el-button><span class="page-muted">点击胶囊登记一次；数字可查看历史。默认“否”表示尚无记录。</span></div>
+    <div class="management-results"><span role="status">{{ visibleRows.length }} / {{ rows.length }} 个网站</span><el-button v-if="hasFilters" text @click="clearFilters">清除全部条件</el-button><span class="page-muted">点击胶囊登记一次；数字可查看历史。</span></div>
     <div class="management-table-wrap" role="region" aria-label="网站工作记录，可横向滚动" tabindex="0" :aria-busy="loading">
-      <table class="management-table"><caption class="sr-only">网站管理工作登记与 GSC 归属</caption><colgroup><col class="management-domain-column" /><col v-for="kind in workKinds" :key="kind" class="management-work-column" /><col class="management-gsc-column" /></colgroup>
+      <table class="management-table" aria-label="网站管理工作登记与 GSC 归属"><colgroup><col class="management-domain-column" /><col v-for="kind in workKinds" :key="kind" class="management-work-column" /><col class="management-gsc-column" /></colgroup>
         <thead><tr><th scope="col">网站域名</th><th v-for="kind in workKinds" :key="kind" scope="col">{{ kind }}</th><th scope="col">GSC归属</th></tr></thead>
         <tbody><tr v-for="row in visibleRows" :key="row.id" :data-website-id="row.id">
-          <th scope="row"><router-link :to="{name:'Home',query:{site:row.id,section:'work'}}">{{ row.domain || row.name }}</router-link><small v-if="row.name!==row.domain" class="page-muted">{{ row.name }}</small></th>
+          <th scope="row"><el-tooltip popper-class="management-domain-tooltip" :content="row.name!==row.domain?`${row.domain || ''} · ${row.name}`:row.domain || row.name" :show-after="150" :persistent="false"><router-link :to="{name:'Home',query:{site:row.id,section:'work'}}">{{ row.domain || row.name }}</router-link></el-tooltip></th>
           <td v-for="kind in workKinds" :key="kind"><div class="work-capsule-line">
             <el-tooltip :content="tooltip(row,kind)" :show-after="150" :persistent="false"><button type="button" class="work-count" :aria-label="`查看${kind}记录：${row.domain || row.name}`" @click="openHistory(row,kind)">{{ row.stats[kind].count }}</button></el-tooltip>
             <button type="button" class="work-capsule" :class="{'has-records':row.stats[kind].count>0}" :disabled="loading || busy.has(key(row,kind)) || historyBusy" :aria-label="`登记${kind}：${row.domain || row.name}`" :title="`记录一次${kind}`" @click="record(row,kind)">{{ busy.has(key(row,kind))?'保存中…':kind }}</button>
-          </div><small class="work-last-time">{{ row.stats[kind].count?'是 · '+workTime(row.stats[kind].last_at,true):'否 · 尚无记录' }}</small></td>
+          </div></td>
           <td><el-tooltip :content="row.gsc_account?.email || ''" placement="top" :disabled="openedGsc===row.id || !row.gsc_account?.email" :show-after="150"><el-select :model-value="row.gsc_account?.id" clearable filterable placeholder="未关联" :aria-label="`GSC归属：${row.domain || row.name}`" :disabled="loading || busy.has(row.id+':gsc')" @visible-change="value=>openedGsc=value?row.id:undefined" @change="value=>assign(row,value)"><el-option v-for="account in accounts" :key="account.id" :label="account.name" :value="account.id" /></el-select></el-tooltip></td>
         </tr></tbody>
       </table>
