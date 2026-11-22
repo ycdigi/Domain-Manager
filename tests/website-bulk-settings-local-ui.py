@@ -33,7 +33,12 @@ try:
   page.get_by_role('option',name=f'GitHub · Bulk github {stamp} · github{stamp}@example.test',exact=True).click();page.keyboard.press('Escape')
   choose('批量设置电脑','Macbook Pro');choose('批量设置GSC账号',gsc['name']+' · '+gsc['email'])
   dialog.get_by_role('button',name='保存批量设置',exact=True).click();expect(dialog).not_to_be_visible()
-  for row in rows.all():expect(row).to_contain_text('Macbook Pro')
+  for row in rows.all():
+   expect(row).to_contain_text('Macbook Pro')
+   provider_cell=row.locator('td').nth(6)
+   expect(provider_cell.locator('.provider-identity')).to_have_count(1)
+   expect(provider_cell).to_contain_text('Bulk cloudflare '+stamp)
+   expect(provider_cell.locator('img')).to_be_visible()
   saved=[site for site in call('/api/websites') if site['id'] in site_ids]
   assert len(saved)==2 and all(site['computer_name']=='Macbook Pro' and set(provider_ids).issubset(site['provider_account_ids']) for site in saved)
   managed=[site for site in call('/api/website-management') if site['id'] in site_ids]

@@ -58,7 +58,7 @@
         <el-select
           :model-value="String(route.query.provider || '')"
           clearable
-          placeholder="全部托管服务商"
+          placeholder="全部服务商"
           aria-label="服务商筛选"
           @change="(value) => filter('provider', value)"
           ><el-option v-for="value in providerNames" :key="value" :label="value" :value="value"
@@ -168,8 +168,10 @@
                 </button>
               </td>
               <td>
-                <button class="site-cell" :title="site.hosting?.name" @click="openSite(site, 'deployment')">
-                  {{ site.hosting?.provider_name || '—' }}
+                <button class="site-cell site-provider-cell" @click="openSite(site, 'deployment')">
+                  <ProviderIdentity v-for="account in serviceProviders(site)" :key="account.key"
+                    :provider="account.provider" :provider-name="account.provider_name" :name="account.name" compact />
+                  <span v-if="!serviceProviders(site).length">—</span>
                 </button>
               </td>
               <td>
@@ -285,6 +287,8 @@ import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
 import WebsiteBulkSettingsDialog from '../components/WebsiteBulkSettingsDialog.vue'
 import DomainFavicon from '../components/DomainFavicon.vue'
 import TechStackIcon from '../components/TechStackIcon.vue'
+import ProviderIdentity from '../components/ProviderIdentity.vue'
+import { providerIdentity } from '../utils/provider-identity'
 import {
   getWebsites,
   createWebsite,
@@ -349,9 +353,20 @@ const views = [
   { value: 'stopped', label: '停止经营' }
 ]
 const view = computed(() => (route.query.view === 'stopped' ? 'stopped' : 'active'))
-const providerNames = computed(() =>
-  [...new Set(websites.value.map((s) => s.hosting?.provider_name).filter((s): s is string => Boolean(s)))].sort()
-)
+const serviceProviders = (site: Website) => {
+  const accounts = (site.provider_accounts || []).filter(account => account.provider !== 'github').map(account => ({
+    ...account, key: `account-${account.id}`, label: providerIdentity(account.provider, account.provider_name, account.name).label
+  }))
+  const hosting = site.hosting
+  if (hosting) {
+    const label = providerIdentity(hosting.provider, hosting.provider_name).label
+    if (!accounts.some(account => account.provider === hosting.provider && account.label === label)) {
+      accounts.push({ id: hosting.id, key: `hosting-${hosting.id}`, provider: hosting.provider, provider_name: label, name: label, label })
+    }
+  }
+  return accounts
+}
+const providerNames = computed(() => [...new Set(websites.value.flatMap(site => serviceProviders(site).map(account => account.label)))].sort())
 const primaryDomain = (site: Website) => site.domains.find((d) => d.is_primary) || site.domains[0]
 const platformLabel = (site: Website) => (site.platform === '其他' ? site.platform_other || '其他' : site.platform)
 const safeExternal = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
@@ -378,7 +393,7 @@ const sortValue = (s: Website, key: string): string | number =>
               s.daily_clicks_range || ''
             ] ??
             -1,
-          provider: s.hosting?.provider_name || '',
+          provider: serviceProviders(s).map(account => `${account.label} ${account.name}`).join(' '),
           github: s.repository?.resource_url || '',
           ip: s.hosting?.ip_address || '',
           computer: s.computer_name || '',
@@ -394,7 +409,7 @@ const visibleSites = computed(() =>
         (!route.query.stage || s.stage === route.query.stage) &&
         (!route.query.ownership || s.ownership === route.query.ownership) &&
         (!route.query.platform || s.platform === route.query.platform) &&
-        (!route.query.provider || s.hosting?.provider_name === route.query.provider) &&
+        (!route.query.provider || serviceProviders(s).some(account => account.label === route.query.provider)) &&
         (!route.query.resource || s.resource_ids?.includes(Number(route.query.resource))) &&
         (!route.query.provider_account || s.provider_account_ids?.includes(Number(route.query.provider_account))) &&
         (!route.query.adsense_account || s.adsense_account_id === Number(route.query.adsense_account)) &&

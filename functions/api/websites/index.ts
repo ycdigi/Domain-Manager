@@ -37,6 +37,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 (SELECT json_group_array(DISTINCT wr.resource_id) FROM website_resources wr WHERE wr.website_id=w.id) AS resource_ids_json,
                 (SELECT json_group_array(batch_id) FROM (SELECT batch_id FROM website_batch_members WHERE website_id=w.id AND membership_status='active' ORDER BY batch_id)) AS batch_ids_json,
                 (SELECT json_group_array(account_id) FROM (SELECT r.account_id FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND r.account_id IS NOT NULL UNION SELECT wa.account_id FROM website_accounts wa WHERE wa.website_id=w.id)) AS provider_account_ids_json,
+                (SELECT json_group_array(json_object('id',a.id,'provider',a.provider,'provider_name',a.provider_name,'name',a.name)) FROM (SELECT pa.id,pa.provider,pa.provider_name,pa.name FROM provider_accounts pa WHERE pa.id IN (SELECT r.account_id FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id UNION SELECT wa.account_id FROM website_accounts wa WHERE wa.website_id=w.id) ORDER BY pa.id) a) AS provider_accounts_json,
                 (SELECT GROUP_CONCAT(DISTINCT r.provider || ': ' || r.name) FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id WHERE wr.website_id = w.id) AS resource_names
             FROM websites w ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
             ORDER BY CASE w.stage WHEN '验证' THEN 1 WHEN '增长' THEN 2 WHEN '维护' THEN 3 WHEN '暂停' THEN 4 ELSE 0 END, w.lifecycle, w.priority_order, w.id
@@ -70,7 +71,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         }
         for (const item of incomeTotals.results || []) incomeTotalsByWebsite.set(item.website_id, [...(incomeTotalsByWebsite.get(item.website_id) || []), { currency: item.currency, amount: Number(item.amount) }])
         return json((rows.results || []).map(row => {
-            const { hosting_json: hostingJson, repository_json: repositoryJson, domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, batch_ids_json: batchIds, provider_account_ids_json: accountIds, ...site } = row
+            const { hosting_json: hostingJson, repository_json: repositoryJson, domains_json: domainsJson, latest_effort_json: effortJson, resource_ids_json: resourceIds, batch_ids_json: batchIds, provider_account_ids_json: accountIds, provider_accounts_json: accountsJson, ...site } = row
             const domains = JSON.parse(String(domainsJson || '[]'))
             const siteIncomes = incomeByWebsite.get(Number(site.id)) || []
             const currentIncome = siteIncomes.filter(item => item.income_month === currentMonth)
@@ -91,6 +92,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 resource_ids: JSON.parse(String(resourceIds || '[]')),
                 batch_ids: JSON.parse(String(batchIds || '[]')),
                 provider_account_ids: JSON.parse(String(accountIds || '[]')),
+                provider_accounts: JSON.parse(String(accountsJson || '[]')),
             }
         }))
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取网站失败') }

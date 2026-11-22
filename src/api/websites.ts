@@ -59,6 +59,7 @@ export interface Website {
   resource_names?: string | null
   resource_ids?: number[]
   provider_account_ids?: number[]
+  provider_accounts?: Array<{ id: number; provider: string; provider_name: string | null; name: string }>
   current_income?: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }>
   latest_income?: { month: string; items: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }> } | null
   income_totals?: Array<{ currency: string; amount: number }>

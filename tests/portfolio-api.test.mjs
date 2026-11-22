@@ -76,6 +76,27 @@ test('website portfolio exposes the primary repository and all actual resource l
   assert.equal(site.resource_ids.length, 2)
 })
 
+test('website list exposes linked account identities without requiring or inventing hosting', async () => {
+  store.sql(`
+    INSERT INTO websites(id,name) VALUES(1,'Account only'),(2,'Resource account'),(3,'Unassigned');
+    INSERT INTO provider_accounts(id,provider,name,provider_name) VALUES(1,'cloudflare','Suscoding@Gmail.Com',NULL),(2,'vhost','Team','SiteGround'),(3,'github','Code account',NULL);
+    INSERT INTO website_accounts(website_id,account_id) VALUES(1,1),(1,3),(2,2);
+    INSERT INTO provider_resources(id,account_id,provider,name) VALUES(1,2,'vhost','Actual host');
+    INSERT INTO website_resources(website_id,resource_id,role,is_primary) VALUES(2,1,'托管',1);
+  `)
+  const rows = await call(sites.onRequestGet, context('/api/websites'))
+  assert.deepEqual(rows[0].provider_accounts, [
+    { id:1, provider:'cloudflare', name:'Suscoding@Gmail.Com', provider_name:null },
+    { id:3, provider:'github', name:'Code account', provider_name:null }
+  ])
+  assert.equal(rows[0].hosting, null)
+  assert.deepEqual(rows[1].provider_accounts, [{ id:2, provider:'vhost', name:'Team', provider_name:'SiteGround' }])
+  assert.equal(rows[1].hosting.name, 'Actual host')
+  assert.deepEqual(rows[2].provider_accounts, [])
+  store.sql('DELETE FROM website_accounts WHERE website_id=2')
+  assert.deepEqual((await call(sites.onRequestGet, context('/api/websites')))[1].provider_accounts, [{ id:2, provider:'vhost', name:'Team', provider_name:'SiteGround' }])
+})
+
 test('website newness uses the primary domain registration date and supports manual override', async () => {
   await call(sites.onRequestPost, context('/api/websites', { name: 'Recent site', domain: { domain: 'recent.test', registrar: 'r', registrar_date: '2026-10-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)
   await call(sites.onRequestPost, context('/api/websites', { name: 'Old site', domain: { domain: 'old.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站' } }, 'POST'), 201)

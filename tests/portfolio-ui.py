@@ -3,7 +3,7 @@ import base64
 import json
 from playwright.sync_api import sync_playwright, expect
 
-sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=dict(id=2,provider='cloudflare',provider_name='Cloudflare',name='Pages',status='正常'),repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=1,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=20,next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
+sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=None,provider_accounts=[dict(id=3,provider='cloudflare',provider_name=None,name='Suscoding@Gmail.Com'),dict(id=4,provider='github',provider_name=None,name='Code account')],repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=1,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=20,next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
 state=dict(fail=False,copy_fail=False,empty=False,copies=0)
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
@@ -64,7 +64,16 @@ with sync_playwright() as p:
  results.locator('.el-tag').filter(has_text='批次：第一批').locator('.el-tag__close').click()
  expect(table.locator('tbody tr')).to_have_count(2);expect(batch_filter).to_contain_text('全部批次')
  row=table.locator('tbody tr').filter(has=page.get_by_role('button',name='Astro site',exact=True))
- expect(row.locator('td').nth(3)).to_have_text('0');expect(row).to_contain_text('Cloudflare');expect(row.get_by_role('link',name='org/repo')).to_have_attribute('href','https://github.com/org/repo')
+ expect(row.locator('td').nth(3)).to_have_text('0');expect(row.locator('td').nth(6).locator('.provider-identity')).to_have_count(1);expect(row.get_by_role('link',name='org/repo')).to_have_attribute('href','https://github.com/org/repo')
+ provider_cell=row.locator('td').nth(6)
+ expect(provider_cell.get_by_role('button')).to_have_accessible_name('Cloudflare · Suscoding')
+ expect(provider_cell.locator('.provider-identity')).to_have_attribute('title','Cloudflare · Suscoding@Gmail.Com')
+ expect(provider_cell.locator('img')).to_be_visible()
+ assert provider_cell.locator('img').evaluate('e=>e.complete && e.naturalWidth>0')
+ expect(provider_cell).to_contain_text('Suscoding');expect(provider_cell).not_to_contain_text('@Gmail.Com')
+ expect(table.locator('tbody tr').filter(has_text='WordPress site').locator('td').nth(6)).to_contain_text('SiteGround')
+ choose_filter('服务商筛选','Cloudflare');expect(table.locator('tbody tr')).to_have_count(1);expect(row).to_be_visible()
+ page.get_by_role('button',name='清除全部条件',exact=True).click();expect(table.locator('tbody tr')).to_have_count(2)
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('Astro site')
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('WordPress site')
  expect(table.locator('th[aria-sort]')).to_have_count(1)
