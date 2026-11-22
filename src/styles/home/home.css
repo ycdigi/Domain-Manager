@@ -254,6 +254,7 @@
 }
 .site-provider-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 100%; }
 .site-provider-cell .provider-identity { max-width: 100%; }
+.site-provider-cell > a, .site-provider-cell > .site-cell { max-width: 100%; }
 .site-cell:disabled {
   cursor: default;
 }

@@ -39,6 +39,10 @@ try:
    expect(provider_cell.locator('.provider-identity')).to_have_count(1)
    expect(provider_cell).to_contain_text('Bulk cloudflare '+stamp)
    expect(provider_cell.locator('img')).to_be_visible()
+   github_cell=row.locator('td').nth(7)
+   expect(github_cell.locator('.provider-identity')).to_have_count(1)
+   expect(github_cell).to_contain_text('Bulk github '+stamp)
+   expect(github_cell.locator('img')).to_be_visible()
   saved=[site for site in call('/api/websites') if site['id'] in site_ids]
   assert len(saved)==2 and all(site['computer_name']=='Macbook Pro' and set(provider_ids).issubset(site['provider_account_ids']) for site in saved)
   managed=[site for site in call('/api/website-management') if site['id'] in site_ids]

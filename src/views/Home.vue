@@ -175,14 +175,17 @@
                 </button>
               </td>
               <td>
-                <a
-                  v-if="site.repository?.resource_url"
-                  :href="safeExternal(site.repository.resource_url)"
-                  :title="site.repository.resource_url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  >{{ site.repository.name }}</a
-                ><button v-else class="site-cell" @click="openSite(site, 'deployment')">—</button>
+                <div class="site-provider-cell">
+                  <template v-for="entry in githubEntries(site)" :key="entry.key">
+                    <a v-if="entry.url" :href="entry.url" :title="entry.url" target="_blank" rel="noopener noreferrer">
+                      <ProviderIdentity provider="github" :name="entry.name" compact />
+                    </a>
+                    <button v-else class="site-cell" @click="openSite(site, 'deployment')">
+                      <ProviderIdentity provider="github" :name="entry.name" compact />
+                    </button>
+                  </template>
+                  <button v-if="!githubEntries(site).length" class="site-cell" @click="openSite(site, 'deployment')">—</button>
+                </div>
               </td>
               <td>
                 <button
@@ -370,6 +373,16 @@ const providerNames = computed(() => [...new Set(websites.value.flatMap(site => 
 const primaryDomain = (site: Website) => site.domains.find((d) => d.is_primary) || site.domains[0]
 const platformLabel = (site: Website) => (site.platform === '其他' ? site.platform_other || '其他' : site.platform)
 const safeExternal = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
+const githubEntries = (site: Website) => {
+  const url = safeExternal(site.repository?.resource_url || '')
+  const entries = (site.provider_accounts || []).filter(account => account.provider === 'github').map(account => ({
+    key: `account-${account.id}`, name: account.name, url: account.id === site.repository?.account_id ? url : undefined
+  }))
+  if (url && site.repository && !entries.some(entry => entry.url)) {
+    entries.push({ key: `repository-${site.repository.id}`, name: site.repository.name, url })
+  }
+  return entries
+}
 const clickLabel = (s: Website) =>
   s.daily_clicks ??
   (
@@ -394,7 +407,7 @@ const sortValue = (s: Website, key: string): string | number =>
             ] ??
             -1,
           provider: serviceProviders(s).map(account => `${account.label} ${account.name}`).join(' '),
-          github: s.repository?.resource_url || '',
+          github: githubEntries(s).map(entry => entry.name).join(' '),
           ip: s.hosting?.ip_address || '',
           computer: s.computer_name || '',
           stage: stages.indexOf(s.stage)
