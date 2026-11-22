@@ -112,7 +112,7 @@ const saveAccount = async () => {
  if (saving.value) return
  if (!accountForm.value.name.trim() || !accountForm.value.owner.trim()) { ElMessage.error('账号名称和归属人不能为空'); return }
  saving.value = true
- try { const id = editingId.value; const saved = await (id ? api.put<Account>(`/api/adsense/accounts/${id}`, accountForm.value) : api.post<Account>('/api/adsense/accounts', accountForm.value)); editing.value = false; invalidateData('/api/adsense/accounts', '/api/domains'); await load(); if (saved?.id && String(saved.id) !== route.query.account) await router.replace({ query: { ...route.query, account: String(saved.id) } }); ElMessage.success('账号已保存') }
+ try { const id = editingId.value; const saved = await (id ? api.put<Account>(`/api/adsense/accounts/${id}`, accountForm.value) : api.post<Account>('/api/adsense/accounts', accountForm.value)); editing.value = false; invalidateData('/api/adsense/accounts', '/api/domains', '/api/websites'); await load(); if (saved?.id && String(saved.id) !== route.query.account) await router.replace({ query: { ...route.query, account: String(saved.id) } }); ElMessage.success('账号已保存') }
  catch (e) { ElMessage.error(e instanceof Error ? e.message : '账号保存失败') }
  finally { saving.value = false }
 }

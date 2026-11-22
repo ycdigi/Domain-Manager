@@ -39,6 +39,7 @@ export interface Website {
   platform_other?: string | null
   page_count?: number | null
   adsense_account_id?: number | null
+  adsense_account_name?: string | null
   adsense_connected: '未知' | '已开通' | '未开通'
   adsense_opened_date?: string | null
   gsc_connected: '未知' | '已开通' | '未开通'

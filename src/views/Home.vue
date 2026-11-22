@@ -74,6 +74,7 @@
     </div>
     <div v-if="selectedIds.size" class="portfolio-bulk-toolbar">
       <strong>已选 {{ selectedIds.size }} 个网站</strong
+      ><el-button @click="copySelectedMarkdown">复制 Markdown</el-button
       ><el-button :disabled="busy" @click="openBulkSettings">批量设置</el-button
       ><el-button @click="batchVisible = true">加入批次</el-button
       ><el-button v-if="view !== 'stopped'" :loading="busy" @click="bulk({ lifecycle: 'stopped' })">停止经营</el-button
@@ -81,8 +82,7 @@
       ><el-button @click="selectedIds.clear()">取消选择</el-button>
     </div>
     <section class="portfolio-stage portfolio-list" :aria-busy="loading">
-      <p id="table-scroll-hint" class="site-scroll-hint">左右滚动查看完整资料；宽屏下网站和操作固定。</p>
-      <div class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动" aria-describedby="table-scroll-hint">
+      <div class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动">
         <table class="portfolio-table site-table" :style="{ minWidth: columns.reduce((sum, col) => sum + col.width, 0) + 'px' }">
           <caption class="sr-only">
             网站总表，共
@@ -214,7 +214,9 @@
                 <button class="site-cell" @click="openSite(site)">{{ site.computer_name || '—' }}</button>
               </td>
               <td>
-                <span class="site-adsense-status" :class="{ 'is-connected': site.adsense_connected === '已开通' }"
+                <span v-if="site.adsense_connected === '已开通' && site.adsense_account_name"
+                  class="site-adsense-account" :title="`AdSense：${site.adsense_account_name}`">{{ site.adsense_account_name }}</span>
+                <span v-else class="site-adsense-status" :class="{ 'is-connected': site.adsense_connected === '已开通' }"
                   role="img" :aria-label="`AdSense：${site.adsense_connected || '未知'}`"
                   :title="`AdSense：${site.adsense_connected || '未知'}`">
                   <el-icon aria-hidden="true"><Check v-if="site.adsense_connected === '已开通'" /><Close v-else /></el-icon>
@@ -329,6 +331,7 @@ import { getBatches, assignBatch, type Batch, type BatchAssignmentPayload } from
 import { websiteQuery, type WebsiteSection } from '../utils/website-location'
 import { api } from '../utils/request'
 import { copyText } from '../utils/clipboard'
+import { websitesMarkdown } from '../utils/website-markdown'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import { localDate } from '../utils/workspaceCache'
 import '../styles/home/home.css'
@@ -349,7 +352,7 @@ const columns = [
   { key: 'github', label: 'GitHub', width: 160 },
   { key: 'ip', label: '服务器 IP', width: 150 },
   { key: 'computer', label: '电脑', width: 130 },
-  { key: 'adsense', label: 'AdSense', width: 90 },
+  { key: 'adsense', label: 'AdSense', width: 140 },
   { key: 'stage', label: '阶段', width: 110 },
   { key: 'actions', label: '操作', width: 126 }
 ]
@@ -607,6 +610,16 @@ const assignSelectedBatch = (payload: BatchAssignmentPayload) =>
     selectedIds.clear()
     ElMessage.success('已加入批次')
   })
+const copySelectedMarkdown = async () => {
+  const sites = visibleSites.value.filter(site => selectedIds.has(site.id))
+  if (!sites.length) return
+  try {
+    await copyText(websitesMarkdown(sites, batches.value, localDate()))
+    ElMessage.success(`已复制 ${sites.length} 个网站的 Markdown`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '复制失败')
+  }
+}
 const copyIp = async (site: Website) => {
   try {
     await copyText(site.hosting?.ip_address || '')

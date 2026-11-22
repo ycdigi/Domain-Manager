@@ -267,6 +267,7 @@
 .site-cell:disabled {
   cursor: default;
 }
+.site-adsense-account { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-adsense-status { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 18px; color: var(--color-muted); }
 .site-adsense-status.is-connected { color: var(--el-color-success); }
 .site-stage-select { width: 100%; }
@@ -345,5 +346,3 @@
     position: static;
   }
 }
-
-.site-scroll-hint { margin:0; padding:var(--space-xs) var(--space-sm); color:var(--color-muted); font-size:var(--text-xs); }

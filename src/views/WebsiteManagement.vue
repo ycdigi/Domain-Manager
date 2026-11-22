@@ -13,7 +13,7 @@
       <el-select :model-value="query('gsc')" clearable placeholder="全部 GSC 账号" aria-label="GSC 账号筛选" @change="value=>filter('gsc',value)"><el-option label="全部 GSC 账号" value="" /><el-option label="未关联" value="none" /><el-option v-for="account in accounts" :key="account.id" :label="account.name" :value="String(account.id)" /></el-select>
       <el-select :model-value="query('sort')" clearable placeholder="默认顺序" aria-label="记录排序" @change="value=>filter('sort',value)"><el-option label="默认顺序" value="" /><el-option label="最近登记优先" value="recent" /><el-option label="最久未登记优先" value="oldest" /></el-select>
     </div>
-    <div class="management-results"><span role="status">{{ visibleRows.length }} / {{ rows.length }} 个网站</span><el-button v-if="hasFilters" text @click="clearFilters">清除全部条件</el-button><span class="page-muted">点击胶囊登记一次；数字可查看历史。</span></div>
+    <div class="management-results"><span role="status">{{ visibleRows.length }} / {{ rows.length }} 个网站</span><el-button v-if="hasFilters" text @click="clearFilters">清除全部条件</el-button></div>
     <div class="management-table-wrap" role="region" aria-label="网站工作记录，可横向滚动" tabindex="0" :aria-busy="loading">
       <table class="management-table" aria-label="网站管理工作登记与 GSC 归属"><colgroup><col class="management-domain-column" /><col v-for="kind in workKinds" :key="kind" class="management-work-column" /><col class="management-gsc-column" /></colgroup>
         <thead><tr><th scope="col">网站域名</th><th v-for="kind in workKinds" :key="kind" scope="col">{{ kind }}</th><th scope="col">GSC归属</th></tr></thead>

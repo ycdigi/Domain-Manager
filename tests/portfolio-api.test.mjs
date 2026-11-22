@@ -484,3 +484,15 @@ test('versioned backups reject contradictory primary domains before any writes',
   await call(importData.onRequestPost, context('/api/backups', backup, 'POST'), 400)
   assert.equal(store.sql('SELECT is_primary FROM domains')[0].is_primary, 1)
 })
+
+
+test('website list resolves the linked AdSense account name live, including renamed and unassigned accounts', async () => {
+  store.sql("INSERT INTO adsense_accounts(id,name,owner) VALUES(1,'Google main','self'); INSERT INTO websites(id,name,adsense_account_id,adsense_connected) VALUES(1,'Enabled',1,'已开通'),(2,'Unassigned',NULL,'已开通'),(3,'Not enabled',1,'未开通')")
+  let rows = await call(sites.onRequestGet, context('/api/websites'))
+  assert.equal(rows.find(row=>row.id===1).adsense_account_name, 'Google main')
+  assert.equal(rows.find(row=>row.id===2).adsense_account_name, null)
+  assert.equal(rows.find(row=>row.id===3).adsense_connected, '未开通')
+  store.sql("UPDATE adsense_accounts SET name='Renamed' WHERE id=1")
+  rows = await call(sites.onRequestGet, context('/api/websites'))
+  assert.equal(rows.find(row=>row.id===1).adsense_account_name, 'Renamed')
+})

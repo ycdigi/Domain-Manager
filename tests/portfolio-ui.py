@@ -5,7 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from playwright.sync_api import sync_playwright, expect
 
-sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='已开通',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=None,provider_accounts=[dict(id=3,provider='cloudflare',provider_name=None,name='Suscoding@Gmail.Com'),dict(id=4,provider='github',provider_name=None,name='Coder@Example.Com')],repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=4,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=None,next_action_status='待做',adsense_account_id=99,adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],provider_accounts=[dict(id=5,provider='github',provider_name=None,name='Unhosted@Example.Com'),dict(id=6,provider='github',provider_name=None,name='Second account')],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
+sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='已开通',adsense_account_id=10,adsense_account_name='Google main',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=None,provider_accounts=[dict(id=3,provider='cloudflare',provider_name=None,name='Suscoding@Gmail.Com'),dict(id=4,provider='github',provider_name=None,name='Coder@Example.Com')],repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=4,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=None,next_action_status='待做',adsense_account_id=99,adsense_account_name='Not enabled account',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],provider_accounts=[dict(id=5,provider='github',provider_name=None,name='Unhosted@Example.Com'),dict(id=6,provider='github',provider_name=None,name='Second account')],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
 state=dict(fail=False,copy_fail=False,empty=False,copies=0,stage_fail=False,stage_writes=[],clicks_fail=False,clicks_writes=[])
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
@@ -62,7 +62,17 @@ with sync_playwright() as p:
  ads=page.get_by_role('checkbox',name='只显示已开通 AdSense 的网站',exact=True)
  ads_toggle=page.locator('.site-results > .el-checkbox')
  expect(ads).not_to_be_checked()
- expect(table.locator('tbody tr').first.get_by_role('img',name='AdSense：已开通',exact=True)).to_be_visible()
+ ads_cell=table.locator('tbody tr').first.locator('td').nth(10)
+ expect(ads_cell).to_have_text('Google main')
+ sites[0]['adsense_account_name']='Long Google AdSense account name';page.get_by_role('button',name='刷新',exact=True).click()
+ expect(ads_cell.locator('.site-adsense-account')).to_have_attribute('title','AdSense：Long Google AdSense account name')
+ assert ads_cell.locator('.site-adsense-account').evaluate('e=>e.scrollWidth>e.clientWidth')
+ sites[0]['adsense_account_name']='Renamed';page.get_by_role('button',name='刷新',exact=True).click()
+ expect(ads_cell).to_have_text('Renamed')
+ sites[0]['adsense_account_name']=None;page.get_by_role('button',name='刷新',exact=True).click()
+ expect(ads_cell.get_by_role('img',name='AdSense：已开通',exact=True)).to_be_visible()
+ sites[0]['adsense_account_name']='Google main';page.get_by_role('button',name='刷新',exact=True).click()
+ expect(ads_cell).to_have_text('Google main')
  expect(table.locator('tbody tr').nth(1).get_by_role('img',name='AdSense：未知',exact=True)).to_be_visible()
  table.locator('thead .el-checkbox').click()
  ads_toggle.click();expect(table.locator('tbody tr')).to_have_count(1)
@@ -87,6 +97,40 @@ with sync_playwright() as p:
  expect(table.locator('tbody tr').first).to_contain_text('Astro site')
  page.get_by_role('button',name='恢复默认排序',exact=True).click()
  for select in filters.locator('.el-select').all():assert select.bounding_box()['width']<=124
+ # Selected-site Markdown export follows table order, omits credentials and keeps the selection.
+ expect(page.get_by_role('button',name='复制 Markdown',exact=True)).to_have_count(0)
+ table.locator('thead .el-checkbox').click()
+ page.get_by_role('button',name='网站 / 主域名',exact=True).click()
+ page.get_by_role('button',name='网站 / 主域名',exact=True).click()
+ bulk_copy=page.get_by_role('button',name='复制 Markdown',exact=True)
+ bulk_copy.click();expect(page.get_by_text('已复制 2 个网站的 Markdown',exact=True)).to_be_visible()
+ markdown=page.evaluate('navigator.clipboard.readText()')
+ assert markdown.index('## 1. WordPress site')<markdown.index('## 2. Astro site'),markdown
+ assert '- 主域名：example.test' in markdown and '- 主域名：wordpress.test' in markdown
+ assert '计算器 0' in markdown and '- 日点击：－' in markdown
+ assert '第一批' in markdown and '历史批次' in markdown
+ assert 'Cloudflare' in markdown and 'Suscoding@Gmail.Com' in markdown
+ assert 'https://github.com/org/repo' in markdown and '203.0.113.10' in markdown
+ assert 'fixture-token' not in markdown and state['copies']==0
+ expect(page.get_by_text('已选 2 个网站',exact=True)).to_be_visible()
+ page.set_viewport_size({'width':952,'height':876})
+ expect(bulk_copy).to_be_visible()
+ assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+1')
+ page.screenshot(path='/tmp/domain-copy-markdown-952.png',full_page=True)
+ page.set_viewport_size({'width':390,'height':844})
+ expect(bulk_copy).to_be_visible()
+ assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+1')
+ page.set_viewport_size({'width':1600,'height':1000})
+ # Deselecting a row removes it from the copied data, and clipboard failure stays retryable.
+ table.locator('tbody tr').filter(has_text='WordPress site').locator('.el-checkbox').click()
+ page.evaluate("window.savedClipboardWrite=navigator.clipboard.writeText.bind(navigator.clipboard);window.savedExec=document.execCommand; navigator.clipboard.writeText=async()=>{throw new Error('denied')};document.execCommand=()=>false")
+ bulk_copy.click();expect(page.get_by_text('复制失败',exact=True)).to_be_visible();expect(bulk_copy).to_be_enabled()
+ page.evaluate('() => { navigator.clipboard.writeText=window.savedClipboardWrite;document.execCommand=window.savedExec }')
+ bulk_copy.click();expect(page.get_by_text('已复制 1 个网站的 Markdown',exact=True)).to_be_visible()
+ markdown=page.evaluate('navigator.clipboard.readText()');assert 'WordPress site' not in markdown and 'Astro site' in markdown
+ page.get_by_role('button',name='取消选择',exact=True).click()
+ expect(bulk_copy).to_have_count(0)
+ page.get_by_role('button',name='恢复默认排序',exact=True).click()
  # Exact daily clicks are entered in the row and classified at every existing bucket boundary.
  clicks_cell=table.locator('tbody tr').filter(has=page.get_by_role('button',name='WordPress site',exact=True)).locator('td').nth(5)
  clicks_input=clicks_cell.get_by_role('spinbutton',name='日点击：WordPress site',exact=True)
