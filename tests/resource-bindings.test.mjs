@@ -61,3 +61,24 @@ test('explicit website account link preserves ownership without inventing deploy
   assert.equal(store.sql('SELECT COUNT(*) AS n FROM provider_resources')[0].n, 0)
   assert.equal((await call(accounts.onRequestGet, ctx('/api/resources/accounts')))[0].linked_website_count, 1)
 })
+
+
+test('invalid primary flags cannot demote an existing primary resource', async () => {
+ const websiteId=site('primary validation'),accountId=await account('main')
+ const first=await resource(accountId,'first'),second=await resource(accountId,'second')
+ await call(links.onRequestPost,ctx('/api/resources/links',{website_id:websiteId,resource_id:first,role:'代码仓库',is_primary:true},'POST'),201)
+ for(const flag of ['0','false',2,{},null]) await call(links.onRequestPost,ctx('/api/resources/links',{website_id:websiteId,resource_id:second,role:'代码仓库',is_primary:flag},'POST'),400)
+ assert.deepEqual(store.sql('SELECT resource_id,is_primary FROM website_resources'),[{resource_id:first,is_primary:1}])
+})
+
+test('optional resource IP values are validated for both create and update', async () => {
+ const accountId=store.sql("INSERT INTO provider_accounts(provider,name) VALUES('vhost','Host') RETURNING id")[0].id
+ const body={account_id:accountId,provider:'vhost',name:'Host',ip_address:'invalid'}
+ await call(resources.onRequestPost,ctx('/api/resources',body,'POST'),400)
+ const saved=await call(resources.onRequestPost,ctx('/api/resources',{...body,ip_address:' 203.0.113.10 '},'POST'),201)
+ assert.equal(saved.ip_address,'203.0.113.10')
+ const resourceDetail=await server.ssrLoadModule('/functions/api/resources/resources/[id]/index.ts')
+ const update=ctx('/api/resources/resources/'+saved.id,body,'PUT');update.params.id=String(saved.id)
+ await call(resourceDetail.onRequestPut,update,400)
+ assert.equal(store.sql('SELECT ip_address FROM provider_resources WHERE id=?',[saved.id])[0].ip_address,'203.0.113.10')
+})

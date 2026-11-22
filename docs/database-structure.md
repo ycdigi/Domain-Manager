@@ -1,4 +1,4 @@
-# 数据库结构（当前 v1.27.0）
+# 数据库结构（当前 v1.28.0）
 
 27 张表（含巡检器状态表 monitor_runner）；界面表格复用这些数据，不为每个视图新建数据库表。
 
@@ -235,6 +235,8 @@ erDiagram
 关联：`website_id` → `websites.id`，删除规则 CASCADE。
 
 关联：`batch_id` → `website_batches.id`，删除规则 CASCADE。
+
+v1.28 通过部分唯一索引限制同一批次、网站只有一条 active 成员关系；removed 历史可保留多次，移出后重新加入使用新 ID。
 
 ### `website_batch_reviews`
 

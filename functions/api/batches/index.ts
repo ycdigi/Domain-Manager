@@ -19,7 +19,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
         const body = await context.request.json() as Record<string, unknown>
-        const validation = validateBatchFields(body)
+        const validation = validateBatchFields(body, {}, {create:true})
         if (validation) return json(null, 400, validation)
         const name = String(body.name).trim()
         const row = await context.env.DB.prepare(`INSERT INTO website_batches (name,source,goal,hypothesis) VALUES (?,?,?,?) RETURNING *`)

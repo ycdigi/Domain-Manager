@@ -25,7 +25,7 @@ export interface Website {
   calculator_count?: number | null
   article_count?: number | null
   computer_name?: string | null
-  hosting?: { id:number; provider:string; provider_name:string; name:string; ip_address?:string|null; resource_url?:string|null; status:string } | null
+  hosting?: { id:number; account_id?:number|null; provider:string; provider_name:string; name:string; ip_address?:string|null; resource_url?:string|null; status:string } | null
   repository?: { id:number; name:string; resource_url?:string|null; account_id?:number|null; status:string } | null
 
   id: number
@@ -87,8 +87,8 @@ export interface WebsiteTask {
 }
 
 export const getWebsites = (force = false) => cachedGet<Website[]>('/api/websites', force)
-export const createWebsite = async (body: Record<string, unknown>) => { const result = await api.post<{ website: Website; domains: WebsiteDomain[] }>('/api/websites', body); invalidateData('/api/websites', ...(body.adsense_account_id == null ? [] : ['/api/adsense/accounts'])); return result }
-export const updateWebsite = async (id: number, fields: Record<string, unknown>) => { const result = await api.patch<Website>(`/api/websites/${id}`, fields); invalidateData('/api/websites', ...(!Object.prototype.hasOwnProperty.call(fields, 'adsense_account_id') ? [] : ['/api/adsense/accounts'])); return result }
-export interface WebsiteBulkRelations { account_ids?: number[]; gsc_account_id?: number | null }
-export const bulkUpdateWebsites = async (websiteIds: number[], fields: Record<string, unknown>, relations: WebsiteBulkRelations = {}) => { const result = await api.patch<{ accepted: number; website_ids: number[] }>('/api/websites/batch', { website_ids: websiteIds, fields, ...relations }); invalidateData('/api/websites', '/api/website-management', '/api/gsc/accounts', '/api/resources/accounts', '/api/resources/account-links'); return result }
-export const deleteWebsite = async (id: number) => { const result = await api.delete(`/api/websites/${id}`); invalidateData('/api/websites', '/api/adsense/accounts'); return result }
+export const createWebsite = async (body: Record<string, unknown>) => { const result = await api.post<{ website: Website; domains: WebsiteDomain[] }>('/api/websites', body); invalidateData('/api/websites', '/api/website-management', '/api/work-queue', '/api/monitor', ...(body.adsense_account_id == null ? [] : ['/api/adsense/accounts'])); return result }
+export const updateWebsite = async (id: number, fields: Record<string, unknown>) => { const result = await api.patch<Website>(`/api/websites/${id}`, fields); invalidateData('/api/websites', '/api/website-management', '/api/batches', '/api/work-queue', '/api/monitor', ...(!Object.prototype.hasOwnProperty.call(fields, 'adsense_account_id') ? [] : ['/api/adsense/accounts'])); return result }
+export interface WebsiteBulkRelations { account_ids?: number[]; remove_account_ids?: number[]; gsc_account_id?: number | null; resource_assignments?: Array<{role:string;resource_id:number|null}>; batch_ids?:number[] }
+export const bulkUpdateWebsites = async (websiteIds: number[], fields: Record<string, unknown>, relations: WebsiteBulkRelations = {}) => { const result = await api.patch<{ accepted: number; website_ids: number[] }>('/api/websites/batch', { website_ids: websiteIds, fields, ...relations }); invalidateData('/api/websites', '/api/website-management', '/api/gsc/accounts', '/api/resources', '/api/batches', '/api/work-queue', '/api/adsense/accounts', '/api/monitor'); return result }
+export const deleteWebsite = async (id: number) => { const result = await api.delete(`/api/websites/${id}`); invalidateData('/api/websites', '/api/website-management', '/api/gsc/accounts', '/api/adsense/accounts', '/api/resources', '/api/batches', '/api/work-queue', '/api/monitor'); return result }

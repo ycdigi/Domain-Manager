@@ -72,9 +72,6 @@
     </div>
     <div v-if="selectedIds.size" class="portfolio-bulk-toolbar">
       <strong>已选 {{ selectedIds.size }} 个网站</strong
-      ><el-select v-model="bulkStage" aria-label="批量设置阶段"
-        ><el-option v-for="stage in stages" :key="stage" :value="stage" /></el-select
-      ><el-button :loading="busy" @click="bulk({ stage: bulkStage })">设置阶段</el-button
       ><el-button :disabled="busy" @click="openBulkSettings">批量设置</el-button
       ><el-button @click="batchVisible = true">加入批次</el-button
       ><el-button v-if="view !== 'stopped'" :loading="busy" @click="bulk({ lifecycle: 'stopped' })">停止经营</el-button
@@ -131,13 +128,16 @@
                   /><DomainFavicon :key="primaryDomain(site)?.domain" :domain-id="primaryDomain(site)?.id" />
                   <div>
                     <button class="site-cell site-name" @click="openSite(site)">{{ site.name }}</button
-                    ><a
-                      v-if="primaryDomain(site)"
-                      :href="`https://${primaryDomain(site)!.domain}`"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      >{{ primaryDomain(site)!.domain }}</a
                     >
+                    <div v-if="primaryDomain(site)" class="site-domain-links">
+                      <a :href="`https://${primaryDomain(site)!.domain}`" :title="primaryDomain(site)!.domain"
+                        target="_blank" rel="noopener noreferrer">{{ primaryDomain(site)!.domain }}</a>
+                      <a class="site-index-link"
+                        :href="`https://www.google.com/search?q=${encodeURIComponent(`site:${primaryDomain(site)!.domain}`)}`"
+                        :title="`Google 收录查询：site:${primaryDomain(site)!.domain}`"
+                        :aria-label="`Google 收录查询：${primaryDomain(site)!.domain}（新标签页打开）`"
+                        target="_blank" rel="noopener noreferrer"><el-icon aria-hidden="true"><Search /></el-icon></a>
+                    </div>
                   </div>
                 </div>
               </td>
@@ -163,7 +163,18 @@
                 </button>
               </td>
               <td>
-                <button class="site-cell" :title="site.clicks_updated_date || '未记录统计日期'" @click="openSite(site, 'content')">
+                <form v-if="site.daily_clicks == null && !site.daily_clicks_range || clickEditingIds.has(site.id)"
+                  class="site-clicks-editor" @submit.prevent="saveClicks(site)">
+                  <el-input :id="`site-clicks-${site.id}`" :model-value="clickDrafts[site.id] ?? ''"
+                    type="number" inputmode="numeric" :min="0" :step="1" size="small" placeholder="回车保存"
+                    :aria-label="`日点击：${site.name}`" title="输入非负整数，回车保存，Esc 取消"
+                    :disabled="clickSavingIds.has(site.id)" @update:model-value="value => clickDrafts[site.id] = value"
+                    @keydown="event => clicksKeydown(site, event as KeyboardEvent)">
+                    <template #suffix><button class="site-clicks-save" type="submit" :aria-label="`保存日点击：${site.name}`"
+                      :disabled="clickSavingIds.has(site.id)"><el-icon aria-hidden="true"><Check /></el-icon></button></template>
+                  </el-input>
+                </form>
+                <button v-else class="site-cell site-clicks-value" :title="`${site.clicks_updated_date || '未记录统计日期'}；点击修改`" @click="editClicks(site)">
                   {{ clickLabel(site) }}
                 </button>
               </td>
@@ -201,7 +212,11 @@
                 <button class="site-cell" @click="openSite(site)">{{ site.computer_name || '—' }}</button>
               </td>
               <td>
-                <button class="site-cell" @click="openSite(site)">{{ site.stage }}</button>
+                <el-select class="site-stage-select" :model-value="site.stage" size="small"
+                  :aria-label="`阶段：${site.name}`" :disabled="stageSavingIds.has(site.id)"
+                  :loading="stageSavingIds.has(site.id)" @change="value => setStage(site, value)">
+                  <el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" />
+                </el-select>
               </td>
               <td>
                 <div class="site-actions">
@@ -280,10 +295,10 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, reactive, ref, watch, onActivated } from 'vue'
+import { computed, reactive, ref, watch, onActivated, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { View, CopyDocument, MoreFilled } from '@element-plus/icons-vue'
+import { View, CopyDocument, MoreFilled, Search, Check } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
@@ -306,6 +321,7 @@ import { websiteQuery, type WebsiteSection } from '../utils/website-location'
 import { api } from '../utils/request'
 import { copyText } from '../utils/clipboard'
 import { confirmAction, isDismissed } from '../utils/feedback'
+import { localDate } from '../utils/workspaceCache'
 import '../styles/home/home.css'
 const route = useRoute()
 const router = useRouter()
@@ -319,12 +335,12 @@ const columns = [
   { key: 'page_count', label: '总页面数', width: 100 },
   { key: 'calculator_count', label: '计算器数量', width: 110 },
   { key: 'article_count', label: '文章数量', width: 100 },
-  { key: 'clicks', label: '日点击', width: 100 },
+  { key: 'clicks', label: '日点击', width: 140 },
   { key: 'provider', label: '服务商', width: 120 },
   { key: 'github', label: 'GitHub', width: 160 },
   { key: 'ip', label: '服务器 IP', width: 150 },
   { key: 'computer', label: '电脑', width: 130 },
-  { key: 'stage', label: '阶段', width: 90 },
+  { key: 'stage', label: '阶段', width: 110 },
   { key: 'actions', label: '操作', width: 126 }
 ]
 const batches = ref<Batch[]>([])
@@ -334,8 +350,11 @@ const error = ref('')
 const search = computed({ get: () => String(route.query.q || ''), set: value => { const query = { ...route.query }; if (value) query.q = value; else delete query.q; void router.replace({ query }) } })
 const busy = ref(false)
 const copying = ref<number>()
+const stageSavingIds = reactive(new Set<number>())
+const clickSavingIds = reactive(new Set<number>())
+const clickEditingIds = reactive(new Set<number>())
+const clickDrafts = reactive<Record<number, string>>({})
 const selectedIds = reactive(new Set<number>())
-const bulkStage = ref<WebsiteStage>('待评估')
 const bulkSettingsVisible = ref(false)
 const bulkSettingsSites = ref<Website[]>([])
 const openBulkSettings = () => {
@@ -363,7 +382,7 @@ const serviceProviders = (site: Website) => {
   const hosting = site.hosting
   if (hosting) {
     const label = providerIdentity(hosting.provider, hosting.provider_name).label
-    if (!accounts.some(account => account.provider === hosting.provider && account.label === label)) {
+    if (!accounts.some(account => hosting.account_id != null ? account.id === hosting.account_id : account.provider === hosting.provider && account.label === label)) {
       accounts.push({ id: hosting.id, key: `hosting-${hosting.id}`, provider: hosting.provider, provider_name: label, name: label, label })
     }
   }
@@ -383,15 +402,11 @@ const githubEntries = (site: Website) => {
   }
   return entries
 }
-const clickLabel = (s: Website) =>
-  s.daily_clicks ??
-  (
-    { under10: '10 次以下', '10to29': '10–29', '30to49': '30–49', '50to99': '50–99', over100: '100 次以上' } as Record<
-      string,
-      string
-    >
-  )[s.daily_clicks_range || ''] ??
-  '—'
+const clickRanges: Record<string, string> = { under10: '＜10', '10to29': '10–29', '30to49': '30–49', '50to99': '50–99', over100: '≥100' }
+const clickRange = (count: number) => count < 10 ? 'under10' : count < 30 ? '10to29' : count < 50 ? '30to49' : count < 100 ? '50to99' : 'over100'
+const clickLabel = (site: Website) => site.daily_clicks != null
+  ? `${clickRanges[clickRange(site.daily_clicks)]}（${site.daily_clicks}）`
+  : clickRanges[site.daily_clicks_range || ''] || '—'
 const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
 const sortValue = (s: Website, key: string): string | number =>
   countKeys.includes(key as (typeof countKeys)[number])
@@ -501,6 +516,56 @@ const run = async (action: () => Promise<void>) => {
     if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '操作失败')
   } finally {
     busy.value = false
+  }
+}
+const setStage = async (site: Website, stage: WebsiteStage) => {
+  if (stage === site.stage || stageSavingIds.has(site.id)) return
+  stageSavingIds.add(site.id)
+  try {
+    await updateWebsite(site.id, { stage })
+    const current = websites.value.find(row => row.id === site.id)
+    if (current) current.stage = stage
+    ElMessage.success('阶段已更新')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '阶段保存失败')
+  } finally {
+    stageSavingIds.delete(site.id)
+  }
+}
+const editClicks = async (site: Website) => {
+  clickDrafts[site.id] = site.daily_clicks == null ? '' : String(site.daily_clicks)
+  clickEditingIds.add(site.id)
+  await nextTick()
+  document.getElementById(`site-clicks-${site.id}`)?.focus()
+}
+const saveClicks = async (site: Website) => {
+  if (clickSavingIds.has(site.id)) return
+  const draft = (clickDrafts[site.id] || '').trim()
+  const count = Number(draft)
+  if (!draft || !Number.isSafeInteger(count) || count < 0) { ElMessage.error('请输入非负整数'); return }
+  const fields = { daily_clicks: count, daily_clicks_range: null, clicks_updated_date: localDate() }
+  clickSavingIds.add(site.id)
+  try {
+    await updateWebsite(site.id, fields)
+    const current = websites.value.find(row => row.id === site.id)
+    if (current) Object.assign(current, fields)
+    clickEditingIds.delete(site.id)
+    delete clickDrafts[site.id]
+    ElMessage.success('日点击已更新')
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '日点击保存失败')
+  } finally {
+    clickSavingIds.delete(site.id)
+  }
+}
+const clicksKeydown = (site: Website, event: KeyboardEvent) => {
+  if (event.key === 'Enter') {
+    event.preventDefault()
+    if (!event.isComposing && event.keyCode !== 229) void saveClicks(site)
+  } else if (event.key === 'Escape' && !event.isComposing && !clickSavingIds.has(site.id)) {
+    event.preventDefault()
+    clickEditingIds.delete(site.id)
+    delete clickDrafts[site.id]
   }
 }
 const bulk = (fields: Record<string, unknown>) =>

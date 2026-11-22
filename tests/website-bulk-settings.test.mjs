@@ -63,19 +63,69 @@ test('a failed bulk write rolls back website fields and every account associatio
 })
 
 
-test('bulk settings handle 200 selected websites while rejecting a larger selection', async () => {
+test('bulk settings handle 200 selected websites within D1 limits while rejecting a larger selection', async () => {
  store.sql("WITH RECURSIVE ids(id) AS (SELECT 3 UNION ALL SELECT id+1 FROM ids WHERE id<200) INSERT INTO websites(id,name) SELECT id,'Website '||id FROM ids")
+ const originalPrepare=store.db.prepare
+ store.db.prepare=sql=>{const statement=originalPrepare(sql),bind=statement.bind;statement.bind=(...values)=>{assert.ok(values.length<=100);return bind.apply(statement,values)};return statement}
  const website_ids=Array.from({length:200},(_,index)=>index+1)
+ try {
  assert.equal((await call({website_ids,fields:{computer_name:'Macbook Pro'},account_ids:[1],gsc_account_id:1})).accepted,200)
  assert.equal(store.sql("SELECT COUNT(*) n FROM websites WHERE computer_name='Macbook Pro'")[0].n,200)
  assert.equal(store.sql('SELECT COUNT(*) n FROM website_gsc_accounts')[0].n,200)
  await call({website_ids:[...website_ids,201],fields:{computer_name:'Must not save'}},400)
+ } finally {store.db.prepare=originalPrepare}
 })
 
 test('bulk platform changes remove obsolete custom platform labels', async () => {
  store.sql("UPDATE websites SET platform='其他',platform_other='Old framework' WHERE id=1")
  await call({website_ids:[1],fields:{platform:'Astro'}})
  assert.deepEqual(store.sql('SELECT platform,platform_other FROM websites WHERE id=1'),[{platform:'Astro',platform_other:null}])
+ await call({website_ids:[1],fields:{platform:'其他',platform_other:'SvelteKit'}})
+ assert.equal(store.sql('SELECT platform_other FROM websites WHERE id=1')[0].platform_other,'SvelteKit')
+ await call({website_ids:[1],fields:{platform_other:'Must not save'}},400)
  await call({website_ids:[1],fields:{platform:'其他'}})
  assert.deepEqual(store.sql('SELECT platform,platform_other FROM websites WHERE id=1'),[{platform:'其他',platform_other:null}])
+})
+
+test('bulk resource assignments update hosting and repository without changing shared resources or other websites', async () => {
+ store.sql(`INSERT INTO websites(id,name) VALUES(3,'Outside selection');
+ INSERT INTO provider_resources(id,account_id,provider,name,ip_address) VALUES(1,3,'vps','Old host','203.0.113.1'),(2,3,'vps','Shared host','203.0.113.2'),(3,2,'github','Shared repository',NULL);
+ INSERT INTO website_resources(website_id,resource_id,role,is_primary,memo) VALUES(1,1,'托管',1,'Preserve old host'),(3,1,'托管',1,'Outside');`)
+ const body={website_ids:[1,2],fields:{stage:'增长'},resource_assignments:[{role:'托管',resource_id:2},{role:'代码仓库',resource_id:3}]}
+ await call(body);await call(body)
+ assert.deepEqual(store.sql('SELECT website_id,resource_id,role,is_primary FROM website_resources ORDER BY website_id,resource_id'),[
+  {website_id:1,resource_id:1,role:'托管',is_primary:0},{website_id:1,resource_id:2,role:'托管',is_primary:1},{website_id:1,resource_id:3,role:'代码仓库',is_primary:1},
+  {website_id:2,resource_id:2,role:'托管',is_primary:1},{website_id:2,resource_id:3,role:'代码仓库',is_primary:1},{website_id:3,resource_id:1,role:'托管',is_primary:1}])
+ assert.equal(store.sql('SELECT COUNT(*) n FROM provider_resources')[0].n,3)
+ await call({website_ids:[1],resource_assignments:[{role:'托管',resource_id:null}]})
+ assert.deepEqual(store.sql("SELECT resource_id FROM website_resources WHERE website_id=1 AND role='托管'"),[])
+ assert.equal(store.sql('SELECT ip_address FROM provider_resources WHERE id=1')[0].ip_address,'203.0.113.1')
+})
+
+test('bulk account removal only removes explicit relations and resource validation happens before all writes', async () => {
+ await call({website_ids:[1,2],account_ids:[1,2]})
+ await call({website_ids:[1,2],remove_account_ids:[1]})
+ assert.deepEqual(store.sql('SELECT website_id,account_id FROM website_accounts ORDER BY website_id,account_id'),[{website_id:1,account_id:2},{website_id:1,account_id:3},{website_id:2,account_id:2}])
+ store.sql("INSERT INTO provider_resources(id,account_id,provider,name,status) VALUES(1,2,'github','Repo','正常'),(2,4,'github','Disabled account repo','正常'),(3,3,'vps','Disabled host','停用')")
+ for(const resource_assignments of [[{role:'托管',resource_id:1}],[{role:'代码仓库',resource_id:2}],[{role:'托管',resource_id:3}],[{role:'托管',resource_id:999}],[{role:'托管',resource_id:1},{role:'托管',resource_id:null}],[{role:'bad',resource_id:1}]]) {
+  await call({website_ids:[1,2],fields:{computer_name:'Must not save'},resource_assignments},400)
+ }
+ await call({website_ids:[1],account_ids:[2],remove_account_ids:[2]},400)
+ assert.equal(store.sql('SELECT computer_name FROM websites WHERE id=1')[0].computer_name,'Old computer')
+})
+
+test('bulk existing batch and AdSense changes are validated and saved in the same transaction', async () => {
+ store.sql("INSERT INTO website_batches(id,name,status) VALUES(1,'Active','进行中'),(2,'Archived','已归档'),(3,'Rollback','进行中'); INSERT INTO adsense_accounts(id,name,owner,status) VALUES(1,'Adsense main','ads@example.test','正常')")
+ await call({website_ids:[1,2],fields:{adsense_account_id:1,new_site_override:1},batch_ids:[1]})
+ await call({website_ids:[1,2],batch_ids:[1]})
+ assert.equal(store.sql("SELECT COUNT(*) n FROM website_batch_members WHERE membership_status='active'")[0].n,2)
+ assert.deepEqual(store.sql('SELECT adsense_account_id,new_site_override FROM websites ORDER BY id'),[{adsense_account_id:1,new_site_override:1},{adsense_account_id:1,new_site_override:1}])
+ await call({website_ids:[1],fields:{computer_name:'Must not save'},batch_ids:[2]},400)
+ await call({website_ids:[1],fields:{adsense_account_id:999}},400)
+ store.script("CREATE TRIGGER fail_bulk_resource BEFORE INSERT ON website_resources BEGIN SELECT RAISE(ABORT,'Injected resource failure'); END;")
+ store.sql("INSERT INTO provider_resources(id,account_id,provider,name) VALUES(1,3,'vps','Host')")
+ await call({website_ids:[1,2],fields:{stage:'维护'},account_ids:[1],gsc_account_id:1,batch_ids:[3],resource_assignments:[{role:'托管',resource_id:1}]},500)
+ assert.deepEqual(store.sql('SELECT stage FROM websites'),[{stage:'待评估'},{stage:'待评估'}])
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_gsc_accounts')[0].n,0)
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batch_members WHERE batch_id=3')[0].n,0)
 })

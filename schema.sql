@@ -395,9 +395,9 @@ CREATE TABLE IF NOT EXISTS website_batch_members (
     member_note TEXT,
     membership_status TEXT NOT NULL DEFAULT 'active' CHECK (membership_status IN ('active', 'removed')),
     removed_at TEXT,
-    removed_reason TEXT,
-    UNIQUE (batch_id, website_id, membership_status)
+    removed_reason TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS idx_website_batch_members_active ON website_batch_members(batch_id, website_id) WHERE membership_status='active';
 CREATE INDEX IF NOT EXISTS idx_website_batch_members_batch ON website_batch_members(batch_id, membership_status, joined_at);
 CREATE INDEX IF NOT EXISTS idx_website_batch_members_website ON website_batch_members(website_id, membership_status);
 

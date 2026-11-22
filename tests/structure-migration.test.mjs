@@ -3,6 +3,24 @@ import { test } from 'node:test'
 import fs from 'node:fs'
 import { database } from './helpers/database.mjs'
 const legacy = fs.readFileSync(new URL('./fixtures/schema-v1.23.0.sql', import.meta.url), 'utf8')
+test('v1.28 preserves membership history, permits repeat removals and can be safely reapplied', () => {
+ const store=database()
+ try {
+  const current=fs.readFileSync(new URL('../schema.sql',import.meta.url),'utf8')
+  const old=current.replace("    removed_reason TEXT\n);\nCREATE UNIQUE INDEX IF NOT EXISTS idx_website_batch_members_active ON website_batch_members(batch_id, website_id) WHERE membership_status='active';","    removed_reason TEXT,\n    UNIQUE(batch_id,website_id,membership_status)\n);")
+  assert.notEqual(old,current);store.init(old)
+  store.sql("INSERT INTO websites(id,name) VALUES(1,'Member'); INSERT INTO website_batches(id,name) VALUES(1,'Batch'); INSERT INTO website_batch_members(id,batch_id,website_id,member_note,membership_status,removed_reason) VALUES(3,1,1,'First','removed','Keep'),(4,1,1,'Second','active',NULL)")
+  store.sql("INSERT INTO websites(id,name) VALUES(2,'Sequence'); INSERT INTO website_batch_members(id,batch_id,website_id,membership_status) VALUES(99,1,2,'removed'); DELETE FROM website_batch_members WHERE id=99")
+  const sql=fs.readFileSync(new URL('../schema-migration-v1.28.0.sql',import.meta.url),'utf8')
+  store.script(sql);store.script(sql)
+  store.sql("UPDATE website_batch_members SET membership_status='removed' WHERE id=4; INSERT INTO website_batch_members(batch_id,website_id,membership_status) VALUES(1,1,'active')")
+  assert.deepEqual(store.sql('SELECT id,member_note,removed_reason FROM website_batch_members WHERE id IN (3,4) ORDER BY id'),[{id:3,member_note:'First',removed_reason:'Keep'},{id:4,member_note:'Second',removed_reason:null}])
+  assert.equal(store.sql("SELECT COUNT(*) n FROM website_batch_members WHERE membership_status='removed'")[0].n,2)
+  assert.equal(store.sql("SELECT id FROM website_batch_members WHERE membership_status='active'")[0].id,100)
+  assert.throws(()=>store.sql("INSERT INTO website_batch_members(batch_id,website_id,membership_status) VALUES(1,1,'active')"))
+  assert.deepEqual(store.sql('PRAGMA foreign_key_check'),[])
+ } finally {store.close()}
+})
 test('v1.24 preserves all records while moving counts and primary-domain computer', () => {
   const store = database()
   try {
@@ -62,6 +80,7 @@ CREATE TABLE alertcfg(id INTEGER PRIMARY KEY,tg_token TEXT);`)
   assert.equal(store.sql('SELECT COUNT(*) AS n FROM website_monitor_checks')[0].n,0)
   assert.equal(store.sql("SELECT count(*) AS n FROM sqlite_schema WHERE name='alertcfg' OR name LIKE 'trg_counts_%'")[0].n,0)
   store.script(fs.readFileSync(new URL('../schema-migration-v1.27.0.sql',import.meta.url),'utf8'))
+  store.script(fs.readFileSync(new URL('../schema-migration-v1.28.0.sql',import.meta.url),'utf8'))
   fresh.init()
   const structure=db=>db.sql("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map(({name})=>({name,columns:db.sql(`PRAGMA table_info(${name})`).map(({cid,...column})=>column).sort((a,b)=>a.name.localeCompare(b.name)),foreignKeys:db.sql(`PRAGMA foreign_key_list(${name})`).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))}))
   assert.deepEqual(structure(store),structure(fresh))

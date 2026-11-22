@@ -2,11 +2,11 @@ export const batchStatuses = ['进行中', '待复盘', '已复盘', '已归档'
 export type BatchStatus = typeof batchStatuses[number]
 
 const maxText = (value: unknown, max: number) => value == null || typeof value === 'string' && value.length <= max
-const optionalDate = (value: unknown) => value == null || value === '' || typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)
+const optionalDate = (value: unknown) => value == null || value === '' || typeof value === 'string' && /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z)?$/.test(value) && Number.isFinite(Date.parse(value))
 
-export const validateBatchFields = (fields: Record<string, unknown>, current: Record<string, unknown> = {}) => {
+export const validateBatchFields = (fields: Record<string, unknown>, current: Record<string, unknown> = {}, options: {create?:boolean} = {}) => {
     const next = { ...current, ...fields }
-    if (fields.name !== undefined && (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.length > 200)) return '批次名称必填且不能超过 200 个字符'
+    if ((options.create || fields.name !== undefined) && (typeof fields.name !== 'string' || !fields.name.trim() || fields.name.length > 200)) return '批次名称必填且不能超过 200 个字符'
     for (const key of ['source', 'goal', 'hypothesis', 'review_conclusion', 'next_action']) if (!maxText(fields[key], 2000)) return `${key} 不能超过 2000 个字符`
     if (fields.status !== undefined && !(batchStatuses as readonly string[]).includes(String(fields.status))) return '批次状态无效'
     if (next.status === '已归档' && fields.archived_at !== undefined && !optionalDate(fields.archived_at)) return '归档日期无效'

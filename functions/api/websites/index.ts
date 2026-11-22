@@ -25,7 +25,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
         if (params.has('lifecycle')) { where.push('w.lifecycle = ?'); values.push(params.get('lifecycle') || '') }
         const [rows, incomeRows, incomeTotals] = await Promise.all([context.env.DB.prepare(`
             SELECT w.*,
-                (SELECT json_object('id',r.id,'provider',r.provider,'provider_name',COALESCE(a.provider_name,CASE r.provider WHEN 'cloudflare' THEN 'Cloudflare' WHEN 'vhost' THEN '虚拟主机' ELSE 'VPS' END),'name',r.name,'ip_address',r.ip_address,'resource_url',r.resource_url,'status',r.status)
+                (SELECT json_object('id',r.id,'account_id',r.account_id,'provider',r.provider,'provider_name',COALESCE(a.provider_name,CASE r.provider WHEN 'cloudflare' THEN 'Cloudflare' WHEN 'vhost' THEN '虚拟主机' ELSE 'VPS' END),'name',r.name,'ip_address',r.ip_address,'resource_url',r.resource_url,'status',r.status)
                  FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id LEFT JOIN provider_accounts a ON a.id=r.account_id WHERE wr.website_id=w.id AND wr.role='托管' AND wr.is_primary=1) AS hosting_json,
                 (SELECT json_object('id',r.id,'name',r.name,'resource_url',r.resource_url,'account_id',r.account_id,'status',r.status)
                  FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id AND wr.role='代码仓库' AND wr.is_primary=1 AND r.provider='github') AS repository_json,

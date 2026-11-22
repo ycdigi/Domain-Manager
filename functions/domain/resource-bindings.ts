@@ -4,9 +4,10 @@ import type { ProviderType } from '../types'
 export type ResourceBindingInput = { websiteId: number; resourceId: number; role: string; isPrimary?: boolean | number; memo?: string | null }
 export type ResolvedResource = { id: number; provider: ProviderType; status: string; identifier: string | null; account_id: number | null }
 export class ResourceBindingError extends Error {}
-const isPrimary = (value: unknown) => value === true || value === 1 || value === '1'
+export const isPrimary = (value: unknown) => value === true || value === 1
 
 export const resolveBindingResource = async (db: D1Database, input: ResourceBindingInput, allowDisabled = false): Promise<ResolvedResource> => {
+    if (input.isPrimary !== undefined && ![true,false,0,1].includes(input.isPrimary)) throw new ResourceBindingError('主要资源标记无效')
     if (!Number.isInteger(input.websiteId) || !input.role?.trim() || !Number.isInteger(input.resourceId)) throw new ResourceBindingError('网站、实际资源和用途不能为空')
     if (!await db.prepare('SELECT id FROM websites WHERE id=?').bind(input.websiteId).first()) throw new ResourceBindingError('网站不存在')
     const resourceId = input.resourceId

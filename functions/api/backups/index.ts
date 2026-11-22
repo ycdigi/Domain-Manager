@@ -76,7 +76,7 @@ const validateMonitoring = (input: Row, websites: Row[], domains: Row[]) => {
 
 const parseInput = async (request: Request) => {
     const type = request.headers.get('content-type') || ''
-    if (type.includes('application/json')) return { input: await request.json(), batchId: null as number | null }
+    if (type.includes('application/json')) return { input: await request.json(), batchId: null as number | null, batchName: null as string | null }
     if (!type.includes('multipart/form-data')) throw new Error('不支持的内容类型')
     const form = await request.formData()
     const file: unknown = form.get('file')
@@ -84,15 +84,19 @@ const parseInput = async (request: Request) => {
     const rawBatchId = form.get('batch_id')
     const batchId = rawBatchId == null || rawBatchId === '' ? null : Number(rawBatchId)
     if (batchId != null && (!Number.isSafeInteger(batchId) || batchId <= 0)) throw new Error('导入批次编号无效')
-    return { input: JSON.parse(await file.text()), batchId }
+    const rawBatchName = form.get('batch_name')
+    const batchName = typeof rawBatchName === 'string' ? rawBatchName.trim() : null
+    if (rawBatchName != null && (!batchName || batchName.length > 200 || batchId != null)) throw new Error('请提供一个新批次名称或选择已有批次')
+    return { input: JSON.parse(await file.text()), batchId, batchName }
 }
 
 export const onRequestPost: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
     try {
-        const parsed = await parseInput(context.request) as { input: Row | Row[]; batchId: number | null }
+        const parsed = await parseInput(context.request) as { input: Row | Row[]; batchId: number | null; batchName: string | null }
         const input = parsed.input as Row
         const importBatchId = parsed.batchId
+        const importBatchName = parsed.batchName
         if (!input || Array.isArray(input) || input.format_version !== backupFormatVersion) return json(null, 400, '仅支持 format_version=1 的当前备份；旧备份须在升级前一次转换并核验')
         if (Object.keys(input).some(key => key !== 'format_version' && !(key in backupColumns))) return json(null, 400, '备份包含不支持的数据集合')
         for (const [table, columns] of Object.entries(backupColumns)) {
@@ -124,7 +128,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
             for (const row of input[table]) if (!row || !Array.isArray(input[parent]) || !input[parent].some((item: Row) => item.id === row[field])) errors.push({ domain: table, error: `关联的 ${parent} 记录不在备份中` })
         }
-        for (const table of ['websites', 'website_tasks', 'website_ai_notes', 'adsense_accounts', 'provider_accounts', 'provider_resources']) {
+        for (const table of ['websites', 'website_tasks', 'website_ai_notes', 'adsense_accounts', 'provider_accounts', 'provider_resources', 'website_batches', 'website_batch_members', 'website_batch_reviews']) {
             if (input[table] === undefined) continue
             if (!Array.isArray(input[table])) { errors.push({ domain: table, error: '记录必须为数组' }); continue }
             const ids = new Set<number>()
@@ -181,10 +185,14 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         let created = 0
         for (const item of domains) if (!await context.env.DB.prepare("SELECT id FROM domains WHERE lower(rtrim(domain, '.'))=?").bind(normalizeDomain(item.domain)).first()) created++
         const updated = domains.length - created
+        if (importBatchId != null) {
+            const target = await context.env.DB.prepare('SELECT id,status FROM website_batches WHERE id=?').bind(importBatchId).first<{id:number;status:string}>()
+            if (!target) return json(null, 404, '导入批次不存在')
+            if (target.status === '已归档' || input.website_batches?.some((batch:Row)=>Number(batch.id)===importBatchId && batch.status==='已归档')) return json(null, 409, '已归档批次不可继续加入网站')
+        }
         if (new URL(context.request.url).searchParams.get('dry_run') === '1') return json({ total: domains.length, created: websites.length, updated, success: 0, failed: 0, errors: [] }, 200, '预览完成，尚未写入')
 
         const db = context.env.DB
-        if (importBatchId != null && !await db.prepare('SELECT id FROM website_batches WHERE id=?').bind(importBatchId).first()) return json(null, 404, '导入批次不存在')
         const siteMap = new Map<number, number>()
         const noteMap = new Map<number, number>()
         const taskMap = new Map<number, number>()
@@ -234,7 +242,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
             else write(db.prepare(`INSERT INTO website_batches (id,${columns.join(',')}) VALUES (?,${columns.map(() => '?').join(',')})`).bind(batchId, ...values))
             batchMap.set(oldId, batchId)
         }
-        for (const member of input.website_batch_members || []) {
+        for (const member of [...(input.website_batch_members || [])].sort((a, b) => Number(a.membership_status !== 'removed') - Number(b.membership_status !== 'removed'))) {
             const batchId = batchMap.get(Number(member.batch_id)); const websiteId = siteMap.get(Number(member.website_id)); if (!batchId || !websiteId) continue
             write(db.prepare(`INSERT INTO website_batch_members (id,batch_id,website_id,joined_at,member_note,membership_status,removed_at,removed_reason) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET batch_id=excluded.batch_id,website_id=excluded.website_id,joined_at=excluded.joined_at,member_note=excluded.member_note,membership_status=excluded.membership_status,removed_at=excluded.removed_at,removed_reason=excluded.removed_reason`).bind(member.id, batchId, websiteId, member.joined_at || new Date().toISOString(), member.member_note || null, member.membership_status || 'active', member.removed_at || null, member.removed_reason || null))
         }
@@ -419,11 +427,13 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         for (const websiteId of siteMap.values()) write(db.prepare('UPDATE website_monitors SET lease_token=NULL,lease_until=NULL,next_check_at=?,config_version=config_version+1 WHERE website_id=?').bind(restoreTime, websiteId))
         // The runner belongs to this environment. Never import backup heartbeat/error fields.
         write(db.prepare('UPDATE monitor_runner SET lease_token=NULL,lease_until=NULL WHERE id=1'))
-        if (statements.length) await db.batch(statements)
-        if (importBatchId != null) {
-            const members = [...new Set(siteMap.values())].map(websiteId => db.prepare(`INSERT INTO website_batch_members (batch_id,website_id,membership_status) VALUES (?,?,'active') ON CONFLICT(batch_id,website_id,membership_status) DO NOTHING`).bind(importBatchId, websiteId))
-            if (members.length) await db.batch(members)
+        if (importBatchName) write(db.prepare("INSERT INTO website_batches(name,source) VALUES(?,'网站组合导入')").bind(importBatchName))
+        if (importBatchId != null || importBatchName) {
+            const target = importBatchName ? '(SELECT MAX(id) FROM website_batches)' : '?'
+            const members = [...new Set(siteMap.values())].map(websiteId => db.prepare(`INSERT INTO website_batch_members (batch_id,website_id,membership_status) VALUES (${target},?,'active') ON CONFLICT(batch_id,website_id) WHERE membership_status='active' DO NOTHING`).bind(...(importBatchName ? [] : [importBatchId]), websiteId))
+            statements.push(...members)
         }
+        if (statements.length) await db.batch(statements)
         return json({ total: domains.length, created: websites.length, updated, success: domains.length, failed: 0, errors: [] }, 200, '导入完成')
     } catch (error) { return json(null, error instanceof SyntaxError ? 400 : 500, error instanceof SyntaxError ? 'JSON 格式无效，未导入数据' : error instanceof Error ? error.message : '导入失败；请检查文件并重试') }
 }

@@ -232,11 +232,19 @@
 .site-identity > div {
   min-width: 0;
 }
-.site-identity a {
-  display: block;
-  font-size: var(--text-xs);
+.site-domain-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
   margin-top: 4px;
 }
+.site-domain-links > a {
+  font-size: var(--text-xs);
+}
+.site-domain-links > a:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-domain-links > .site-index-link { display: inline-flex; flex: none; align-items: center; gap: 2px; min-height: 24px; white-space: nowrap; }
+.site-index-link:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
 .site-cell {
   border: 0;
   background: transparent;
@@ -258,6 +266,12 @@
 .site-cell:disabled {
   cursor: default;
 }
+.site-stage-select { width: 100%; }
+.site-clicks-editor { margin: 0; }
+.site-clicks-value { white-space: nowrap; }
+.site-clicks-save { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; padding: 0; border: 0; background: transparent; color: var(--color-link); cursor: pointer; }
+.site-clicks-save:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 1px; }
+.site-clicks-save:disabled { cursor: default; }
 .site-name {
   font-weight: var(--weight-semibold);
 }

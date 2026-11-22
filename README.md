@@ -43,3 +43,5 @@ GET /api/backups 导出 format_version=1 的网站管理数据；POST /api/backu
 “网站管理”记录四类工作次数、最近时间和 GSC 账号归属，每次登记可查看历史和撤销；原按日操作记录保留。JSON 与 Excel 包含工作记录及账号关联。规格、迁移和验收边界见 [网站管理](docs/specs/website-management.md)。
 
 网站管理使用增量迁移 v1.27.0。上线前核对 `new_site_override`；仅缺失时补执行 v1.16.0。完整备份及副本演练要求见上述规格。
+
+批量网站设置与批次历史修正使用 v1.28.0 增量迁移；已有 v1.27 库先备份并演练，再运行 `db:migrate:v1.28.0`，随后发布配套应用。批量操作范围与验证记录见 [批量网站设置](docs/specs/website-bulk-settings.md)。

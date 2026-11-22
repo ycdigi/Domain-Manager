@@ -4,7 +4,7 @@ from playwright.sync_api import sync_playwright,expect
 BASE='http://127.0.0.1:5173'
 sites=[dict(id=i,name='Bulk '+str(i),stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=i,computer_name='Old computer',gsc_connected='未知',adsense_connected='未知',next_action_status='待做',domains=[dict(id=i,website_id=i,domain=f'bulk-{i}.test',is_primary=1)]) for i in [1,2]]
 accounts=[dict(id=1,provider='cloudflare',name='Cloudflare main',login_email='cloud@example.test',status='正常'),dict(id=2,provider='github',name='GitHub main',login_email='git@example.test',status='正常'),dict(id=3,provider='github',name='Disabled account',status='停用')]
-state=dict(fail=True,requests=[])
+state=dict(fail=True,requests=[],option_fail=False)
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
  page=browser.new_page(viewport=dict(width=1440,height=1000));errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
@@ -13,6 +13,11 @@ with sync_playwright() as p:
   path=route.request.url.split('?')[0].split('/api/')[-1];data=[];status=200;message='成功'
   if path=='websites':data=sites
   elif path=='resources/accounts':data=accounts
+  elif path=='resources':
+   data=[dict(id=10,provider='vps',account_id=None,name='Shared host',ip_address='203.0.113.10',status='正常'),dict(id=11,provider='github',account_id=2,name='Shared repo',resource_url='https://github.com/org/repo',status='正常'),dict(id=12,provider='github',account_id=3,name='Disabled repo',status='正常')]
+   if state['option_fail']:status=503;message='模拟资源读取失败'
+  elif path=='batches':data=[dict(id=7,name='第一批',status='进行中'),dict(id=8,name='归档批次',status='已归档')]
+  elif path=='adsense/accounts':data=[dict(id=20,name='Adsense main',status='正常')]
   elif path=='gsc/accounts':data=[dict(id=1,name='Google main',email='google@example.test')]
   elif path=='websites/batch':
    body=route.request.post_data_json;state['requests'].append(body)
@@ -66,6 +71,34 @@ with sync_playwright() as p:
  page.screenshot(path='/tmp/domain-bulk-settings-mobile.png',full_page=True)
  save.click();expect(dialog).not_to_be_visible()
  assert state['requests'][-1]==dict(website_ids=[1,2],fields=dict(computer_name=None),gsc_account_id=None),state['requests'][-1]
+ # Resource reads fail closed; retry restores controls without silently applying defaults.
+ page.set_viewport_size(dict(width=1440,height=1000))
+ state['option_fail']=True
+ page.locator('.site-table thead .el-checkbox').click();page.get_by_role('button',name='批量设置',exact=True).click()
+ expect(dialog.get_by_role('alert')).to_contain_text('模拟资源读取失败');expect(save).to_be_disabled()
+ state['option_fail']=False;dialog.get_by_role('button',name='重试读取账号',exact=True).click()
+ expect(dialog.get_by_role('alert')).not_to_be_visible();expect(save).to_be_disabled()
+ choose('批量设置托管资源','Shared host · 203.0.113.10')
+ choose('批量设置代码仓库资源','Shared repo · https://github.com/org/repo')
+ expect(page.get_by_role('option',name=re.compile('Disabled repo'))).to_have_count(0)
+ choose('批量加入已有批次','第一批');expect(page.get_by_role('option',name='归档批次',exact=True)).to_have_count(0);page.keyboard.press('Escape')
+ choose('批量设置AdSense账号','Adsense main');choose('批量设置新站分类','新站')
+ choose('批量设置阶段','维护');choose('批量设置技术栈','其他')
+ dialog.get_by_role('textbox',name='批量自定义技术栈',exact=True).fill('SvelteKit')
+ choose('批量设置GSC 开通状态','已开通')
+ page.screenshot(path='/tmp/domain-bulk-settings-complete.png',full_page=True)
+ save.click();expect(dialog).not_to_be_visible()
+ assert state['requests'][-1]==dict(website_ids=[1,2],fields=dict(stage='维护',platform='其他',platform_other='SvelteKit',gsc_connected='已开通',adsense_account_id=20,new_site_override=1),resource_assignments=[dict(role='托管',resource_id=10),dict(role='代码仓库',resource_id=11)],batch_ids=[7]),state['requests'][-1]
+ # Cancelled resource picks preserve existing data; explicit zero unlinks only that role.
+ page.locator('.site-table thead .el-checkbox').click();page.get_by_role('button',name='批量设置',exact=True).click()
+ choose('批量设置托管资源','Shared host · 203.0.113.10')
+ control=dialog.locator('.el-select').filter(has=page.get_by_role('combobox',name='批量设置托管资源',exact=True))
+ control.hover();control.locator('.el-select__clear').click();expect(save).to_be_disabled()
+ choose('批量关联服务账号','GitHub · GitHub main · git@example.test');page.keyboard.press('Escape')
+ dialog.locator('.el-radio').filter(has=page.get_by_role('radio',name='解除所选账号关联',exact=True)).click();expect(save).to_be_disabled()
+ choose('批量关联服务账号','GitHub · Disabled account');page.keyboard.press('Escape')
+ choose('批量设置托管资源','解除全部托管资源关联');save.click();expect(dialog).not_to_be_visible()
+ assert state['requests'][-1]==dict(website_ids=[1,2],fields={},remove_account_ids=[3],resource_assignments=[dict(role='托管',resource_id=None)]),state['requests'][-1]
  assert not errors,errors
  browser.close()
 print('Website bulk settings UI passed')
