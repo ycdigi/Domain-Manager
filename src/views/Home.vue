@@ -65,6 +65,8 @@
         /></el-select>
       </div>
       <div class="site-results">
+        <el-checkbox :model-value="adsOnly" aria-label="只显示已开通 AdSense 的网站"
+          @change="value => filter('ads', value ? '1' : '')">Ads</el-checkbox>
         <span role="status">{{ visibleSites.length }} / {{ websites.length }} 个网站</span>
         <el-tag v-for="condition in activeFilters" :key="condition.key" closable @close="filter(condition.key, '')">{{ condition.label }}</el-tag>
         <el-button v-if="activeFilters.length" text @click="clearFilters">清除全部条件</el-button>
@@ -212,6 +214,13 @@
                 <button class="site-cell" @click="openSite(site)">{{ site.computer_name || '—' }}</button>
               </td>
               <td>
+                <span class="site-adsense-status" :class="{ 'is-connected': site.adsense_connected === '已开通' }"
+                  role="img" :aria-label="`AdSense：${site.adsense_connected || '未知'}`"
+                  :title="`AdSense：${site.adsense_connected || '未知'}`">
+                  <el-icon aria-hidden="true"><Check v-if="site.adsense_connected === '已开通'" /><Close v-else /></el-icon>
+                </span>
+              </td>
+              <td>
                 <el-select class="site-stage-select" :model-value="site.stage" size="small"
                   :aria-label="`阶段：${site.name}`" :disabled="stageSavingIds.has(site.id)"
                   :loading="stageSavingIds.has(site.id)" @change="value => setStage(site, value)">
@@ -298,7 +307,7 @@
 import { computed, reactive, ref, watch, onActivated, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { View, CopyDocument, MoreFilled, Search, Check } from '@element-plus/icons-vue'
+import { View, CopyDocument, MoreFilled, Search, Check, Close } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
@@ -340,6 +349,7 @@ const columns = [
   { key: 'github', label: 'GitHub', width: 160 },
   { key: 'ip', label: '服务器 IP', width: 150 },
   { key: 'computer', label: '电脑', width: 130 },
+  { key: 'adsense', label: 'AdSense', width: 90 },
   { key: 'stage', label: '阶段', width: 110 },
   { key: 'actions', label: '操作', width: 126 }
 ]
@@ -366,9 +376,10 @@ const bulkSettingsSaved = () => { selectedIds.clear(); void load(true) }
 const batchVisible = ref(false)
 const createVisible = ref(false)
 const sortKey = computed({ get: () => String(route.query.sort || ''), set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
+const adsOnly = computed(() => route.query.ads === '1')
 const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')
-const filterLabels: Record<string, string> = { batch: '批次', ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', new: '新站', view: '状态', q: '搜索' }
-const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'new' ? '是' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : route.query[key]}` })))
+const filterLabels: Record<string, string> = { batch: '批次', ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', ads: 'Ads', new: '新站', view: '状态', q: '搜索' }
+const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => key === 'ads' ? adsOnly.value : route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'ads' ? '已开通' : key === 'new' ? '是' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : route.query[key]}` })))
 const clearFilters = () => { const query = { ...route.query }; for (const key of Object.keys(filterLabels)) delete query[key]; void router.push({ query }) }
 const views = [
   { value: 'active', label: '经营中' },
@@ -425,6 +436,7 @@ const sortValue = (s: Website, key: string): string | number =>
           github: githubEntries(s).map(entry => entry.name).join(' '),
           ip: s.hosting?.ip_address || '',
           computer: s.computer_name || '',
+          adsense: s.adsense_connected === '已开通' ? 1 : 0,
           stage: stages.indexOf(s.stage)
         } as Record<string, string | number>
       )[key] ?? '')
@@ -441,6 +453,7 @@ const visibleSites = computed(() =>
         (!route.query.resource || s.resource_ids?.includes(Number(route.query.resource))) &&
         (!route.query.provider_account || s.provider_account_ids?.includes(Number(route.query.provider_account))) &&
         (!route.query.adsense_account || s.adsense_account_id === Number(route.query.adsense_account)) &&
+        (!adsOnly.value || s.adsense_connected === '已开通') &&
         (!route.query.new || s.is_new_site) &&
         `${s.name} ${s.domains.map((d) => d.domain).join(' ')}`
           .toLowerCase()

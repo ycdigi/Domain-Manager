@@ -5,7 +5,7 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 from playwright.sync_api import sync_playwright, expect
 
-sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=None,provider_accounts=[dict(id=3,provider='cloudflare',provider_name=None,name='Suscoding@Gmail.Com'),dict(id=4,provider='github',provider_name=None,name='Coder@Example.Com')],repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=4,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=None,next_action_status='待做',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],provider_accounts=[dict(id=5,provider='github',provider_name=None,name='Unhosted@Example.Com'),dict(id=6,provider='github',provider_name=None,name='Second account')],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
+sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='已开通',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=None,provider_accounts=[dict(id=3,provider='cloudflare',provider_name=None,name='Suscoding@Gmail.Com'),dict(id=4,provider='github',provider_name=None,name='Coder@Example.Com')],repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=4,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=None,next_action_status='待做',adsense_account_id=99,adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],provider_accounts=[dict(id=5,provider='github',provider_name=None,name='Unhosted@Example.Com'),dict(id=6,provider='github',provider_name=None,name='Second account')],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
 state=dict(fail=False,copy_fail=False,empty=False,copies=0,stage_fail=False,stage_writes=[],clicks_fail=False,clicks_writes=[])
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
@@ -45,7 +45,7 @@ with sync_playwright() as p:
  page.get_by_role('button',name='清除全部条件',exact=True).click()
  expect(page.locator('.site-table tbody tr')).to_have_count(2)
  page.goto('http://127.0.0.1:5173/home');page.wait_for_load_state('networkidle')
- table=page.locator('.site-table');expect(table.locator('thead th')).to_have_count(12)
+ table=page.locator('.site-table');expect(table.locator('thead th')).to_have_count(13)
  index_link=table.locator('tbody tr').first.get_by_role('link',name='Google 收录查询：example.test（新标签页打开）',exact=True)
  expect(index_link).to_have_attribute('href','https://www.google.com/search?q=site%3Aexample.test')
  expect(index_link).to_have_attribute('target','_blank');expect(index_link).to_have_text('')
@@ -57,7 +57,36 @@ with sync_playwright() as p:
  assert abs(results.bounding_box()['y']-filters.bounding_box()['y'])<12
  assert table.bounding_box()['y']<190
 
- expect(table.locator('thead th')).to_have_text(['网站 / 主域名','技术栈','总页面数','计算器数量','文章数量','日点击','服务商','GitHub','服务器 IP','电脑','阶段','操作'])
+ expect(table.locator('thead th')).to_have_text(['网站 / 主域名','技术栈','总页面数','计算器数量','文章数量','日点击','服务商','GitHub','服务器 IP','电脑','AdSense','阶段','操作'])
+ # AdSense status uses explicit activation, independently of account association.
+ ads=page.get_by_role('checkbox',name='只显示已开通 AdSense 的网站',exact=True)
+ ads_toggle=page.locator('.site-results > .el-checkbox')
+ expect(ads).not_to_be_checked()
+ expect(table.locator('tbody tr').first.get_by_role('img',name='AdSense：已开通',exact=True)).to_be_visible()
+ expect(table.locator('tbody tr').nth(1).get_by_role('img',name='AdSense：未知',exact=True)).to_be_visible()
+ table.locator('thead .el-checkbox').click()
+ ads_toggle.click();expect(table.locator('tbody tr')).to_have_count(1)
+ expect(page.get_by_text('已选 1 个网站',exact=True)).to_be_visible()
+ expect(page.locator('.site-results [role="status"]')).to_have_text('1 / 2 个网站')
+ expect(page).to_have_url(__import__('re').compile('ads=1'))
+ page.reload();expect(ads).to_be_checked();expect(table.locator('tbody tr')).to_have_count(1)
+ page.get_by_role('textbox',name='搜索网站或域名',exact=True).fill('wordpress')
+ expect(page.get_by_text('没有符合条件的网站。',exact=False)).to_be_visible()
+ page.get_by_role('button',name='清除全部条件',exact=True).click()
+ expect(ads).not_to_be_checked();expect(table.locator('tbody tr')).to_have_count(2)
+ ads_toggle.click();expect(table.locator('tbody tr')).to_have_count(1)
+ ads_toggle.click();expect(table.locator('tbody tr')).to_have_count(2)
+ expect(page).not_to_have_url(__import__('re').compile('ads='))
+ sites[1]['adsense_connected']='未开通';page.get_by_role('button',name='刷新',exact=True).click()
+ expect(table.locator('tbody tr').nth(1).get_by_role('img',name='AdSense：未开通',exact=True)).to_be_visible()
+ sites[1]['adsense_connected']='未知';page.get_by_role('button',name='刷新',exact=True).click()
+ expect(table.locator('tbody tr').nth(1).get_by_role('img',name='AdSense：未知',exact=True)).to_be_visible()
+ page.get_by_role('button',name='AdSense',exact=True).click()
+ expect(table.locator('tbody tr').first).to_contain_text('WordPress site')
+ page.get_by_role('button',name='AdSense',exact=True).click()
+ expect(table.locator('tbody tr').first).to_contain_text('Astro site')
+ page.get_by_role('button',name='恢复默认排序',exact=True).click()
+ for select in filters.locator('.el-select').all():assert select.bounding_box()['width']<=124
  # Exact daily clicks are entered in the row and classified at every existing bucket boundary.
  clicks_cell=table.locator('tbody tr').filter(has=page.get_by_role('button',name='WordPress site',exact=True)).locator('td').nth(5)
  clicks_input=clicks_cell.get_by_role('spinbutton',name='日点击：WordPress site',exact=True)
@@ -172,7 +201,7 @@ with sync_playwright() as p:
  page.reload();page.wait_for_load_state('networkidle');expect(page.get_by_role('textbox',name='搜索网站或域名',exact=True)).to_have_value('wordpress')
  page.get_by_role('textbox',name='搜索网站或域名',exact=True).fill('')
  # The same headers remain after a stage filter.
- page.locator('.el-select').filter(has=page.get_by_role('combobox',name='阶段筛选')).locator('.el-select__wrapper').click();page.get_by_role('option',name='验证',exact=True).click();expect(table.locator('tbody tr')).to_have_count(1);expect(table.locator('thead th')).to_have_count(12)
+ page.locator('.el-select').filter(has=page.get_by_role('combobox',name='阶段筛选')).locator('.el-select__wrapper').click();page.get_by_role('option',name='验证',exact=True).click();expect(table.locator('tbody tr')).to_have_count(1);expect(table.locator('thead th')).to_have_count(13)
  page.locator('.el-select').filter(has=page.get_by_role('combobox',name='阶段筛选')).locator('.el-select__wrapper').click();page.get_by_role('option',name='增长',exact=True).click();expect(table.locator('tbody tr')).to_have_count(1)
  page.get_by_role('button',name='WordPress site',exact=True).click();drawer=page.locator('.website-detail-drawer');expect(drawer).to_be_visible();expect(drawer.get_by_text('主要管理电脑',exact=True)).to_be_visible();expect(drawer.get_by_text('经营场景',exact=True)).to_have_count(0)
  expect(drawer.get_by_role('tab')).to_have_count(7)
@@ -191,6 +220,14 @@ with sync_playwright() as p:
  state['fail']=False;state['empty']=True;page.get_by_role('button',name='重试',exact=True).click();expect(page.get_by_text('还没有网站，点击新增网站开始管理。')).to_be_visible()
  state['empty']=False;page.get_by_role('button',name='刷新',exact=True).click();expect(table.locator('tbody tr')).to_have_count(2)
  page.screenshot(path='/tmp/domain-manager-structure-desktop.png',full_page=True)
+ page.set_viewport_size({'width':952,'height':876})
+ filter_boxes=[item.bounding_box() for item in filters.locator(':scope > *').all()]
+ assert max(box['y'] for box in filter_boxes)-min(box['y'] for box in filter_boxes)<2,filter_boxes
+ assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+1')
+ expect(ads).not_to_be_checked()
+ assert ads_toggle.bounding_box()['x']<results.locator('[role="status"]').bounding_box()['x']
+ table.locator('tbody tr').first.locator('td').nth(10).scroll_into_view_if_needed()
+ page.screenshot(path='/tmp/domain-manager-adsense-952.png',full_page=True)
  page.set_viewport_size({'width':390,'height':844});expect(table).to_be_visible()
  wrap=page.locator('.portfolio-table-wrap');assert wrap.evaluate('e=>e.scrollWidth>e.clientWidth')
  assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+1')

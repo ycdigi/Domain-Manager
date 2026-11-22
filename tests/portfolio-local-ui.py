@@ -91,7 +91,7 @@ try:
         page.add_init_script(f"localStorage.setItem('auth_token', {json.dumps(token)})")
         page.goto(BASE + '/home')
         page.wait_for_load_state('networkidle')
-        expect(page.locator('.site-table thead th')).to_have_count(12)
+        expect(page.locator('.site-table thead th')).to_have_count(13)
         expect(page.locator('.site-table thead')).to_contain_text('服务器 IP')
         expect(page.locator('.site-table thead')).not_to_contain_text('经营场景')
         page.get_by_role('button', name=f'验收网站 A {stamp}', exact=True).click()

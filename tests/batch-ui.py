@@ -91,7 +91,7 @@ with sync_playwright() as p:
     expect(page.get_by_text('请求超时', exact=True)).to_be_visible()
     page.get_by_role('button', name='网站总表', exact=True).click()
     expect(page.get_by_role('heading', name='网站总表', exact=True)).to_be_visible()
-    expect(page.locator('.site-table thead th')).to_have_count(12)
+    expect(page.locator('.site-table thead th')).to_have_count(13)
     expect(page.locator('.site-table thead th').filter(has_text='服务器 IP')).to_be_visible()
     page.get_by_role('button', name='Astro batch site', exact=True).click()
     drawer=page.locator('.website-detail-drawer')
