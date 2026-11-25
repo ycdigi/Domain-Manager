@@ -15,7 +15,7 @@ const choices: Record<string, Array<string | number>> = {
 const dates = ['adsense_opened_date', 'seo_last_date', 'clicks_updated_date', 'content_stats_updated_date', 'next_action_due_date']
 const counts = ['calculator_count', 'article_count', 'daily_clicks', 'page_count', 'priority_order']
 
-export const validateWebsiteFields = (fields: Record<string, unknown>, current: Record<string, unknown> = {}) => {
+export const validateWebsiteFields = (fields: Record<string, unknown>, current: Record<string, unknown> = {}, options: { snapshot?: boolean } = {}) => {
     for (const [key, values] of Object.entries(choices)) {
         if (fields[key] === undefined || key === 'industry' && fields[key] === null || key === 'new_site_override' && fields[key] === null) continue
         if (fields[key] === null || !values.some(value => String(value) === String(fields[key]))) return `${key} 值无效`
@@ -29,10 +29,11 @@ export const validateWebsiteFields = (fields: Record<string, unknown>, current: 
     if (fields.daily_clicks_range != null && !dailyClicksRanges.includes(fields.daily_clicks_range as typeof dailyClicksRanges[number])) return 'daily_clicks_range 无效'
     for (const key of dates) if (fields[key] != null && fields[key] !== '' && !isValidDate(fields[key])) return `${key} 必须是有效的 YYYY-MM-DD 日期`
     const next = { ...current, ...fields }
-    if (['calculator_count','article_count','page_count'].some(key => fields[key] != null) && !isValidDate(fields.content_stats_updated_date || current.content_stats_updated_date)) return '更新内容数量时必须填写统计日期'
+    if (!options.snapshot && ['calculator_count','article_count','page_count'].some(key => fields[key] != null) && !isValidDate(next.content_stats_updated_date)) return '更新内容数量时必须填写统计日期'
     if (fields.computer_name != null && (typeof fields.computer_name !== 'string' || fields.computer_name.length > 120)) return '电脑名称不能超过 120 个字符'
+    if (next.daily_clicks != null && next.daily_clicks_range != null) return '点击精确数量与区间不能同时填写'
     const clicksChanged = fields.daily_clicks !== undefined || fields.daily_clicks_range !== undefined
-    if (clicksChanged && (next.daily_clicks != null || next.daily_clicks_range != null) && !isValidDate(fields.clicks_updated_date)) return '更新点击数据时必须填写统计日期'
+    if (!options.snapshot && clicksChanged && (next.daily_clicks != null || next.daily_clicks_range != null) && !isValidDate(fields.clicks_updated_date)) return '更新点击数据时必须填写统计日期'
     if (fields.clicks_updated_date !== undefined && fields.clicks_updated_date != null && !isValidDate(fields.clicks_updated_date)) return 'clicks_updated_date 必须是有效日期'
     return null
 }

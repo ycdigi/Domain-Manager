@@ -39,13 +39,13 @@ const navigationStorageKey = 'domain-manager.navigation-collapsed'
 try { navigationCollapsed.value = localStorage.getItem(navigationStorageKey) === 'true' } catch { /* use expanded navigation */ }
 const toggleNavigation = () => { navigationCollapsed.value = !navigationCollapsed.value; try { localStorage.setItem(navigationStorageKey, String(navigationCollapsed.value)) } catch { /* current view remains usable */ } }
 const websites = cachedValue<Website[]>('/api/websites')
-const activeManager = computed(() => ({ Home: 'home', Finance: 'finance', WorkQueue: 'work', Batches: 'batches', BatchDetail: 'batches', Monitor: 'monitor', Domains: 'domains', Resources: 'resources', Adsense: 'adsense', Data: 'data' }[String(route.name)] || ''))
+const activeManager = computed(() => ({ Home: 'home', WebsiteManagement: 'management', Finance: 'finance', WorkQueue: 'work', Batches: 'batches', BatchDetail: 'batches', Monitor: 'monitor', Domains: 'domains', Resources: 'resources', Adsense: 'adsense', Data: 'data' }[String(route.name)] || ''))
 let pendingNavigationAction: (() => void) | undefined
 const runPendingNavigationAction = () => { const action = pendingNavigationAction; pendingNavigationAction = undefined; action?.() }
 const runNavigationAction = (action: () => void) => { if (navigationMobileOpen.value) { pendingNavigationAction = action; navigationMobileOpen.value = false } else action() }
 const workspaceQueries: Record<string, typeof route.query> = { [String(route.name)]: { ...route.query } }
 watch(() => route.fullPath, () => { workspaceQueries[String(route.name)] = { ...route.query } })
-const navigateManager = (view: string) => runNavigationAction(() => { const name = { home: 'Home', finance: 'Finance', work: 'WorkQueue', batches: 'Batches', monitor: 'Monitor', domains: 'Domains', resources: 'Resources', adsense: 'Adsense', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
+const navigateManager = (view: string) => runNavigationAction(() => { const name = { home: 'Home', management: 'WebsiteManagement', finance: 'Finance', work: 'WorkQueue', batches: 'Batches', monitor: 'Monitor', domains: 'Domains', resources: 'Resources', adsense: 'Adsense', data: 'Data' }[view]; void router.push({ name, query: workspaceQueries[name || ''] || {} }) })
 const backup = async () => { try { await downloadJsonBackup(); ElMessage.success('JSON 备份已导出') } catch (error) { ElMessage.error(error instanceof Error ? error.message : '导出失败') } }
 const logout = () => { void logoutWorkspace() }
 provide('openWorkspaceNavigation', () => { navigationMobileOpen.value = true })

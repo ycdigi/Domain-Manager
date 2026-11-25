@@ -27,21 +27,20 @@ export const insertSnapshot = (db: D1Database, taskId: number, kind: 'before' | 
     ON CONFLICT(task_id, period_kind) DO UPDATE SET period_start=excluded.period_start, period_end=excluded.period_end, clicks=excluded.clicks
 `).bind(taskId, kind, snapshot.period_start, snapshot.period_end, snapshot.clicks)
 
-export const ensureSeoReview = async (db: D1Database, task: { id: number; website_id: number; title: string; completed_at?: string | null; review_delay_days?: number; review_window_days?: number }) => {
-    const completedAt = String(task.completed_at || new Date().toISOString().slice(0, 10)).slice(0, 10)
-    const delay = Number(task.review_delay_days || 28)
-    await db.batch([
-        db.prepare(`INSERT OR IGNORE INTO website_tasks (website_id, task_type, title, description, status, due_at, review_of_task_id, review_window_days, baseline_missing)
-            VALUES (?, 'SEO复查', ?, ?, '待跟进', ?, ?, ?, 1)`)
-            .bind(task.website_id, `复查：${task.title}`, `复查 SEO 修改效果：${task.title}`, addDays(completedAt, delay), task.id, task.review_window_days || 28),
-        db.prepare(`INSERT OR IGNORE INTO website_click_snapshots (task_id, period_kind, period_start, period_end, clicks)
-            SELECT r.id, 'before', s.period_start, s.period_end, s.clicks FROM website_tasks r
-            JOIN website_click_snapshots s ON s.task_id=? AND s.period_kind='before' WHERE r.review_of_task_id=?`).bind(task.id, task.id),
-        db.prepare("DELETE FROM website_click_snapshots WHERE task_id=? AND period_kind='before'").bind(task.id),
-        db.prepare(`UPDATE website_tasks SET baseline_missing=CASE WHEN EXISTS (
-            SELECT 1 FROM website_click_snapshots s JOIN website_tasks r ON r.id=s.task_id
-            WHERE r.review_of_task_id=? AND s.period_kind='before') THEN 0 ELSE 1 END
-            WHERE id=? OR review_of_task_id=?`).bind(task.id, task.id, task.id)
-    ])
-    return (await db.prepare('SELECT id FROM website_tasks WHERE review_of_task_id=?').bind(task.id).first<{ id: number }>())?.id
-}
+// These statements read the task inside the transaction, after its transition.
+// Both adapters commit completion, snapshot transfer and follow-up together.
+export const seoReviewWrites = (db: D1Database, taskId: number) => [
+    db.prepare(`INSERT OR IGNORE INTO website_tasks (website_id, task_type, title, description, status, due_at, review_of_task_id, review_window_days, baseline_missing)
+        SELECT website_id, 'SEO复查', '复查：' || title, '复查 SEO 修改效果：' || title, '待跟进', date(completed_at, '+' || review_delay_days || ' days'), id, review_window_days, 1
+        FROM website_tasks WHERE id=? AND task_type='SEO' AND completed_at IS NOT NULL`).bind(taskId),
+    db.prepare(`INSERT INTO website_click_snapshots (task_id, period_kind, period_start, period_end, clicks)
+        SELECT r.id, 'before', s.period_start, s.period_end, s.clicks FROM website_tasks r
+        JOIN website_click_snapshots s ON s.task_id=? AND s.period_kind='before' WHERE r.review_of_task_id=?
+        ON CONFLICT(task_id,period_kind) DO UPDATE SET period_start=excluded.period_start,period_end=excluded.period_end,clicks=excluded.clicks`).bind(taskId,taskId),
+    db.prepare(`DELETE FROM website_click_snapshots WHERE task_id=? AND period_kind='before'
+        AND EXISTS (SELECT 1 FROM website_tasks WHERE review_of_task_id=?)`).bind(taskId,taskId),
+    db.prepare(`UPDATE website_tasks SET baseline_missing=CASE WHEN EXISTS (
+        SELECT 1 FROM website_click_snapshots s JOIN website_tasks r ON r.id=s.task_id
+        WHERE r.review_of_task_id=? AND s.period_kind='before') THEN 0 ELSE 1 END
+        WHERE (id=? OR review_of_task_id=?) AND EXISTS (SELECT 1 FROM website_tasks WHERE review_of_task_id=?)`).bind(taskId,taskId,taskId,taskId)
+]

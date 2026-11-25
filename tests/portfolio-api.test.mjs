@@ -396,13 +396,15 @@ test('portfolio backup snapshot restores websites, domains, tasks, income and ef
 })
 
 test('a backup failure rolls back every website and history write in that import', async () => {
+  store.sql("CREATE TRIGGER reject_income BEFORE INSERT ON website_income BEGIN SELECT RAISE(ABORT,'test failure'); END;")
   const data = {
+    format_version: 1,
     websites: [{ id: 10, name: 'Invalid backup' }],
-    domains: [{ id: 10, website_id: 10, domain: 'atomic.test', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站', status: '在线' }],
-    website_income: [{ website_id: 10, income_month: '2026-11', source: 'Bad', currency: 'USD', amount: -1 }]
+    domains: [{ id: 10, website_id: 10, domain: 'atomic.test', is_primary: 1, domain_role: '主域名', registrar: 'r', registrar_date: '2026-01-01', expiry_date: '2027-01-01', service_type: '网站', status: '在线' }],
+    website_income: [{ website_id: 10, income_month: '2026-11', source: 'Bad', currency: 'USD', amount: 1 }]
   }
   const response = await importData.onRequestPost(context('/api/backups', data, 'POST'))
-  assert.ok(response.status >= 400)
+  assert.equal(response.status, 500)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM websites;')[0].count, 0)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM domains;')[0].count, 0)
 })
@@ -454,4 +456,95 @@ test('versioned backups reject contradictory primary domains before any writes',
   backup.domains[0].is_primary = 0
   await call(importData.onRequestPost, context('/api/backups', backup, 'POST'), 400)
   assert.equal(store.sql('SELECT is_primary FROM domains')[0].is_primary, 1)
+})
+
+// Both live adapters must enforce the same metric invariant before writing.
+test('manual and AI edits reject conflicting exact clicks and click ranges without writes', async () => {
+  store.sql("INSERT INTO websites(id,name) VALUES(1,'Clicks');")
+  for (const [handler, url, body, token] of [
+    [siteEdit.onRequestPatch, '/api/websites/1', { daily_clicks: 0, daily_clicks_range: 'under10', clicks_updated_date: '2026-11-01' }, false],
+    [sync.onRequestPost, '/api/ai/sync', { website_id: 1, fields: { daily_clicks: 0, daily_clicks_range: 'under10', clicks_updated_date: '2026-11-01' } }, true]
+  ]) {
+    await call(handler, context(url, body, token ? 'POST' : 'PATCH', token), 400)
+    assert.deepEqual(store.sql('SELECT daily_clicks,daily_clicks_range FROM websites'), [{ daily_clicks: null, daily_clicks_range: null }])
+  }
+})
+
+test('clearing an AdSense association does not validate the removed account as the next account', async () => {
+  store.sql("INSERT INTO adsense_accounts(id,name,owner) VALUES(1,'Old','Owner'); INSERT INTO websites(id,name,adsense_account_id) VALUES(1,'Site',1);")
+  // Historical databases can contain a dangling reference; clearing it must repair it.
+  store.script('PRAGMA foreign_keys=OFF; DELETE FROM adsense_accounts WHERE id=1;')
+  await call(siteEdit.onRequestPatch, context('/api/websites/1', { adsense_account_id: null }, 'PATCH'))
+  assert.equal(store.sql('SELECT adsense_account_id FROM websites')[0].adsense_account_id, null)
+})
+
+test('backup import rolls back restored data when optional batch assignment fails', async () => {
+  store.sql("INSERT INTO website_batches(id,name) VALUES(1,'Import');")
+  store.sql("CREATE TRIGGER reject_import_member BEFORE INSERT ON website_batch_members BEGIN SELECT RAISE(ABORT,'membership failure'); END;")
+  const form = new FormData()
+  form.append('batch_id','1')
+  form.append('file',new File([JSON.stringify({format_version:1,websites:[{id:10,name:'Atomic'}],domains:[{id:10,website_id:10,domain:'atomic-batch.test',registrar:'r',registrar_date:'2026-01-01',expiry_date:'2027-01-01',service_type:'网站',status:'在线',is_primary:1,domain_role:'主域名'}]})], 'backup.json', {type:'application/json'}))
+  const ctx = context('/api/backups', undefined, 'POST')
+  ctx.request = new Request('https://example.test/api/backups',{method:'POST',headers:{Authorization:`Bearer ${session}`},body:form})
+  await call(importData.onRequestPost,ctx,500)
+  assert.equal(store.sql('SELECT COUNT(*) AS n FROM websites')[0].n,0)
+  assert.equal(store.sql('SELECT COUNT(*) AS n FROM domains')[0].n,0)
+})
+
+test('backup preview validates the same optional batch as execution', async () => {
+ const form = new FormData()
+ form.append('batch_id','999')
+ form.append('file',new File([JSON.stringify({format_version:1,websites:[],domains:[]})],'backup.json',{type:'application/json'}))
+ const ctx = context('/api/backups?dry_run=1',undefined,'POST')
+ ctx.request = new Request('https://example.test/api/backups?dry_run=1',{method:'POST',headers:{Authorization:`Bearer ${session}`},body:form})
+ await call(importData.onRequestPost,ctx,404)
+})
+
+test('manual and AI task completion roll back completion when follow-up insertion fails', async () => {
+ for (const ai of [false,true]) {
+  store.init()
+  store.sql("INSERT INTO websites(id,name) VALUES(1,'SEO'); INSERT INTO website_tasks(id,website_id,task_type,title) VALUES(1,1,'SEO','Improve');")
+  store.sql("CREATE TRIGGER reject_review BEFORE INSERT ON website_tasks WHEN NEW.task_type='SEO复查' BEGIN SELECT RAISE(ABORT,'review failure'); END;")
+  await call(ai ? sync.onRequestPost : taskEdit.onRequestPut, context(ai ? '/api/ai/sync' : '/api/websites/1/tasks/1', ai ? {website_id:1,fields:{name:'Changed'},task_updates:[{task_id:1,status:'已完成'}]} : {status:'已完成'},ai?'POST':'PUT',ai),500)
+  assert.deepEqual(store.sql('SELECT status,completed_at FROM website_tasks'),[{status:'待做',completed_at:null}])
+  assert.equal(store.sql('SELECT name FROM websites')[0].name,'SEO')
+  store.sql('DROP TRIGGER reject_review;')
+  await call(ai ? sync.onRequestPost : taskEdit.onRequestPut, context(ai ? '/api/ai/sync' : '/api/websites/1/tasks/1', ai ? {website_id:1,task_updates:[{task_id:1,status:'已完成'}]} : {status:'已完成'},ai?'POST':'PUT',ai))
+  assert.equal(store.sql("SELECT COUNT(*) AS n FROM website_tasks WHERE task_type='SEO复查'")[0].n,1)
+ }
+})
+
+test('portable export includes task history but never reads credential storage', async () => {
+ store.sql("INSERT INTO websites(id,name) VALUES(1,'Export'); INSERT INTO website_tasks(id,website_id,task_type,title) VALUES(1,1,'SEO','Task'); INSERT INTO website_click_snapshots(task_id,period_kind,period_start,period_end,clicks) VALUES(1,'before','2026-01-01','2026-01-28',9);")
+ const ctx = context('/api/backups')
+ ctx.env = {...ctx.env, DB: {...store.db, prepare(sql) {
+  assert.doesNotMatch(sql,/provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|API_TOKEN/)
+  return store.db.prepare(sql)
+ }}}
+ const data=await call(snapshotApi.onRequestGet,ctx)
+ assert.equal(data.website_tasks[0].title,'Task')
+ assert.equal(data.website_click_snapshots[0].clicks,9)
+ assert.equal(Object.hasOwn(data,'provider_credentials'),false)
+})
+
+test('baseline validation follows the actual review window after it changes',async()=>{
+ store.sql("INSERT INTO websites(id,name) VALUES(1,'Window'); INSERT INTO website_tasks(id,website_id,task_type,title,status,completed_at) VALUES(1,1,'SEO','Task','已完成','2026-01-01'); INSERT INTO website_tasks(id,website_id,task_type,title,status,review_of_task_id,review_window_days,due_at) VALUES(2,1,'SEO复查','Review','待跟进',1,7,'2026-01-29');")
+ await call(sync.onRequestPost,context('/api/ai/sync',{website_id:1,task_updates:[{task_id:1,baseline:{period_start:'2026-01-01',period_end:'2026-01-28',clicks:10}}]},'POST',true),400)
+ await call(sync.onRequestPost,context('/api/ai/sync',{website_id:1,task_updates:[{task_id:1,baseline:{period_start:'2026-01-01',period_end:'2026-01-07',clicks:10}}]},'POST',true))
+ assert.deepEqual(store.sql('SELECT task_id,period_end FROM website_click_snapshots'),[{task_id:2,period_end:'2026-01-07'}])
+})
+test('a completed review rejects a changed baseline but permits an identical retry',async()=>{
+ store.sql("INSERT INTO websites(id,name) VALUES(1,'Final'); INSERT INTO website_tasks(id,website_id,task_type,title,status,completed_at) VALUES(1,1,'SEO','Task','已完成','2026-01-01'); INSERT INTO website_tasks(id,website_id,task_type,title,status,review_of_task_id,due_at,review_conclusion,review_basis) VALUES(2,1,'SEO复查','Review','已完成',1,'2026-01-29','提升','10 to 20'); INSERT INTO website_click_snapshots(task_id,period_kind,period_start,period_end,clicks) VALUES(2,'before','2026-01-01','2026-01-28',10),(2,'after','2026-01-02','2026-01-29',20);")
+ const baseline={period_start:'2026-01-01',period_end:'2026-01-28',clicks:30}
+ await call(sync.onRequestPost,context('/api/ai/sync',{website_id:1,task_updates:[{task_id:1,baseline}]},'POST',true),400)
+ baseline.clicks=10
+ await call(sync.onRequestPost,context('/api/ai/sync',{website_id:1,task_updates:[{task_id:1,baseline}]},'POST',true))
+ assert.equal(store.sql("SELECT clicks FROM website_click_snapshots WHERE period_kind='before'")[0].clicks,10)
+ assert.equal(store.sql('SELECT review_basis FROM website_tasks WHERE id=2')[0].review_basis,'10 to 20')
+})
+test('a baseline correction after completion updates the follow-up snapshot instead of losing it', async () => {
+ store.sql("INSERT INTO websites(id,name) VALUES(1,'Correction'); INSERT INTO website_tasks(id,website_id,task_type,title) VALUES(1,1,'SEO','Task');")
+ await call(sync.onRequestPost,context('/api/ai/sync',{website_id:1,task_updates:[{task_id:1,status:'已完成',baseline:{period_start:'2026-01-01',period_end:'2026-01-28',clicks:10}}]},'POST',true))
+ await call(sync.onRequestPost,context('/api/ai/sync',{website_id:1,task_updates:[{task_id:1,baseline:{period_start:'2026-01-01',period_end:'2026-01-28',clicks:20}}]},'POST',true))
+ assert.deepEqual(store.sql("SELECT t.task_type,s.clicks FROM website_click_snapshots s JOIN website_tasks t ON t.id=s.task_id"),[{task_type:'SEO复查',clicks:20}])
 })

@@ -28,8 +28,8 @@ import type { DropdownInstance } from 'element-plus'
 import { Close, Coin, Collection, Connection, Download, Expand, Fold, FolderOpened, Grid, List, Monitor, MoreFilled } from '@element-plus/icons-vue'
 const props = defineProps<{ activeManager: string; monitorUnread?: number; queueCounts?: { total: number }; collapsed?: boolean; mobile?: boolean }>()
 const queueCounts = computed(() => props.queueCounts || { total: 0 })
-const emit = defineEmits<{ manage: [value: 'work' | 'batches' | 'monitor' | 'domains' | 'resources' | 'adsense' | 'finance' | 'home' | 'data']; collapse: []; close: []; backup: []; logout: [] }>()
-const primaryItems=[{value:'home',label:'网站总表',icon:Grid},{value:'domains',label:'域名资产',icon:Connection},{value:'resources',label:'部署与账号',icon:FolderOpened},{value:'monitor',label:'网站监控',icon:Monitor}] as const
+const emit = defineEmits<{ manage: [value: 'work' | 'batches' | 'monitor' | 'domains' | 'resources' | 'adsense' | 'finance' | 'home' | 'management' | 'data']; collapse: []; close: []; backup: []; logout: [] }>()
+const primaryItems=[{value:'home',label:'网站总表',icon:Grid},{value:'management',label:'网站管理',icon:List},{value:'domains',label:'域名资产',icon:Connection},{value:'resources',label:'部署与账号',icon:FolderOpened},{value:'monitor',label:'网站监控',icon:Monitor}] as const
 const operationItems=[{value:'work',label:'待处理',icon:List},{value:'batches',label:'网站批次',icon:Collection},{value:'finance',label:'收入与投入',icon:Coin},{value:'adsense',label:'AdSense',icon:Coin}] as const
 const moreMenu = ref<DropdownInstance>()
 const closeMoreMenu = () => moreMenu.value?.handleClose()

@@ -92,7 +92,7 @@
   position: sticky;
   top: 0;
   z-index: 1;
-  padding: 8px 9px;
+  padding: 8px 6px;
   border-bottom: 1px solid var(--color-rule);
   background: var(--color-paper-2);
   color: var(--color-muted);
@@ -130,7 +130,7 @@
 .portfolio-table td {
   height: 58px;
   min-width: 0;
-  padding: 7px 9px;
+  padding: 6px;
   border-bottom: 1px solid var(--color-rule);
   color: var(--color-ink);
   vertical-align: middle;
@@ -255,6 +255,9 @@
 .site-cell:disabled {
   cursor: default;
 }
+.site-inline-select, .site-stage-select, .site-stack-select {
+  width: 100%;
+}
 .site-name {
   font-weight: var(--weight-semibold);
 }
@@ -270,21 +273,19 @@
   padding: 6px;
   font-size: 17px;
 }
-.site-platform-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
+.site-stack-select .el-select__wrapper { padding-inline: 5px; gap: 4px; }
+.site-stack-select .el-select__selected-item svg,
+.site-stack-select .el-select__selected-item .el-icon {
+  display: block;
+  width: 22px;
+  height: 22px;
+  font-size: 22px;
 }
-.site-platform-icon svg,
-.site-platform-icon .el-icon {
-  width: 24px;
-  height: 24px;
-  font-size: 24px;
-}
-.site-platform-icon:hover {
-  color: var(--color-link);
+.site-table td:nth-child(n + 3):nth-child(-n + 6) { font-variant-numeric: tabular-nums; }
+.site-table td:nth-child(n + 3):nth-child(-n + 6) .site-cell { min-width: 28px; }
+@media (max-width: 640px), (pointer: coarse) {
+  html.dm-ui .site-stack-select .el-select__wrapper,
+  .site-table td:nth-child(n + 3):nth-child(-n + 6) .site-cell { min-width: 44px; min-height: 44px; }
 }
 .sr-only {
   position: absolute;
@@ -296,8 +297,7 @@
   white-space: nowrap;
 }
 @media (max-width: 640px) {
-  .site-actions .el-button,
-  .site-platform-icon {
+  .site-actions .el-button {
     min-width: 36px;
     min-height: 44px;
   }
@@ -327,3 +327,7 @@
 }
 
 .site-scroll-hint { margin:0; padding:var(--space-xs) var(--space-sm); color:var(--color-muted); font-size:var(--text-xs); }
+
+.site-metric-editor form { display: grid; gap: var(--space-xs); margin-top: var(--space-xs); }
+.site-metric-editor .el-select { width: 100%; }
+.site-metric-editor .page-actions { justify-content: flex-end; }

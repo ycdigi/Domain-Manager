@@ -73,6 +73,7 @@
         </div>
         <p v-else class="portfolio-empty">还没有任务。</p>
       </section><section class="portfolio-detail-section">
+        <div class="portfolio-detail-heading"><h2>工作登记</h2><router-link :to="{name:'WebsiteManagement',query:{q:website.name}}">查看网站管理</router-link></div><WebsiteWorkHistory v-if="visible && activeSection==='work'" :key="website.id" :website-id="website.id" @busy="workHistoryBusy=$event" @changed="notifyChanged" /></section><section class="portfolio-detail-section">
         <div class="portfolio-detail-heading"><h2>操作记录</h2><span>{{ operations.length }} 条</span></div>
         <form class="portfolio-operation-form" @submit.prevent="addOperation"><el-date-picker v-model="operationForm.operation_date" type="date" value-format="YYYY-MM-DD" aria-label="操作日期" /><el-select v-model="operationForm.operation_kind" aria-label="操作类型"><el-option v-for="kind in taskTypes" :key="kind" :label="kind" :value="kind" /></el-select><el-button type="primary" :loading="savingOperation" native-type="submit">记录操作</el-button></form>
         <div v-for="operation in operations" :key="operation.id" class="portfolio-detail-row"><span>{{ operation.operation_date }} · {{ operation.operation_kind }}</span><el-button text type="danger" :aria-label="`删除 ${operation.operation_date} ${operation.operation_kind} 操作`" @click="removeOperation(operation)"><Delete /></el-button></div>
@@ -132,6 +133,7 @@
 </template>
 
 <script setup lang="ts">
+import { websiteEditPatch } from '../../shared/website-edits'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { websiteQuery, websiteSections, type WebsiteSection } from '../utils/website-location'
@@ -139,11 +141,13 @@ import { ElMessage } from 'element-plus'
 import DomainFavicon from './DomainFavicon.vue'
 import WebsiteDeployment from './WebsiteDeployment.vue'
 import { sortComputerNames } from '../utils/computer-options'
+import WebsiteWorkHistory from './WebsiteWorkHistory.vue'
 import WebsiteMonitorPanel from './WebsiteMonitorPanel.vue'
 import { Delete } from '@element-plus/icons-vue'
 import { api } from '../utils/request'
 import { invalidateData } from '../utils/workspaceCache'
 import { getWriteQueue } from '../utils/writeQueue'
+import { createWebsiteSession } from '../composables/websiteSession'
 import { useUnsavedChanges, confirmDiscard } from '../composables/useUnsavedChanges'
 import { confirmAction, isDismissed } from '../utils/feedback'
 import type { Website, WebsiteDomain, WebsiteTask, WebsiteTaskType } from '../api/websites'
@@ -157,9 +161,9 @@ const props = defineProps<{ visible: boolean; website?: Website }>()
 const emit = defineEmits<{ 'update:visible': [value: boolean]; changed: [] }>()
 const route = useRoute(); const router = useRouter()
 const activeSection = computed<WebsiteSection>({ get: () => websiteSections.some(item => item.key === route.query.section) ? route.query.section as WebsiteSection : 'basic', set: section => { if (props.website) void router.replace({ query: websiteQuery(props.website.id, section, route.query) }) } })
-const sectionLoading = reactive<Record<string, boolean>>({})
-const sectionErrors = reactive<Record<string, string>>({})
-const loadedSections = new Set<string>()
+const session = createWebsiteSession()
+const sectionLoading = session.loading
+const sectionErrors = session.errors
 const queue = getWriteQueue()
 const visible = computed({ get: () => props.visible, set: value => emit('update:visible', value) })
 const drawerSize = ref('760px')
@@ -174,8 +178,13 @@ const profile = reactive<{ name: string; stage: string; new_site_mode: 'auto' | 
 const adsenseAccounts = ref<Array<{ id: number; name: string }>>([])
 const domains = ref<WebsiteDomain[]>([])
 const computerNames=computed(()=>sortComputerNames([profile.computer_name]))
-const refreshingIcon=ref(false);const iconRevision=ref(0)
-const refreshIcon=async()=>{const id=domains.value.find(d=>d.is_primary)?.id;if(!id)return;refreshingIcon.value=true;try{const result=await api.post<{status:string;last_error?:string}>(`/api/domains/${id}/favicon`,{});iconRevision.value++;if(result.last_error)ElMessage.warning(result.last_error);else ElMessage.success('图标已更新')}catch(e){ElMessage.error(e instanceof Error?e.message:'图标刷新失败')}finally{refreshingIcon.value=false}}
+const refreshingIcon=computed(() => Boolean(session.saving.icon));const iconRevision=ref(0)
+const refreshIcon = async () => {
+  const id = domains.value.find(domain => domain.is_primary)?.id
+  if (!id) return
+  try { await session.save('icon', () => api.post<{status: string; last_error?: string}>(`/api/domains/${id}/favicon`, {}), result => { iconRevision.value++; if (result.last_error) ElMessage.warning(result.last_error); else ElMessage.success('图标已更新') }) }
+  catch (e) { ElMessage.error(e instanceof Error ? e.message : '图标刷新失败') }
+}
 
 const tasks = ref<WebsiteTask[]>([])
 const incomes = ref<IncomeRow[]>([])
@@ -184,7 +193,13 @@ const operations = ref<OperationRow[]>([])
 const notes = ref<AiNote[]>([])
 const noteHistory = ref<NoteVersion[]>([])
 const error = computed(() => sectionErrors[activeSection.value] || '')
-const saving = ref(false); const savingDomain = ref(false); const savingTask = ref(false); const savingIncome = ref(false); const savingEffort = ref(false); const savingOperation = ref(false); const savingNote = ref(false)
+const saving = computed(() => Boolean(session.saving.profile))
+const savingDomain = computed(() => Boolean(session.saving.domain))
+const savingTask = computed(() => Boolean(session.saving.task || session.saving['task-edit']))
+const savingIncome = computed(() => Boolean(session.saving.income))
+const savingEffort = computed(() => Boolean(session.saving.effort))
+const savingOperation = computed(() => Boolean(session.saving.operation))
+const savingNote = computed(() => Boolean(session.saving.note))
 const checkingDomainId = ref<number | null>(null)
 const noteDialogVisible = ref(false); const historyVisible = ref(false); const editingNoteId = ref<number | null>(null)
 const taskDialogVisible = ref(false)
@@ -198,36 +213,37 @@ const incomeForm = reactive({ income_month: '', source: '', currency: 'USD', amo
 const effortForm = reactive({ week_start: '', hours: 0 })
 const operationForm = reactive({ operation_date: '', operation_kind: 'SEO' })
 const noteForm = reactive<{ kind: 'AI提示词' | '想法说明'; content: string }>({ kind: 'AI提示词', content: '' })
-const profileBaseline = ref('')
 let profileOriginal: typeof profile | undefined
 let profileWebsiteId: number | undefined
-let loadVersion = 0
-const profileDirty = computed(() => Boolean(props.visible && profileBaseline.value && JSON.stringify(profile) !== profileBaseline.value))
+const profileDirty = computed(() => Boolean(props.visible && session.isDirty('profile')))
+const workHistoryBusy=ref(false)
 const monitorPanel = ref<InstanceType<typeof WebsiteMonitorPanel>>()
 const deploymentPanel = ref<InstanceType<typeof WebsiteDeployment>>()
-const draftSnapshots = () => ({ domain: JSON.stringify(domainForm), task: JSON.stringify({ taskForm, baselineRange: baselineRange.value, baselineClicks: baselineClicks.value }), income: JSON.stringify(incomeForm), effort: JSON.stringify(effortForm), operation: JSON.stringify(operationForm) })
-const draftsBaseline = ref<Record<string, string>>({})
-const taskEditBaseline = ref(''); const noteBaseline = ref('')
-const taskEditDirty = computed(() => taskDialogVisible.value && JSON.stringify(taskEdit) !== taskEditBaseline.value)
-const noteDirty = computed(() => noteDialogVisible.value && JSON.stringify(noteForm) !== noteBaseline.value)
-const discardAccepted = ref(false)
-const dirty = computed(() => Boolean(props.visible && !discardAccepted.value && (profileDirty.value || (Object.entries(draftSnapshots()).some(([key, value]) => draftsBaseline.value[key] !== value)) || taskEditDirty.value || noteDirty.value || monitorPanel.value?.dirty || deploymentPanel.value?.dirty)))
-const savingAny = computed(() => Boolean(saving.value || savingDomain.value || savingTask.value || savingIncome.value || savingEffort.value || savingOperation.value || savingNote.value || monitorPanel.value?.busy || deploymentPanel.value?.busy))
+const taskEditDirty = computed(() => taskDialogVisible.value && session.isDirty('task-edit'))
+const noteDirty = computed(() => noteDialogVisible.value && session.isDirty('note'))
+for (const [key, read] of Object.entries({ profile: () => profile, domain: () => domainForm, task: () => ({ taskForm, baselineRange: baselineRange.value, baselineClicks: baselineClicks.value }), income: () => incomeForm, effort: () => effortForm, operation: () => operationForm })) session.draft(key, read)
+session.observe(() => monitorPanel.value)
+session.observe(() => deploymentPanel.value)
+session.draft('task-edit', () => taskEdit)
+session.draft('note', () => noteForm)
+session.observe(() => ({ busy: workHistoryBusy.value }))
+watch(taskDialogVisible, open => { if (!open) session.clean('task-edit') })
+watch(noteDialogVisible, open => { if (!open) session.clean('note') })
+const dirty = session.dirty
+const savingAny = session.busy
 useUnsavedChanges(dirty, { blocked: savingAny, leaving: (to, from) => to.path !== from.path || to.query.site !== from.query.site })
 const beforeClose = async (done: () => void) => {
   if (savingAny.value) { ElMessage.warning('正在保存，请稍候'); return }
-  if (!(await confirmDiscard(dirty.value))) return
-  discardAccepted.value = true
+  if (!(await session.leave(confirmDiscard))) return
   done()
 }
 const closeTask = async (done: () => void) => { if (!savingTask.value && await confirmDiscard(taskEditDirty.value)) done() }
 const closeNote = async (done: () => void) => { if (!savingNote.value && await confirmDiscard(noteDirty.value)) done() }
-const markDraftsClean = (key?: string) => { const values = draftSnapshots(); if (key) draftsBaseline.value[key] = values[key as keyof typeof values]; else draftsBaseline.value = values }
-const markProfileClean = () => { profileOriginal = JSON.parse(JSON.stringify(profile)); profileBaseline.value = JSON.stringify(profile) }
+const markDraftsClean = (key?: string) => { if (key) session.clean(key); else for (const name of ['domain', 'task', 'income', 'effort', 'operation']) session.clean(name) }
+const markProfileClean = () => { profileOriginal = JSON.parse(JSON.stringify(profile)); session.clean('profile') }
 const notifyChanged = () => { invalidateData('/api/websites'); emit('changed') }
 const loadAll = async () => {
   if (!props.website) return
-  const version = ++loadVersion
   if (profileWebsiteId !== props.website.id) {
   Object.assign(profile, { name: props.website.name, stage: props.website.stage, new_site_mode: props.website.new_site_override === 1 ? 'new' : props.website.new_site_override === 0 ? 'regular' : 'auto', lifecycle: props.website.lifecycle, ownership: props.website.ownership, platform: props.website.platform, platform_other: props.website.platform_other || '', industry: props.website.industry || '', computer_name: props.website.computer_name || '', page_count: props.website.page_count ?? undefined, adsense_connected: props.website.adsense_connected, adsense_account_id: props.website.adsense_account_id || undefined, adsense_opened_date: props.website.adsense_opened_date || '', gsc_connected: props.website.gsc_connected, daily_clicks: props.website.daily_clicks ?? undefined, daily_clicks_range: props.website.daily_clicks_range || '', clicks_updated_date: props.website.clicks_updated_date || '', calculator_count: props.website.calculator_count ?? undefined, article_count: props.website.article_count ?? undefined, content_stats_updated_date: props.website.content_stats_updated_date || '', potential: props.website.potential || '', next_action: props.website.next_action || '', next_action_due_date: props.website.next_action_due_date || '', next_action_status: props.website.next_action_status || '待做' })
     profileWebsiteId = props.website.id
@@ -235,17 +251,13 @@ const loadAll = async () => {
     tasks.value = []; incomes.value = []; efforts.value = []; operations.value = []; notes.value = []
   }
   domains.value = queue.applyPendingDomains(props.website.domains || [])
-  const id = props.website.id
-  await loadSection(activeSection.value, true, version, id)
+  await loadSection(activeSection.value, true)
 }
-const loadSection = async (section: WebsiteSection, force = false, version = loadVersion, id = props.website?.id) => {
-  if (!id || !props.visible || (!force && loadedSections.has(section))) return
-  sectionLoading[section] = true; sectionErrors[section] = ''
-  const reads: Array<() => Promise<void>> = []
-  const read = <T,>(url: string, assign: (value: T) => void) => reads.push(async () => {
-    const value = await api.get<T>(url)
-    if (props.website?.id === id && version === loadVersion) assign(value)
-  })
+const loadSection = async (section: WebsiteSection, force = false) => {
+  const id = props.website?.id
+  if (!id || !props.visible) return
+  const reads: Array<{read: () => Promise<unknown>; assign: (value: any) => void}> = []
+  const read = <T,>(url: string, assign: (value: T) => void) => reads.push({ read: () => api.get<T>(url), assign })
   if (section === 'domains') read<WebsiteDomain[]>(`/api/domains?website_id=${id}`, value => { domains.value = queue.applyPendingDomains(value) })
   if (section === 'work') {
     read<WebsiteTask[]>(`/api/websites/${id}/tasks`, value => { tasks.value = value })
@@ -257,178 +269,135 @@ const loadSection = async (section: WebsiteSection, force = false, version = loa
     read<EffortRow[]>(`/api/websites/${id}/effort`, value => { efforts.value = value })
     read<Array<{ id: number; name: string }>>('/api/adsense/accounts', value => { adsenseAccounts.value = value })
   }
-  const results = await Promise.allSettled(reads.map(run => run()))
-  if (props.website?.id !== id || version !== loadVersion) return
-  sectionErrors[section] = results.filter((result): result is PromiseRejectedResult => result.status === 'rejected').map(result => result.reason instanceof Error ? result.reason.message : '分区读取失败').join('；')
-  if (!sectionErrors[section]) loadedSections.add(section)
-  sectionLoading[section] = false
+  await session.load(section, reads, force)
 }
 watch(activeSection, section => { void loadSection(section) })
 
 const saveProfile = async () => {
   if (!props.website || saving.value) return
-  saving.value = true
   try {
-    const patch: Record<string, unknown> = {}
-    const addIfChanged = (key: string, value: unknown, current: unknown) => { if (!Object.is(value, current)) patch[key] = value }
     const original = profileOriginal
     if (!original) return
-    addIfChanged('name', profile.name, original.name)
-    addIfChanged('stage', profile.stage, original.stage)
-    addIfChanged('new_site_override', profile.new_site_mode === 'new' ? 1 : profile.new_site_mode === 'regular' ? 0 : null, original.new_site_mode === 'new' ? 1 : original.new_site_mode === 'regular' ? 0 : null)
-    addIfChanged('lifecycle', profile.lifecycle, original.lifecycle)
-    addIfChanged('ownership', profile.ownership, original.ownership)
-    addIfChanged('industry', profile.industry || null, original.industry || null)
-    addIfChanged('computer_name', profile.computer_name || null, original.computer_name || null)
-    addIfChanged('page_count', profile.page_count ?? null, original.page_count ?? null)
-    addIfChanged('gsc_connected', profile.gsc_connected, original.gsc_connected)
-    addIfChanged('potential', profile.potential || null, original.potential || null)
-    addIfChanged('next_action', profile.next_action || null, original.next_action || null)
-    addIfChanged('next_action_due_date', profile.next_action_due_date || null, original.next_action_due_date || null)
-    addIfChanged('next_action_status', profile.next_action_status, original.next_action_status)
-
-    const nextPlatformOther = profile.platform === '其他' ? profile.platform_other || null : null
-    const originalPlatformOther = original.platform === '其他' ? original.platform_other || null : null
-    if (profile.platform !== original.platform || nextPlatformOther !== originalPlatformOther) {
-      patch.platform = profile.platform
-      patch.platform_other = nextPlatformOther
+    const editFields = (draft: typeof profile) => {
+      const { new_site_mode, ...fields } = draft
+      return { ...fields, new_site_override: new_site_mode === 'new' ? 1 : new_site_mode === 'regular' ? 0 : null,
+        daily_clicks: draft.daily_clicks_range ? null : draft.daily_clicks ?? null,
+        daily_clicks_range: draft.daily_clicks_range || null,
+        clicks_updated_date: draft.daily_clicks != null || draft.daily_clicks_range ? draft.clicks_updated_date || null : null }
     }
-
-    const nextAdSenseAccountId = profile.adsense_account_id ?? null
-    const nextAdSenseOpenedDate = profile.adsense_opened_date || null
-    if (profile.adsense_connected !== original.adsense_connected || nextAdSenseAccountId !== (original.adsense_account_id ?? null) || nextAdSenseOpenedDate !== (original.adsense_opened_date || null)) {
-      Object.assign(patch, { adsense_connected: profile.adsense_connected, adsense_account_id: nextAdSenseAccountId, adsense_opened_date: nextAdSenseOpenedDate })
-    }
-
-    const nextClicks = profile.daily_clicks_range ? null : profile.daily_clicks ?? null
-    const nextClicksRange = profile.daily_clicks_range || null
-    const nextClicksDate = profile.daily_clicks != null || profile.daily_clicks_range ? profile.clicks_updated_date || null : null
-    if (nextClicks !== (original.daily_clicks ?? null) || nextClicksRange !== (original.daily_clicks_range || null) || nextClicksDate !== (original.clicks_updated_date || null)) {
-      Object.assign(patch, { daily_clicks: nextClicks, daily_clicks_range: nextClicksRange, clicks_updated_date: nextClicksDate })
-    }
-
-    const nextStats = { calculator_count: profile.calculator_count ?? null, article_count: profile.article_count ?? null }
-    if (nextStats.calculator_count !== (original.calculator_count ?? null) || nextStats.article_count !== (original.article_count ?? null) || profile.page_count !== original.page_count || profile.content_stats_updated_date !== original.content_stats_updated_date) Object.assign(patch, {...nextStats, content_stats_updated_date: profile.content_stats_updated_date || null})
+    const patch = websiteEditPatch(editFields(profile), editFields(original))
     if (!Object.keys(patch).length) return
-    await api.patch(`/api/websites/${props.website.id}`, patch)
-    if (Object.prototype.hasOwnProperty.call(patch, 'adsense_account_id')) {
-      invalidateData('/api/adsense/accounts')
-      await loadAll()
-    }
-    markProfileClean(); notifyChanged(); ElMessage.success('经营信息已保存')
+    const id = props.website.id, submitted = JSON.parse(JSON.stringify(profile)) as typeof profile
+    await session.save('profile', () => api.patch(`/api/websites/${id}`, patch), () => {
+      if (Object.prototype.hasOwnProperty.call(patch, 'adsense_account_id')) invalidateData('/api/adsense/accounts')
+      profileOriginal = submitted; notifyChanged(); ElMessage.success('经营信息已保存')
+    })
   }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '经营信息保存失败') }
-  finally { saving.value = false }
 }
 const clearExactClicks = (range: string) => { if (range) profile.daily_clicks = undefined }
 const addDomain = async () => {
-  if (!props.website || savingDomain.value) return
-  savingDomain.value = true
-  try { const created = await api.post<WebsiteDomain>('/api/domains', { ...domainForm, website_id: props.website.id, service_type: '网站', status: '在线', domain_role: '备用域名' }); domains.value.push(created); Object.assign(domainForm, { domain: '', registrar: '', registrar_date: '', expiry_date: '' }); markDraftsClean('domain'); notifyChanged(); ElMessage.success('域名已关联') }
+  if (!props.website) return
+  const id = props.website.id
+  try { await session.save('domain', () => api.post<WebsiteDomain>('/api/domains', { ...domainForm, website_id: id, service_type: '网站', status: '在线', domain_role: '备用域名' }), (created, unchanged) => { domains.value.push(created); if (unchanged) Object.assign(domainForm, { domain: '', registrar: '', registrar_date: '', expiry_date: '' }); notifyChanged(); ElMessage.success('域名已关联') }) }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '域名关联失败') }
-  finally { savingDomain.value = false }
 }
-const setPrimary = async (domain: WebsiteDomain) => { try { await api.put(`/api/domains/${domain.id}`, { domain_role: '主域名' }); await loadAll(); notifyChanged() } catch (e) { ElMessage.error(e instanceof Error ? e.message : '主域名更新失败') } }
+const setPrimary = async (domain: WebsiteDomain) => {
+  try { await session.save('primary-domain', () => api.put(`/api/domains/${domain.id}`, { domain_role: '主域名' }), async () => { await loadAll(); notifyChanged() }) }
+  catch (e) { ElMessage.error(e instanceof Error ? e.message : '主域名更新失败') }
+}
 const removeDomain = async (id: number) => {
-  try { await confirmAction('删除这个域名？网站经营记录会保留。', '删除域名', { confirmButtonText: '删除域名' }); await api.delete(`/api/domains/${id}`); await loadAll(); notifyChanged() }
+  try { await session.save('remove-domain', async () => { await confirmAction('删除这个域名？网站经营记录会保留。', '删除域名', { confirmButtonText: '删除域名' }); await api.delete(`/api/domains/${id}`) }, async () => { await loadAll(); notifyChanged() }) }
   catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '域名删除失败') }
 }
 const checkDomain = async (domain: WebsiteDomain) => {
   if (checkingDomainId.value != null) return
   checkingDomainId.value = domain.id
-  try { const result = await api.post<{ status: '在线' | '离线' }>('/api/domains/check', { domain: domain.domain }); const checkedAt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); queue.enqueue({ type: 'domain_patch', id: domain.id, fields: { status: result.status, last_status_check_at: checkedAt } }); Object.assign(domain, { status: result.status, last_status_check_at: checkedAt }); const synced = await queue.flush(); notifyChanged(); ElMessage[synced.pending ? 'warning' : 'success'](synced.pending ? '检查完成，状态已保存在本机待同步' : `${domain.domain}：${result.status}`) }
+  try { await session.save('domain-check', async () => { const result = await api.post<{ status: '在线' | '离线' }>('/api/domains/check', { domain: domain.domain }); const checkedAt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()); queue.enqueue({ type: 'domain_patch', id: domain.id, fields: { status: result.status, last_status_check_at: checkedAt } }); Object.assign(domain, { status: result.status, last_status_check_at: checkedAt }); const synced = await queue.flush(); return synced }, synced => { notifyChanged(); ElMessage[synced.pending ? 'warning' : 'success'](synced.pending ? '检查完成，状态已保存在本机待同步' : `${domain.domain}：${domain.status}`) }) }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '域名检查失败') }
   finally { checkingDomainId.value = null }
 }
 const addTask = async () => {
-  if (!props.website || savingTask.value) return
-  savingTask.value = true
-  try {
-    const baseline = baselineClicks.value == null ? undefined : { period_start: baselineRange.value[0], period_end: baselineRange.value[1], clicks: baselineClicks.value }
-    const task = await api.post<WebsiteTask>(`/api/websites/${props.website.id}/tasks`, { ...taskForm, baseline })
-    tasks.value.unshift(task); Object.assign(taskForm, { task_type: '内容', title: '', description: '', review_delay_days: 28, review_window_days: 28 }); baselineRange.value = []; baselineClicks.value = undefined; markDraftsClean('task'); notifyChanged()
-  }
-  catch (e) { ElMessage.error(e instanceof Error ? e.message : '任务添加失败') }
-  finally { savingTask.value = false }
+  if (!props.website) return
+  const id = props.website.id
+  const baseline = baselineClicks.value == null ? undefined : { period_start: baselineRange.value[0], period_end: baselineRange.value[1], clicks: baselineClicks.value }
+  try { await session.save('task', () => api.post<WebsiteTask>(`/api/websites/${id}/tasks`, { ...taskForm, baseline }), (task, unchanged) => {
+    tasks.value.unshift(task); if (unchanged) { Object.assign(taskForm, { task_type: '内容', title: '', description: '', review_delay_days: 28, review_window_days: 28 }); baselineRange.value = []; baselineClicks.value = undefined }; notifyChanged()
+  }) } catch (e) { ElMessage.error(e instanceof Error ? e.message : '任务添加失败') }
 }
 const updateTask = async (task: WebsiteTask, fields: Record<string, unknown>) => {
-  if (!props.website) return
-  try { await api.put(`/api/websites/${props.website.id}/tasks/${task.id}`, fields); await loadAll(); notifyChanged() }
+  const id = props.website?.id
+  if (!id) return
+  try { await session.save('task-status', () => api.put(`/api/websites/${id}/tasks/${task.id}`, fields), async () => { await loadAll(); notifyChanged() }) }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '任务更新失败') }
 }
 const editTask = (task: WebsiteTask) => {
   editingTask.value = task
   Object.assign(taskEdit, { title: task.title, description: task.description || '', completion_summary: task.completion_summary || '', result_url: task.result_url || '', due_at: task.due_at || '', review_delay_days: task.review_delay_days, review_window_days: task.review_window_days })
-  taskEditBaseline.value = JSON.stringify(taskEdit)
   taskDialogVisible.value = true
+  session.clean('task-edit')
 }
 const saveTaskEdit = async () => {
   if (!props.website || !editingTask.value || savingTask.value) return
-  savingTask.value = true
   try {
     const body: Record<string, unknown> = { title: taskEdit.title, description: taskEdit.description || null, completion_summary: taskEdit.completion_summary || null, result_url: taskEdit.result_url || null, due_at: taskEdit.due_at || null }
     if (editingTask.value.task_type === 'SEO' && !editingTask.value.completed_at) Object.assign(body, { review_delay_days: taskEdit.review_delay_days, review_window_days: taskEdit.review_window_days })
-    await api.put(`/api/websites/${props.website.id}/tasks/${editingTask.value.id}`, body)
-    taskDialogVisible.value = false; await loadAll(); notifyChanged()
+    const id = props.website.id, taskId = editingTask.value.id
+    await session.save('task-edit', () => api.put(`/api/websites/${id}/tasks/${taskId}`, body), async (_value, unchanged) => { if (unchanged) taskDialogVisible.value = false; await loadAll(); notifyChanged() })
   } catch (e) { ElMessage.error(e instanceof Error ? e.message : '任务保存失败') }
-  finally { savingTask.value = false }
 }
 const removeTask = async (task: WebsiteTask) => {
-  if (!props.website) return
-  try { await confirmAction(`删除任务“${task.title}”？`, '删除任务', { confirmButtonText: '删除' }); await api.delete(`/api/websites/${props.website.id}/tasks/${task.id}`); await loadAll(); notifyChanged() }
+  const id = props.website?.id
+  if (!id) return
+  try { await session.save('remove-task', async () => { await confirmAction(`删除任务“${task.title}”？`, '删除任务', { confirmButtonText: '删除' }); await api.delete(`/api/websites/${id}/tasks/${task.id}`) }, async () => { await loadAll(); notifyChanged() }) }
   catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '任务删除失败') }
 }
 const addOperation = async () => {
-  if (!props.website || savingOperation.value) return
-  savingOperation.value = true
-  try { const row = await api.post<OperationRow>(`/api/websites/${props.website.id}/operations`, operationForm); operations.value = [row, ...operations.value.filter(item => item.id !== row.id)]; markDraftsClean('operation'); notifyChanged() }
+  if (!props.website) return
+  const id = props.website.id
+  try { await session.save('operation', () => api.post<OperationRow>(`/api/websites/${id}/operations`, operationForm), row => { operations.value = [row, ...operations.value.filter(item => item.id !== row.id)]; notifyChanged() }) }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '操作记录保存失败') }
-  finally { savingOperation.value = false }
 }
 const removeOperation = async (item: OperationRow) => {
-  if (!props.website) return
-  try { await confirmAction(`删除 ${item.operation_date} 的 ${item.operation_kind} 操作记录？`, '删除操作记录', { confirmButtonText: '删除' }); await api.delete(`/api/websites/${props.website.id}/operations/${item.id}`); operations.value = operations.value.filter(row => row.id !== item.id); notifyChanged() }
+  const id = props.website?.id
+  if (!id) return
+  try { await session.save('remove-operation', async () => { await confirmAction(`删除 ${item.operation_date} 的 ${item.operation_kind} 操作记录？`, '删除操作记录', { confirmButtonText: '删除' }); await api.delete(`/api/websites/${id}/operations/${item.id}`) }, () => { operations.value = operations.value.filter(row => row.id !== item.id); notifyChanged() }) }
   catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '操作记录删除失败') }
 }
-const editNote = (item?: AiNote) => { editingNoteId.value = item?.id || null; noteForm.kind = item?.kind || 'AI提示词'; noteForm.content = item?.content || ''; noteBaseline.value = JSON.stringify(noteForm); noteDialogVisible.value = true }
+const editNote = (item?: AiNote) => { editingNoteId.value = item?.id || null; noteForm.kind = item?.kind || 'AI提示词'; noteForm.content = item?.content || ''; noteDialogVisible.value = true; session.clean('note') }
 const saveNote = async () => {
-  if (!props.website || savingNote.value) return
-  savingNote.value = true
-  try { const path = `/api/websites/${props.website.id}/ai-notes`; await (editingNoteId.value ? api.put(`${path}/${editingNoteId.value}`, noteForm) : api.post(path, noteForm)); noteDialogVisible.value = false; notes.value = await api.get(path); notifyChanged() }
+  if (!props.website) return
+  const path = `/api/websites/${props.website.id}/ai-notes`, noteId = editingNoteId.value
+  try { await session.save('note', async () => { await (noteId ? api.put(`${path}/${noteId}`, noteForm) : api.post(path, noteForm)); return api.get<AiNote[]>(path) }, (value, unchanged) => { if (unchanged) noteDialogVisible.value = false; notes.value = value; notifyChanged() }) }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '记录保存失败') }
-  finally { savingNote.value = false }
 }
 const archiveNote = async (item: AiNote) => {
-  if (!props.website) return
-  try { await confirmAction(`归档这条${item.kind}记录？`, '归档记录', { confirmButtonText: '归档' }); await api.post(`/api/websites/${props.website.id}/ai-notes/${item.id}`); notes.value = notes.value.filter(note => note.id !== item.id); notifyChanged() }
+  const id = props.website?.id
+  if (!id) return
+  try { await session.save('archive-note', async () => { await confirmAction(`归档这条${item.kind}记录？`, '归档记录', { confirmButtonText: '归档' }); await api.post(`/api/websites/${id}/ai-notes/${item.id}`) }, () => { notes.value = notes.value.filter(note => note.id !== item.id); notifyChanged() }) }
   catch (e) { if (!isDismissed(e)) ElMessage.error(e instanceof Error ? e.message : '记录归档失败') }
 }
 const showNoteHistory = async (item: AiNote) => {
   if (!props.website) return
-  try { noteHistory.value = await api.get(`/api/websites/${props.website.id}/ai-notes/${item.id}`); historyVisible.value = true }
-  catch (e) { ElMessage.error(e instanceof Error ? e.message : '记录历史读取失败') }
+  const id = props.website.id
+  await session.load('note-history', [{ read: () => api.get<NoteVersion[]>(`/api/websites/${id}/ai-notes/${item.id}`), assign: value => { noteHistory.value = value; historyVisible.value = true } }], true)
+  if (session.errors['note-history']) ElMessage.error(session.errors['note-history'])
 }
 const saveIncome = async () => {
-  if (!props.website || savingIncome.value) return
-  savingIncome.value = true
-  try { await api.post(`/api/websites/${props.website.id}/income`, incomeForm); incomes.value = await api.get(`/api/websites/${props.website.id}/income`); markDraftsClean('income'); notifyChanged() }
+  if (!props.website) return
+  const path = `/api/websites/${props.website.id}/income`
+  try { await session.save('income', async () => { await api.post(path, incomeForm); return api.get<IncomeRow[]>(path) }, value => { incomes.value = value; notifyChanged() }) }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '收入保存失败') }
-  finally { savingIncome.value = false }
 }
 const saveEffort = async () => {
-  if (!props.website || savingEffort.value) return
-  savingEffort.value = true
-  try { await api.post(`/api/websites/${props.website.id}/effort`, effortForm); efforts.value = await api.get(`/api/websites/${props.website.id}/effort`); markDraftsClean('effort'); notifyChanged() }
+  if (!props.website) return
+  const path = `/api/websites/${props.website.id}/effort`
+  try { await session.save('effort', async () => { await api.post(path, effortForm); return api.get<EffortRow[]>(path) }, value => { efforts.value = value; notifyChanged() }) }
   catch (e) { ElMessage.error(e instanceof Error ? e.message : '投入时间保存失败') }
-  finally { savingEffort.value = false }
 }
-watch(() => [props.visible, props.website?.id], ([open]) => {
-  discardAccepted.value = false
+watch([() => props.visible, () => props.website?.id], ([open]) => {
+  session.begin(open ? props.website?.id : undefined)
   profileWebsiteId = undefined
-  loadVersion++
-  loadedSections.clear()
-  for (const key of Object.keys(sectionErrors)) delete sectionErrors[key]
-  for (const key of Object.keys(sectionLoading)) delete sectionLoading[key]
   noteDialogVisible.value = false; taskDialogVisible.value = false; historyVisible.value = false
   Object.assign(taskForm, { task_type: '内容', title: '', description: '', review_delay_days: 28, review_window_days: 28 })
   Object.assign(domainForm, { domain: '', registrar: '', registrar_date: '', expiry_date: '' })

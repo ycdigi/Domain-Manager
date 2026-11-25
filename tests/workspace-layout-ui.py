@@ -1,7 +1,7 @@
 """Shared heading and toolbar layout across every workspace at desktop/tablet/mobile widths."""
 import base64,json
 from playwright.sync_api import sync_playwright,expect
-routes={'home':'网站总表','domains':'域名资产','resources':'部署与账号','adsense':'AdSense','finance':'收入与投入','work':'待处理','batches':'网站批次','batches/1':'布局验收批次','monitor':'网站监控','data':'数据管理'}
+routes={'home':'网站总表','website-management':'网站管理','domains':'域名资产','resources':'部署与账号','adsense':'AdSense','finance':'收入与投入','work':'待处理','batches':'网站批次','batches/1':'布局验收批次','monitor':'网站监控','data':'数据管理'}
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
  page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
@@ -39,4 +39,4 @@ with sync_playwright() as p:
     page.screenshot(path='/tmp/domain-layout-'+route.replace('/','-')+'-mobile.png',full_page=True)
  assert not errors,errors
  browser.close()
-print('All 10 workspace routes passed at 5 viewport widths')
+print('All 11 workspace routes passed at 5 viewport widths')

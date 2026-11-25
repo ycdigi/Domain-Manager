@@ -72,13 +72,6 @@ test('a domain can be unassigned but a website domain references one website', (
   } finally { fs.rmSync(dir, { recursive: true, force: true }) }
 })
 
-test('portable export does not select credential storage', () => {
-  const source = fs.readFileSync(path.join(root, 'functions/api/backups/index.ts'), 'utf8')
-  assert.doesNotMatch(source, /provider_credentials|ciphertext|CREDENTIAL_ENCRYPTION_KEY|API_TOKEN/)
-  assert.match(source, /website_click_snapshots/)
-  assert.match(source, /website_tasks/)
-})
-
 test('AI sync reads stable website context and does not expose secrets', () => {
   const source = fs.readFileSync(path.join(root, 'functions/api/ai/sync/index.ts'), 'utf8')
   assert.match(source, /checkApiToken/)

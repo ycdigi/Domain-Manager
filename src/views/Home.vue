@@ -83,7 +83,7 @@
             个网站
           </caption>
           <colgroup>
-            <col v-for="col in columns" :key="col.key" :style="{ width: col.width + 'px' }" />
+            <col v-for="col in columns" :key="col.key" :style="col.key === 'identity' ? undefined : { width: col.width + 'px' }" />
           </colgroup>
           <thead>
             <tr>
@@ -132,14 +132,18 @@
                 </div>
               </td>
               <td>
-                <button
-                  class="site-cell site-platform-icon"
-                  :aria-label="`技术栈：${platformLabel(site)}，编辑网站`"
+                <el-select
+                  class="site-stack-select"
                   :title="platformLabel(site)"
-                  @click="openSite(site)"
+                  :model-value="platformLabel(site)"
+                  :aria-label="`技术栈：${site.name}`"
+                  :disabled="busy || loading || Boolean(metricEdit)"
+                  filterable allow-create default-first-option
+                  @change="(value: string) => changePlatform(site, value)"
                 >
-                  <TechStackIcon :platform="site.platform" />
-                </button>
+                  <template #label><TechStackIcon :platform="site.platform" /><span class="sr-only">{{ platformLabel(site) }}</span></template>
+                  <el-option v-for="value in [...new Set([...platforms, platformLabel(site)])]" :key="value" :label="value" :value="value" />
+                </el-select>
               </td>
               <td v-for="key in countKeys" :key="key">
                 <button
@@ -147,13 +151,15 @@
                   :title="
                     site.content_stats_updated_date ? `统计日期：${site.content_stats_updated_date}` : '未记录统计日期'
                   "
-                  @click="openSite(site, 'content')"
+                  :aria-label="`编辑${metricLabels[key]}：${site.name}`"
+                  :disabled="busy || loading"
+                  @click="openMetric(site, key, $event)"
                 >
                   {{ site[key] ?? '—' }}
                 </button>
               </td>
               <td>
-                <button class="site-cell" :title="site.clicks_updated_date || '未记录统计日期'" @click="openSite(site, 'content')">
+                <button class="site-cell" :title="site.clicks_updated_date || '未记录统计日期'" :aria-label="`编辑日点击：${site.name}`" :disabled="busy || loading" @click="openMetric(site, 'daily_clicks', $event)">
                   {{ clickLabel(site) }}
                 </button>
               </td>
@@ -173,20 +179,21 @@
                 ><button v-else class="site-cell" @click="openSite(site, 'deployment')">—</button>
               </td>
               <td>
-                <button
-                  class="site-cell"
-                  :disabled="!site.hosting?.ip_address"
-                  title="复制服务器 IP"
-                  @click="copyIp(site)"
+                <el-select class="site-inline-select" :model-value="site.computer_name || ''" :aria-label="`电脑：${site.name}`" :disabled="busy || loading || Boolean(metricEdit)" filterable allow-create clearable default-first-option @change="(value: string) => changeComputer(site, value)">
+                  <el-option v-for="name in computerNames" :key="name" :label="name" :value="name" />
+                </el-select>
+              </td>
+              <td>
+                <el-select
+                  class="site-stage-select"
+                  :model-value="site.stage"
+                  :disabled="busy || loading || Boolean(metricEdit)"
+                  :aria-label="`阶段：${site.name}`"
+                  title="选择后自动保存阶段"
+                  @change="(stage: WebsiteStage) => changeStage(site, stage)"
                 >
-                  {{ site.hosting?.ip_address || '—' }}
-                </button>
-              </td>
-              <td>
-                <button class="site-cell" @click="openSite(site)">{{ site.computer_name || '—' }}</button>
-              </td>
-              <td>
-                <button class="site-cell" @click="openSite(site)">{{ site.stage }}</button>
+                  <el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" />
+                </el-select>
               </td>
               <td>
                 <div class="site-actions">
@@ -254,6 +261,7 @@
       :submitting="busy"
       @submit="assignSelectedBatch"
     />
+    <WebsiteMetricEditor v-if="metricEdit" :key="`${metricEdit.site.id}-${metricEdit.field}`" :website="metricEdit.site" :field="metricEdit.field" :label="metricLabels[metricEdit.field]" :anchor="metricEdit.anchor" :busy="busy" @save="saveMetric" @cancel="closeMetric" />
     <el-dialog v-model="createVisible" title="新增网站" width="min(560px,94vw)"
       ><el-form label-position="top" @submit.prevent="createSite"
         ><el-form-item v-for="field in createFields" :key="field.key" :label="field.label"
@@ -264,11 +272,14 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, reactive, ref, watch, onActivated } from 'vue'
+import { websiteEditPatch } from '../../shared/website-edits'
+import { computed, reactive, ref, shallowRef, watch, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, CopyDocument, MoreFilled } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
+import WebsiteMetricEditor from '../components/WebsiteMetricEditor.vue'
+import { sortComputerNames } from '../utils/computer-options'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
 import DomainFavicon from '../components/DomainFavicon.vue'
@@ -296,18 +307,20 @@ const ownerships = ['自营网站', '企业客户网站', '未分类']
 const countKeys = ['page_count', 'calculator_count', 'article_count'] as const
 const columns = [
   { key: 'identity', label: '网站 / 主域名', width: 245 },
-  { key: 'platform', label: '技术栈', width: 80 },
-  { key: 'page_count', label: '总页面数', width: 100 },
-  { key: 'calculator_count', label: '计算器数量', width: 110 },
-  { key: 'article_count', label: '文章数量', width: 100 },
-  { key: 'clicks', label: '日点击', width: 100 },
-  { key: 'provider', label: '服务商', width: 120 },
-  { key: 'github', label: 'GitHub', width: 160 },
-  { key: 'ip', label: '服务器 IP', width: 150 },
-  { key: 'computer', label: '电脑', width: 130 },
-  { key: 'stage', label: '阶段', width: 90 },
-  { key: 'actions', label: '操作', width: 126 }
+  { key: 'platform', label: '技术栈', width: 76 },
+  { key: 'page_count', label: '总页面数', width: 82 },
+  { key: 'calculator_count', label: '计算器数量', width: 92 },
+  { key: 'article_count', label: '文章数量', width: 82 },
+  { key: 'clicks', label: '日点击', width: 86 },
+  { key: 'provider', label: '服务商', width: 112 },
+  { key: 'github', label: 'GitHub', width: 144 },
+  { key: 'computer', label: '电脑', width: 150 },
+  { key: 'stage', label: '阶段', width: 104 },
+  { key: 'actions', label: '操作', width: 116 }
 ]
+type MetricField = (typeof countKeys)[number] | 'daily_clicks'
+const metricLabels: Record<MetricField, string> = { page_count: '总页面数', calculator_count: '计算器数量', article_count: '文章数量', daily_clicks: '日点击' }
+const metricEdit = shallowRef<{ site: Website; field: MetricField; anchor: HTMLElement }>()
 const batches = ref<Batch[]>([])
 const websites = ref<Website[]>([])
 const loading = ref(false)
@@ -319,7 +332,7 @@ const selectedIds = reactive(new Set<number>())
 const bulkStage = ref<WebsiteStage>('待评估')
 const batchVisible = ref(false)
 const createVisible = ref(false)
-const sortKey = computed({ get: () => String(route.query.sort || ''), set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
+const sortKey = computed({ get: () => columns.some(column => column.key !== 'actions' && column.key === route.query.sort) ? String(route.query.sort) : '', set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
 const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')
 const filterLabels: Record<string, string> = { ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', new: '新站', view: '状态', q: '搜索' }
 const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'new' ? '是' : key === 'view' ? '停止经营' : route.query[key]}` })))
@@ -332,6 +345,7 @@ const view = computed(() => (route.query.view === 'stopped' ? 'stopped' : 'activ
 const providerNames = computed(() =>
   [...new Set(websites.value.map((s) => s.hosting?.provider_name).filter((s): s is string => Boolean(s)))].sort()
 )
+const computerNames = computed(() => sortComputerNames(websites.value.map(site => site.computer_name)))
 const primaryDomain = (site: Website) => site.domains.find((d) => d.is_primary) || site.domains[0]
 const platformLabel = (site: Website) => (site.platform === '其他' ? site.platform_other || '其他' : site.platform)
 const safeExternal = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
@@ -360,7 +374,6 @@ const sortValue = (s: Website, key: string): string | number =>
             -1,
           provider: s.hosting?.provider_name || '',
           github: s.repository?.resource_url || '',
-          ip: s.hosting?.ip_address || '',
           computer: s.computer_name || '',
           stage: stages.indexOf(s.stage)
         } as Record<string, string | number>
@@ -454,6 +467,35 @@ const run = async (action: () => Promise<void>) => {
     busy.value = false
   }
 }
+const saveInline = (site: Website, fields: Record<string, unknown>) => {
+  if (loading.value || Object.entries(fields).every(([key, value]) => (site[key as keyof Website] ?? null) === value)) return
+  return run(async () => {
+    await updateWebsite(site.id, websiteEditPatch(fields, site))
+    ElMessage.success('资料已保存')
+  })
+}
+const changeStage = (site: Website, stage: WebsiteStage) => saveInline(site, { stage })
+const changeComputer = (site: Website, value: string | undefined) => saveInline(site, { computer_name: value?.trim() || null })
+const changePlatform = (site: Website, value: string) => {
+  const platform = platforms.includes(value) ? value : '其他'
+  return saveInline(site, { platform, platform_other: platform === '其他' && value !== '其他' ? value : null })
+}
+const openMetric = (site: Website, field: MetricField, event: MouseEvent) => {
+  if (busy.value || loading.value) return
+  if (metricEdit.value) { ElMessage.warning('请先保存或取消当前编辑'); return }
+  metricEdit.value = { site, field, anchor: event.currentTarget as HTMLElement }
+}
+const closeMetric = () => { const anchor = metricEdit.value?.anchor; metricEdit.value = undefined; anchor?.focus() }
+watch(() => route.fullPath, () => { if (metricEdit.value) closeMetric() })
+const saveMetric = (fields: Record<string, unknown>) => {
+  const edit = metricEdit.value
+  if (!edit) return
+  return run(async () => {
+    if (Object.keys(fields).length) await updateWebsite(edit.site.id, fields)
+    closeMetric()
+    ElMessage.success('资料已保存')
+  })
+}
 const bulk = (fields: Record<string, unknown>) =>
   run(async () => {
     await bulkUpdateWebsites([...selectedIds], fields)
@@ -480,14 +522,6 @@ const assignSelectedBatch = (payload: BatchAssignmentPayload) =>
     selectedIds.clear()
     ElMessage.success('已加入批次')
   })
-const copyIp = async (site: Website) => {
-  try {
-    await copyText(site.hosting?.ip_address || '')
-    ElMessage.success('服务器 IP 已复制')
-  } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '复制失败')
-  }
-}
 const copySite = async (site: Website) => {
   if (copying.value) return
   copying.value = site.id

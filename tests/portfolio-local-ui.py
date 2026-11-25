@@ -91,9 +91,39 @@ try:
         page.add_init_script(f"localStorage.setItem('auth_token', {json.dumps(token)})")
         page.goto(BASE + '/home')
         page.wait_for_load_state('networkidle')
-        expect(page.locator('.site-table thead th')).to_have_count(12)
-        expect(page.locator('.site-table thead')).to_contain_text('服务器 IP')
+        expect(page.locator('.site-table thead th')).to_have_count(11)
+        expect(page.locator('.site-table thead')).not_to_contain_text('服务器 IP')
         expect(page.locator('.site-table thead')).not_to_contain_text('经营场景')
+        # Inline stage selection persists through the real API and a browser reload.
+        row = page.locator('.site-table tbody tr').filter(has=page.get_by_role('button', name=f'验收网站 A {stamp}', exact=True))
+        stage = row.get_by_role('combobox', name=f'阶段：验收网站 A {stamp}', exact=True)
+        row.locator('.site-stage-select .el-select__wrapper').click()
+        with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as stage_response:
+            page.get_by_role('option', name='增长', exact=True).click()
+        assert stage_response.value.ok, stage_response.value.text()
+        assert json.loads(stage_response.value.request.post_data) == {'stage': '增长'}
+        expect(stage).to_be_enabled()
+        assert call(prefix)['stage'] == '增长'
+        page.reload();page.wait_for_load_state('networkidle')
+        expect(row.locator('.site-stage-select')).to_contain_text('增长')
+        expect(page.locator('.website-detail-drawer')).not_to_be_visible()
+        # Quick edits use the same field validation and persisted records as details.
+        for label,option in [(f'技术栈：验收网站 A {stamp}','Next.js'),(f'电脑：验收网站 A {stamp}','Macbook Pro')]:
+            row.locator('.el-select').filter(has=page.get_by_role('combobox',name=label,exact=True)).locator('.el-select__wrapper').click()
+            page.get_by_role('option',name=option,exact=True).click()
+            expect(row.get_by_role('combobox',name=label,exact=True)).to_be_enabled()
+        for label,key,value in [('总页面数','page_count','20'),('计算器数量','calculator_count','0'),('文章数量','article_count','9'),('日点击','daily_clicks','0')]:
+            row.get_by_role('button',name=f'编辑{label}：验收网站 A {stamp}',exact=True).click()
+            editor=page.get_by_role('dialog',name=f'编辑{label}',exact=True)
+            editor.get_by_role('spinbutton',name=label,exact=True).fill(value)
+            editor.get_by_label('统计日期',exact=True).fill(today.isoformat())
+            editor.get_by_role('button',name='保存',exact=True).click()
+            expect(editor).not_to_be_visible()
+            assert call(prefix)[key]==int(value)
+        page.reload();page.wait_for_load_state('networkidle')
+        saved=call(prefix)
+        assert (saved['platform'],saved['computer_name'],saved['page_count'],saved['calculator_count'],saved['article_count'],saved['daily_clicks'])==('Next.js','Macbook Pro',20,0,9,0)
+        assert saved['clicks_updated_date']==today.isoformat() and saved['content_stats_updated_date']==today.isoformat()
         page.get_by_role('button', name=f'验收网站 A {stamp}', exact=True).click()
         profile_section = page.locator('.website-detail-drawer')
         new_site_select = profile_section.locator('.el-form-item').filter(has_text='新站分类').locator('.el-select__wrapper')

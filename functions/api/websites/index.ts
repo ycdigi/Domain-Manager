@@ -2,16 +2,13 @@ import { cacheDomainFavicon } from '../../domain/favicons'
 import type { Env } from '../../types'
 import { checkAuth } from '../../utils/auth'
 import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
-import { validateWebsiteFields } from '../../domain/website-validation'
+import { websiteFields } from '../../../shared/website-edits'
+import { prepareWebsiteEdit, WebsiteEditError } from '../../domain/website-edits'
 import { websiteIncomeRowsCte } from '../../domain/website-income'
 import { isWebsiteNew } from '../../../shared/website-newness'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
-const siteFields = new Set(['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'page_count'])
-
-const validSiteFields = (fields: Record<string, unknown>) => {
-    return validateWebsiteFields(fields)
-}
+const siteFields = new Set<string>(websiteFields)
 
 export const onRequestGet: PagesFunction<Env> = async context => {
     const authError = await checkAuth(context); if (authError) return authError
@@ -100,9 +97,7 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const body = await context.request.json() as Record<string, unknown>
         if (Object.keys(body).some(key => key !== 'domain' && !siteFields.has(key))) return json(null, 400, '网站创建包含不支持的字段')
         const domain = body.domain as Record<string, unknown> | undefined
-        const fields = Object.fromEntries(Object.entries(body).filter(([key]) => siteFields.has(key)))
-        const fieldError = validSiteFields(fields)
-        if (fieldError) return json(null, 400, fieldError)
+        const fields = await prepareWebsiteEdit(context.env.DB, Object.fromEntries(Object.entries(body).filter(([key]) => siteFields.has(key))), 'human')
         if (!domain || typeof domain !== 'object') return json(null, 400, '新建网站必须同时提供一个域名')
         const domainError = validateDomain({ ...domain, status: domain.status || '在线' } as never)
         if (domainError) return json(null, 400, domainError)
@@ -112,8 +107,6 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const domainName = String(domain.domain)
         const duplicate = await db.prepare("SELECT id FROM domains WHERE lower(rtrim(domain, '.')) = ? LIMIT 1").bind(normalizeDomain(domainName)).first()
         if (duplicate) return json(null, 409, '该域名已存在')
-        const adsenseId = fields.adsense_account_id
-        if (adsenseId != null && !await db.prepare('SELECT id FROM adsense_accounts WHERE id = ?').bind(adsenseId).first()) return json(null, 400, 'AdSense 账号不存在')
         const siteColumns = ['name', ...Object.keys(fields).filter(key => key !== 'name')]
         const siteValues = [name, ...siteColumns.slice(1).map(key => fields[key])]
         const placeholders = siteColumns.map(() => '?').join(', ')
@@ -131,5 +124,5 @@ export const onRequestPost: PagesFunction<Env> = async context => {
         const domains = await db.prepare('SELECT * FROM domains WHERE website_id = ?').bind(websiteId).all()
         if (context.waitUntil) context.waitUntil(cacheDomainFavicon(context.env.DB, Number((domains.results?.[0] as {id:number})?.id)))
         return json({ website: created, domains: domains.results || [] }, 201, '网站已创建')
-    } catch (error) { return json(null, 500, error instanceof Error ? error.message : '网站创建失败') }
+    } catch (error) { return json(null, error instanceof WebsiteEditError ? error.status : 500, error instanceof Error ? error.message : '网站创建失败') }
 }

@@ -61,3 +61,18 @@ test('explicit website account link preserves ownership without inventing deploy
   assert.equal(store.sql('SELECT COUNT(*) AS n FROM provider_resources')[0].n, 0)
   assert.equal((await call(accounts.onRequestGet, ctx('/api/resources/accounts')))[0].linked_website_count, 1)
 })
+
+test('a non-primary binding cannot clear the current primary through a truthy flag', async () => {
+ const websiteId=site('flags'),accountId=await account('flags'),first=await resource(accountId,'first'),second=await resource(accountId,'second')
+ await call(links.onRequestPost,ctx('/api/resources/links',{website_id:websiteId,resource_id:first,role:'代码仓库',is_primary:true},'POST'),201)
+ await call(links.onRequestPost,ctx('/api/resources/links',{website_id:websiteId,resource_id:second,role:'代码仓库',is_primary:'0'},'POST'),201)
+ assert.deepEqual(store.sql('SELECT resource_id FROM website_resources WHERE is_primary=1'),[{resource_id:first}])
+})
+
+test('resource binding change keeps the previous primary when the replacement fails', async () => {
+ const websiteId=site('rollback'),accountId=await account('rollback'),first=await resource(accountId,'first'),second=await resource(accountId,'second')
+ await call(links.onRequestPost,ctx('/api/resources/links',{website_id:websiteId,resource_id:first,role:'代码仓库',is_primary:true,memo:'keep'},'POST'),201)
+ store.sql(`CREATE TRIGGER reject_link BEFORE INSERT ON website_resources WHEN NEW.resource_id=${second} BEGIN SELECT RAISE(ABORT,'link failure'); END;`)
+ await call(links.onRequestPost,ctx('/api/resources/links',{website_id:websiteId,resource_id:second,role:'代码仓库',is_primary:true},'POST'),409)
+ assert.deepEqual(store.sql('SELECT resource_id,is_primary,memo FROM website_resources'),[{resource_id:first,is_primary:1,memo:'keep'}])
+})

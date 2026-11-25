@@ -93,6 +93,9 @@ export const backupColumns: Record<string, readonly string[]> = {
     "clicks",
     "created_at"
   ],
+  "gsc_accounts": ["id", "name", "email", "created_at"],
+  "website_gsc_accounts": ["website_id", "account_id"],
+  "website_work_records": ["id", "website_id", "kind", "request_id", "created_at", "voided_at"],
   "website_operations": [
     "id",
     "website_id",

@@ -5,10 +5,12 @@ site=lambda id,name:dict(id=id,name=name,stage='验证',lifecycle='active',owner
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True);page=browser.new_page(viewport={'width':1440,'height':1000})
  token=base64.b64encode(json.dumps({'token':'fixture'}).encode()).decode();page.add_init_script(f"localStorage.setItem('auth_token',{json.dumps(token)})")
- state=dict(fail_tasks=False,reads=[]);pending=[]
+ state=dict(fail_tasks=False,reads=[]);pending=[];pending_profile=[];pending_history=[]
  def handle(route):
   path=route.request.url.split('?')[0].split('/api/')[-1];state['reads'].append(path);code=200;data=[];message='成功'
   if path=='websites/1/tasks' and state.get('delay_tasks') and route.request.method=='GET':pending.append(route);return
+  if path=='websites/1' and state.get('delay_profile') and route.request.method=='PATCH':pending_profile.append(route);return
+  if path=='websites/1/ai-notes/1' and state.get('delay_history'):pending_history.append(route);return
   if path=='websites':data=[site(1,'First'),site(2,'Second')]
   elif path=='monitor':data=dict(monitors=[],incidents=[],unread_count=0,runner=None)
   elif path=='work-queue':data=dict(counts=dict(total=0),items=[])
@@ -51,6 +53,21 @@ with sync_playwright() as p:
  drawer.get_by_role('button',name='新增记录',exact=True).click();note=page.get_by_role('dialog',name='新增记录',exact=True);note.get_by_role('textbox',name='内容',exact=True).fill('Note draft');note.get_by_role('button',name='取消',exact=True).click();cancel();expect(note.get_by_role('textbox',name='内容',exact=True)).to_have_value('Note draft');note.get_by_role('button',name='取消',exact=True).click();page.get_by_role('dialog',name='离开编辑').get_by_role('button',name='放弃修改',exact=True).click()
  expect(note).not_to_be_visible()
  page.screenshot(path='/tmp/domain-manager-detail-work.png',full_page=True)
+ # A save acknowledges only the submitted profile, preserving newer input.
+ close();expect(drawer).not_to_be_visible();reopen();tab('基本资料')
+ name=drawer.get_by_role('textbox',name='网站名称',exact=True);name.fill('Submitted name');state['delay_profile']=True
+ drawer.get_by_role('button',name='保存',exact=True).click();expect(drawer.get_by_role('button',name='保存',exact=True)).to_have_class(re.compile('is-loading'))
+ name.fill('Newer name');assert len(pending_profile)==1
+ pending_profile.pop().fulfill(status=200,json=dict(status=200,data=site(1,'Submitted name')))
+ expect(name).to_have_value('Newer name');expect(drawer.get_by_role('button',name='保存',exact=True)).to_be_enabled()
+ close();cancel();expect(name).to_have_value('Newer name');close();discard();state['delay_profile']=False
+ reopen();tab('任务与记录');state['delay_history']=True;drawer.get_by_role('button',name='历史',exact=True).click()
+ assert len(pending_history)==1
+ page.get_by_role('button',name='Second',exact=True).evaluate('button => button.click()')
+ expect(drawer.get_by_role('textbox',name='网站名称',exact=True)).to_have_value('Second')
+ pending_history.pop().fulfill(status=200,json=dict(status=200,data=[dict(id=1,version_no=1,content='Stale history')]))
+ tab('任务与记录');expect(page.get_by_role('dialog',name='记录历史',exact=True)).not_to_be_visible()
+ close();expect(drawer).not_to_be_visible();reopen()
  # Complete the first site's delayed response after switching to the second site.
  close();expect(drawer).not_to_be_visible();reopen();state['delay_tasks']=True;tab('任务与记录')
  expect(drawer.get_by_role('tab',name='任务与记录',exact=True)).to_have_attribute('aria-selected','true')
