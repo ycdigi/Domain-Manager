@@ -161,3 +161,153 @@ test('batch assignment rejects archived batches and invalid website ids before w
   assert.equal(store.sql("SELECT COUNT(*) AS count FROM website_batches WHERE name='Should not exist'")[0].count, 0)
   assert.equal(store.sql('SELECT COUNT(*) AS count FROM website_batch_members')[0].count, 0)
 })
+
+test('both batch entry points reject archived batches without changing memberships or stages', async () => {
+ const site=await createSite('Archived entry')
+ await call(batchList.onRequestPost,context('/api/batches',{name:'Archived'},'POST'),201)
+ store.sql("UPDATE website_batches SET status='已归档' WHERE id=1")
+ await call(members.onRequestPost,context('/api/batches/1/members',{website_ids:[site.id]},'POST'),409)
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batch_members')[0].n,0)
+})
+
+test('repeated removal and rejoining preserves every membership episode through backup restore', async () => {
+ const site=await createSite('Repeated membership')
+ await call(batchList.onRequestPost,context('/api/batches',{name:'Repeat'},'POST'),201)
+ for(let round=0;round<3;round++) {
+  await call(assign.onRequestPost,context('/api/batches/assign',{batch_id:1,website_ids:[site.id],member_note:'Join '+round},'POST'))
+  await call(members.onRequestDelete,context('/api/batches/1/members',{website_ids:[site.id],reason:'Remove '+round},'DELETE'))
+ }
+ assert.deepEqual(store.sql('SELECT member_note,removed_reason,membership_status FROM website_batch_members ORDER BY id'),[0,1,2].map(round=>({member_note:'Join '+round,removed_reason:'Remove '+round,membership_status:'removed'})))
+ const backup=await call(snapshotApi.onRequestGet,context('/api/backups'))
+ await call(importData.onRequestPost,context('/api/backups',backup,'POST'))
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batch_members')[0].n,3)
+ assert.deepEqual(store.sql('PRAGMA foreign_key_check'),[])
+})
+
+
+test('batch member note changes distinguish retry from explicit update and clear', async () => {
+ const site=await createSite('Member note')
+ await call(batchList.onRequestPost,context('/api/batches',{name:'Notes'},'POST'),201)
+ const update=body=>call(members.onRequestPost,context('/api/batches/1/members',{website_ids:[site.id],...body},'POST'))
+ await update({note:'Original'});await update({})
+ assert.equal(store.sql('SELECT member_note FROM website_batch_members')[0].member_note,'Original')
+ await update({note:'Changed'})
+ assert.equal(store.sql('SELECT member_note FROM website_batch_members')[0].member_note,'Changed')
+ await update({note:''})
+ assert.equal(store.sql('SELECT member_note FROM website_batch_members')[0].member_note,null)
+})
+
+test('all batch entry points and removals support 200 sites within D1 parameter limits', async () => {
+ store.sql("WITH RECURSIVE ids(id) AS (SELECT 1 UNION ALL SELECT id+1 FROM ids WHERE id<200) INSERT INTO websites(id,name) SELECT id,'Website '||id FROM ids")
+ const originalPrepare=store.db.prepare
+ store.db.prepare=sql=>{ const statement=originalPrepare(sql),bind=statement.bind;statement.bind=(...values)=>{assert.ok(values.length<=100,'D1 bound parameter limit');return bind.apply(statement,values)};return statement }
+ try {
+  const website_ids=Array.from({length:200},(_,i)=>i+1)
+  const result=await call(assign.onRequestPost,context('/api/batches/assign',{batch:{name:'200 sites'},website_ids},'POST'),201)
+  assert.equal(result.accepted,200)
+  await call(members.onRequestDelete,context('/api/batches/1/members',{website_ids},'DELETE'))
+  await call(members.onRequestPost,context('/api/batches/1/members',{website_ids},'POST'))
+  const retry=await call(assign.onRequestPost,context('/api/batches/assign',{batch_id:1,website_ids},'POST'))
+  assert.equal(retry.skipped,200)
+  assert.equal(retry.reactivated,0)
+  assert.equal(store.sql("SELECT COUNT(*) n FROM website_batch_members WHERE membership_status='removed'")[0].n,200)
+ } finally {store.db.prepare=originalPrepare}
+})
+
+test('new batch creation, memberships and optional stage all roll back together', async () => {
+ const site=await createSite('Atomic new batch')
+ store.script("CREATE TRIGGER fail_member BEFORE INSERT ON website_batch_members BEGIN SELECT RAISE(ABORT,'Injected membership failure'); END;")
+ await call(assign.onRequestPost,context('/api/batches/assign',{batch:{name:'Must roll back'},website_ids:[site.id],website_fields:{stage:'增长'}},'POST'),500)
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batches')[0].n,0)
+ assert.equal(store.sql('SELECT stage FROM websites')[0].stage,'待评估')
+})
+
+
+test('batch creation and assignment both require an explicit nonempty name', async () => {
+ const site=await createSite('Missing batch name')
+ for(const batch of [{},{name:null},{name:''},{name:'   '}]) {
+  await call(batchList.onRequestPost,context('/api/batches',batch,'POST'),400)
+  await call(assign.onRequestPost,context('/api/batches/assign',{batch,website_ids:[site.id]},'POST'),400)
+ }
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batches')[0].n,0)
+})
+
+
+test('restoring active and removed episodes orders writes to avoid stale active conflicts', async () => {
+ const site=await createSite('Restore membership')
+ await call(batchList.onRequestPost,context('/api/batches',{name:'Restore episodes'},'POST'),201)
+ const payload={batch_id:1,website_ids:[site.id]}
+ await call(assign.onRequestPost,context('/api/batches/assign',payload,'POST'))
+ await call(members.onRequestDelete,context('/api/batches/1/members',{website_ids:[site.id],reason:'History'},'DELETE'))
+ await call(assign.onRequestPost,context('/api/batches/assign',payload,'POST'))
+ const backup=await call(snapshotApi.onRequestGet,context('/api/backups'))
+ // Backups have no record ordering contract: active record may precede history.
+ backup.website_batch_members.sort((a,b)=>b.id-a.id)
+ store.sql("DELETE FROM website_batch_members WHERE id=2; UPDATE website_batch_members SET membership_status='active',removed_at=NULL,removed_reason=NULL WHERE id=1")
+ await call(importData.onRequestPost,context('/api/backups',backup,'POST'))
+ assert.deepEqual(store.sql('SELECT id,membership_status,removed_reason FROM website_batch_members ORDER BY id'),[{id:1,membership_status:'removed',removed_reason:'History'},{id:2,membership_status:'active',removed_reason:null}])
+ await call(importData.onRequestPost,context('/api/backups',backup,'POST'))
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batch_members')[0].n,2)
+})
+
+
+test('import batch assignment rolls back with restored data and rejects archived targets in preview', async () => {
+ const site=await createSite('Import batch rollback')
+ const backup=await call(snapshotApi.onRequestGet,context('/api/backups'))
+ backup.websites[0].name='Must roll back'
+ await call(batchList.onRequestPost,context('/api/batches',{name:'Import target'},'POST'),201)
+ const request=(preview=false)=>{
+  const form=new FormData();form.append('batch_id','1');form.append('file',new File([JSON.stringify(backup)],'backup.json',{type:'application/json'}))
+  return {env:context('/').env,request:new Request('https://example.test/api/backups'+(preview?'?dry_run=1':''),{method:'POST',headers:{Authorization:`Bearer ${session}`},body:form})}
+ }
+ store.script("CREATE TRIGGER fail_import_member BEFORE INSERT ON website_batch_members BEGIN SELECT RAISE(ABORT,'Injected import membership failure'); END;")
+ await call(importData.onRequestPost,request(),500)
+ assert.equal(store.sql('SELECT name FROM websites WHERE id=?',[site.id])[0].name,'Import batch rollback')
+ store.sql("UPDATE website_batches SET status='已归档' WHERE id=1")
+ await call(importData.onRequestPost,request(true),409)
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batch_members')[0].n,0)
+})
+
+
+test('a new import batch is created with the data in one transaction after preview', async () => {
+ const site=await createSite('New import batch')
+ const backup=await call(snapshotApi.onRequestGet,context('/api/backups'))
+ const request=(name,preview=false)=>{
+  const form=new FormData();form.append('batch_name',name);form.append('file',new File([JSON.stringify(backup)],'backup.json',{type:'application/json'}))
+  return {env:context('/').env,request:new Request('https://example.test/api/backups'+(preview?'?dry_run=1':''),{method:'POST',headers:{Authorization:`Bearer ${session}`},body:form})}
+ }
+ await call(importData.onRequestPost,request('Import new',true))
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batches')[0].n,0)
+ store.script("CREATE TRIGGER fail_new_import BEFORE INSERT ON website_batch_members BEGIN SELECT RAISE(ABORT,'Injected new import failure'); END;")
+ await call(importData.onRequestPost,request('Import new'),500)
+ assert.equal(store.sql('SELECT COUNT(*) n FROM website_batches')[0].n,0)
+ store.sql('DROP TRIGGER fail_new_import')
+ await call(importData.onRequestPost,request('Import new'))
+ assert.equal(store.sql('SELECT name FROM website_batches')[0].name,'Import new')
+ assert.deepEqual(store.sql('SELECT batch_id,website_id FROM website_batch_members'),[{batch_id:1,website_id:site.id}])
+})
+
+
+test('backup rejects duplicate membership identities before overwriting history', async () => {
+ const site=await createSite('Backup identity')
+ await call(batchList.onRequestPost,context('/api/batches',{name:'Identity'},'POST'),201)
+ await call(assign.onRequestPost,context('/api/batches/assign',{batch_id:1,website_ids:[site.id]},'POST'))
+ const backup=await call(snapshotApi.onRequestGet,context('/api/backups'))
+ backup.website_batch_members.push({...backup.website_batch_members[0],membership_status:'removed',removed_reason:'Duplicate'})
+ await call(importData.onRequestPost,context('/api/backups',backup,'POST'),400)
+ assert.equal(store.sql('SELECT membership_status FROM website_batch_members')[0].membership_status,'active')
+})
+
+
+test('archived batch timestamps exported by the app survive backup preview and restore', async () => {
+ await createSite('Archived restore')
+ const batch=await call(batchList.onRequestPost,context('/api/batches',{name:'Archived restore'},'POST'),201)
+ await call(batchDetail.onRequestPatch,context('/api/batches/1',{status:'已归档'},'PATCH'))
+ const backup=await call(snapshotApi.onRequestGet,context('/api/backups'))
+ assert.ok(backup.website_batches[0].archived_at.includes('T'))
+ await call(importData.onRequestPost,context('/api/backups?dry_run=1',backup,'POST'))
+ await call(importData.onRequestPost,context('/api/backups',backup,'POST'))
+ assert.equal(store.sql('SELECT archived_at FROM website_batches WHERE id=?',[batch.id])[0].archived_at,backup.website_batches[0].archived_at)
+ backup.website_batches[0].archived_at='invalid'
+ await call(importData.onRequestPost,context('/api/backups',backup,'POST'),400)
+})

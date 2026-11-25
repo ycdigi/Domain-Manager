@@ -23,6 +23,15 @@
       <div class="site-filters">
         <el-input v-model="search" clearable placeholder="搜索网站或域名" aria-label="搜索网站或域名" />
         <el-select
+          :model-value="String(route.query.batch || '')"
+          clearable
+          filterable
+          placeholder="全部批次"
+          aria-label="网站批次筛选"
+          @change="(value) => filter('batch', value)"
+          ><el-option v-for="batch in batches" :key="batch.id" :label="batch.name" :value="String(batch.id)"
+        /></el-select>
+        <el-select
           :model-value="String(route.query.ownership || '')"
           clearable
           placeholder="全部归属"
@@ -49,13 +58,15 @@
         <el-select
           :model-value="String(route.query.provider || '')"
           clearable
-          placeholder="全部托管服务商"
+          placeholder="全部服务商"
           aria-label="服务商筛选"
           @change="(value) => filter('provider', value)"
           ><el-option v-for="value in providerNames" :key="value" :label="value" :value="value"
         /></el-select>
       </div>
       <div class="site-results">
+        <el-checkbox :model-value="adsOnly" aria-label="只显示已开通 AdSense 的网站"
+          @change="value => filter('ads', value ? '1' : '')">Ads</el-checkbox>
         <span role="status">{{ visibleSites.length }} / {{ websites.length }} 个网站</span>
         <el-tag v-for="condition in activeFilters" :key="condition.key" closable @close="filter(condition.key, '')">{{ condition.label }}</el-tag>
         <el-button v-if="activeFilters.length" text @click="clearFilters">清除全部条件</el-button>
@@ -63,17 +74,15 @@
     </div>
     <div v-if="selectedIds.size" class="portfolio-bulk-toolbar">
       <strong>已选 {{ selectedIds.size }} 个网站</strong
-      ><el-select v-model="bulkStage" aria-label="批量设置阶段"
-        ><el-option v-for="stage in stages" :key="stage" :value="stage" /></el-select
-      ><el-button :loading="busy" @click="bulk({ stage: bulkStage })">设置阶段</el-button
+      ><el-button @click="copySelectedMarkdown">复制 Markdown</el-button
+      ><el-button :disabled="busy" @click="openBulkSettings">批量设置</el-button
       ><el-button @click="batchVisible = true">加入批次</el-button
       ><el-button v-if="view !== 'stopped'" :loading="busy" @click="bulk({ lifecycle: 'stopped' })">停止经营</el-button
       ><el-button v-else :loading="busy" @click="bulk({ lifecycle: 'active' })">恢复经营</el-button
       ><el-button @click="selectedIds.clear()">取消选择</el-button>
     </div>
     <section class="portfolio-stage portfolio-list" :aria-busy="loading">
-      <p id="table-scroll-hint" class="site-scroll-hint">左右滚动查看完整资料；宽屏下网站和操作固定。</p>
-      <div class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动" aria-describedby="table-scroll-hint">
+      <div class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动">
         <table class="portfolio-table site-table" :style="{ minWidth: columns.reduce((sum, col) => sum + col.width, 0) + 'px' }">
           <caption class="sr-only">
             网站总表，共
@@ -121,13 +130,16 @@
                   /><DomainFavicon :key="primaryDomain(site)?.domain" :domain-id="primaryDomain(site)?.id" />
                   <div>
                     <button class="site-cell site-name" @click="openSite(site)">{{ site.name }}</button
-                    ><a
-                      v-if="primaryDomain(site)"
-                      :href="`https://${primaryDomain(site)!.domain}`"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      >{{ primaryDomain(site)!.domain }}</a
                     >
+                    <div v-if="primaryDomain(site)" class="site-domain-links">
+                      <a :href="`https://${primaryDomain(site)!.domain}`" :title="primaryDomain(site)!.domain"
+                        target="_blank" rel="noopener noreferrer">{{ primaryDomain(site)!.domain }}</a>
+                      <a class="site-index-link"
+                        :href="`https://www.google.com/search?q=${encodeURIComponent(`site:${primaryDomain(site)!.domain}`)}`"
+                        :title="`Google 收录查询：site:${primaryDomain(site)!.domain}`"
+                        :aria-label="`Google 收录查询：${primaryDomain(site)!.domain}（新标签页打开）`"
+                        target="_blank" rel="noopener noreferrer"><el-icon aria-hidden="true"><Search /></el-icon></a>
+                    </div>
                   </div>
                 </div>
               </td>
@@ -164,24 +176,38 @@
                 </button>
               </td>
               <td>
-                <button class="site-cell" :title="site.hosting?.name" @click="openSite(site, 'deployment')">
-                  {{ site.hosting?.provider_name || '—' }}
+                <button class="site-cell site-provider-cell" @click="openSite(site, 'deployment')">
+                  <ProviderIdentity v-for="account in serviceProviders(site)" :key="account.key"
+                    :provider="account.provider" :provider-name="account.provider_name" :name="account.name" compact />
+                  <span v-if="!serviceProviders(site).length">—</span>
                 </button>
               </td>
               <td>
-                <a
-                  v-if="site.repository?.resource_url"
-                  :href="safeExternal(site.repository.resource_url)"
-                  :title="site.repository.resource_url"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  >{{ site.repository.name }}</a
-                ><button v-else class="site-cell" @click="openSite(site, 'deployment')">—</button>
+                <div class="site-provider-cell">
+                  <template v-for="entry in githubEntries(site)" :key="entry.key">
+                    <a v-if="entry.url" :href="entry.url" :title="entry.url" target="_blank" rel="noopener noreferrer">
+                      <ProviderIdentity provider="github" :name="entry.name" compact />
+                    </a>
+                    <button v-else class="site-cell" @click="openSite(site, 'deployment')">
+                      <ProviderIdentity provider="github" :name="entry.name" compact />
+                    </button>
+                  </template>
+                  <button v-if="!githubEntries(site).length" class="site-cell" @click="openSite(site, 'deployment')">—</button>
+                </div>
               </td>
               <td>
                 <el-select class="site-inline-select" :model-value="site.computer_name || ''" :aria-label="`电脑：${site.name}`" :disabled="busy || loading || Boolean(metricEdit)" filterable allow-create clearable default-first-option @change="(value: string) => changeComputer(site, value)">
                   <el-option v-for="name in computerNames" :key="name" :label="name" :value="name" />
                 </el-select>
+              </td>
+              <td>
+                <span v-if="site.adsense_connected === '已开通' && site.adsense_account_name"
+                  class="site-adsense-account" :title="`AdSense：${site.adsense_account_name}`">{{ site.adsense_account_name }}</span>
+                <span v-else class="site-adsense-status" :class="{ 'is-connected': site.adsense_connected === '已开通' }"
+                  role="img" :aria-label="`AdSense：${site.adsense_connected || '未知'}`"
+                  :title="`AdSense：${site.adsense_connected || '未知'}`">
+                  <el-icon aria-hidden="true"><Check v-if="site.adsense_connected === '已开通'" /><Close v-else /></el-icon>
+                </span>
               </td>
               <td>
                 <el-select
@@ -253,6 +279,7 @@
       }}
     </p>
     <WebsiteDetailDrawer v-model:visible="detailVisible" :website="selectedSite" @changed="load(true)" />
+    <WebsiteBulkSettingsDialog v-model:visible="bulkSettingsVisible" :websites="bulkSettingsSites" :computer-names="websites.map(site=>site.computer_name || '')" @saved="bulkSettingsSaved" />
     <BatchAssignmentDialog
       v-model="batchVisible"
       :websites="websites"
@@ -276,14 +303,17 @@ import { websiteEditPatch } from '../../shared/website-edits'
 import { computed, reactive, ref, shallowRef, watch, onActivated } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { View, CopyDocument, MoreFilled } from '@element-plus/icons-vue'
+import { View, CopyDocument, MoreFilled, Search, Check, Close } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteMetricEditor from '../components/WebsiteMetricEditor.vue'
 import { sortComputerNames } from '../utils/computer-options'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
 import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
+import WebsiteBulkSettingsDialog from '../components/WebsiteBulkSettingsDialog.vue'
 import DomainFavicon from '../components/DomainFavicon.vue'
 import TechStackIcon from '../components/TechStackIcon.vue'
+import ProviderIdentity from '../components/ProviderIdentity.vue'
+import { providerIdentity } from '../utils/provider-identity'
 import {
   getWebsites,
   createWebsite,
@@ -297,7 +327,9 @@ import { getBatches, assignBatch, type Batch, type BatchAssignmentPayload } from
 import { websiteQuery, type WebsiteSection } from '../utils/website-location'
 import { api } from '../utils/request'
 import { copyText } from '../utils/clipboard'
+import { websitesMarkdown } from '../utils/website-markdown'
 import { confirmAction, isDismissed } from '../utils/feedback'
+import { localDate } from '../utils/workspaceCache'
 import '../styles/home/home.css'
 const route = useRoute()
 const router = useRouter()
@@ -306,15 +338,16 @@ const platforms = ['WordPress', 'Astro', 'Next.js', '其他']
 const ownerships = ['自营网站', '企业客户网站', '未分类']
 const countKeys = ['page_count', 'calculator_count', 'article_count'] as const
 const columns = [
-  { key: 'identity', label: '网站 / 主域名', width: 245 },
+  { key: 'identity', label: '网站 / 主域名', width: 225 },
   { key: 'platform', label: '技术栈', width: 76 },
   { key: 'page_count', label: '总页面数', width: 82 },
   { key: 'calculator_count', label: '计算器数量', width: 92 },
   { key: 'article_count', label: '文章数量', width: 82 },
   { key: 'clicks', label: '日点击', width: 86 },
   { key: 'provider', label: '服务商', width: 112 },
-  { key: 'github', label: 'GitHub', width: 144 },
-  { key: 'computer', label: '电脑', width: 150 },
+  { key: 'github', label: 'GitHub', width: 124 },
+  { key: 'computer', label: '电脑', width: 130 },
+  { key: 'adsense', label: 'AdSense', width: 100 },
   { key: 'stage', label: '阶段', width: 104 },
   { key: 'actions', label: '操作', width: 116 }
 ]
@@ -329,35 +362,60 @@ const search = computed({ get: () => String(route.query.q || ''), set: value => 
 const busy = ref(false)
 const copying = ref<number>()
 const selectedIds = reactive(new Set<number>())
-const bulkStage = ref<WebsiteStage>('待评估')
+const bulkSettingsVisible = ref(false)
+const bulkSettingsSites = ref<Website[]>([])
+const openBulkSettings = () => {
+  if (selectedIds.size > 200) { ElMessage.error('每次最多设置 200 个网站'); return }
+  bulkSettingsSites.value = websites.value.filter(site=>selectedIds.has(site.id))
+  bulkSettingsVisible.value = true
+}
+const bulkSettingsSaved = () => { selectedIds.clear(); void load(true) }
 const batchVisible = ref(false)
 const createVisible = ref(false)
 const sortKey = computed({ get: () => columns.some(column => column.key !== 'actions' && column.key === route.query.sort) ? String(route.query.sort) : '', set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
+const adsOnly = computed(() => route.query.ads === '1')
 const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')
-const filterLabels: Record<string, string> = { ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', new: '新站', view: '状态', q: '搜索' }
-const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'new' ? '是' : key === 'view' ? '停止经营' : route.query[key]}` })))
+const filterLabels: Record<string, string> = { batch: '批次', ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', ads: 'Ads', new: '新站', view: '状态', q: '搜索' }
+const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => key === 'ads' ? adsOnly.value : route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'ads' ? '已开通' : key === 'new' ? '是' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : route.query[key]}` })))
 const clearFilters = () => { const query = { ...route.query }; for (const key of Object.keys(filterLabels)) delete query[key]; void router.push({ query }) }
 const views = [
   { value: 'active', label: '经营中' },
   { value: 'stopped', label: '停止经营' }
 ]
 const view = computed(() => (route.query.view === 'stopped' ? 'stopped' : 'active'))
-const providerNames = computed(() =>
-  [...new Set(websites.value.map((s) => s.hosting?.provider_name).filter((s): s is string => Boolean(s)))].sort()
-)
+const serviceProviders = (site: Website) => {
+  const accounts = (site.provider_accounts || []).filter(account => account.provider !== 'github').map(account => ({
+    ...account, key: `account-${account.id}`, label: providerIdentity(account.provider, account.provider_name, account.name).label
+  }))
+  const hosting = site.hosting
+  if (hosting) {
+    const label = providerIdentity(hosting.provider, hosting.provider_name).label
+    if (!accounts.some(account => hosting.account_id != null ? account.id === hosting.account_id : account.provider === hosting.provider && account.label === label)) {
+      accounts.push({ id: hosting.id, key: `hosting-${hosting.id}`, provider: hosting.provider, provider_name: label, name: label, label })
+    }
+  }
+  return accounts
+}
+const providerNames = computed(() => [...new Set(websites.value.flatMap(site => serviceProviders(site).map(account => account.label)))].sort())
 const computerNames = computed(() => sortComputerNames(websites.value.map(site => site.computer_name)))
 const primaryDomain = (site: Website) => site.domains.find((d) => d.is_primary) || site.domains[0]
 const platformLabel = (site: Website) => (site.platform === '其他' ? site.platform_other || '其他' : site.platform)
 const safeExternal = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
-const clickLabel = (s: Website) =>
-  s.daily_clicks ??
-  (
-    { under10: '10 次以下', '10to29': '10–29', '30to49': '30–49', '50to99': '50–99', over100: '100 次以上' } as Record<
-      string,
-      string
-    >
-  )[s.daily_clicks_range || ''] ??
-  '—'
+const githubEntries = (site: Website) => {
+  const url = safeExternal(site.repository?.resource_url || '')
+  const entries = (site.provider_accounts || []).filter(account => account.provider === 'github').map(account => ({
+    key: `account-${account.id}`, name: account.name, url: account.id === site.repository?.account_id ? url : undefined
+  }))
+  if (url && site.repository && !entries.some(entry => entry.url)) {
+    entries.push({ key: `repository-${site.repository.id}`, name: site.repository.name, url })
+  }
+  return entries
+}
+const clickRanges: Record<string, string> = { under10: '＜10', '10to29': '10–29', '30to49': '30–49', '50to99': '50–99', over100: '≥100' }
+const clickRange = (count: number) => count < 10 ? 'under10' : count < 30 ? '10to29' : count < 50 ? '30to49' : count < 100 ? '50to99' : 'over100'
+const clickLabel = (site: Website) => site.daily_clicks != null
+  ? `${clickRanges[clickRange(site.daily_clicks)]}（${site.daily_clicks}）`
+  : clickRanges[site.daily_clicks_range || ''] || '—'
 const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
 const sortValue = (s: Website, key: string): string | number =>
   countKeys.includes(key as (typeof countKeys)[number])
@@ -372,9 +430,10 @@ const sortValue = (s: Website, key: string): string | number =>
               s.daily_clicks_range || ''
             ] ??
             -1,
-          provider: s.hosting?.provider_name || '',
-          github: s.repository?.resource_url || '',
+          provider: serviceProviders(s).map(account => `${account.label} ${account.name}`).join(' '),
+          github: githubEntries(s).map(entry => entry.name).join(' '),
           computer: s.computer_name || '',
+          adsense: s.adsense_connected === '已开通' ? 1 : 0,
           stage: stages.indexOf(s.stage)
         } as Record<string, string | number>
       )[key] ?? '')
@@ -383,13 +442,15 @@ const visibleSites = computed(() =>
     .filter(
       (s) =>
         s.lifecycle === view.value &&
+        (!route.query.batch || s.batch_ids?.includes(Number(route.query.batch))) &&
         (!route.query.stage || s.stage === route.query.stage) &&
         (!route.query.ownership || s.ownership === route.query.ownership) &&
         (!route.query.platform || s.platform === route.query.platform) &&
-        (!route.query.provider || s.hosting?.provider_name === route.query.provider) &&
+        (!route.query.provider || serviceProviders(s).some(account => account.label === route.query.provider)) &&
         (!route.query.resource || s.resource_ids?.includes(Number(route.query.resource))) &&
         (!route.query.provider_account || s.provider_account_ids?.includes(Number(route.query.provider_account))) &&
         (!route.query.adsense_account || s.adsense_account_id === Number(route.query.adsense_account)) &&
+        (!adsOnly.value || s.adsense_connected === '已开通') &&
         (!route.query.new || s.is_new_site) &&
         `${s.name} ${s.domains.map((d) => d.domain).join(' ')}`
           .toLowerCase()
@@ -522,6 +583,16 @@ const assignSelectedBatch = (payload: BatchAssignmentPayload) =>
     selectedIds.clear()
     ElMessage.success('已加入批次')
   })
+const copySelectedMarkdown = async () => {
+  const sites = visibleSites.value.filter(site => selectedIds.has(site.id))
+  if (!sites.length) return
+  try {
+    await copyText(websitesMarkdown(sites, batches.value, localDate()))
+    ElMessage.success(`已复制 ${sites.length} 个网站的 Markdown`)
+  } catch (e) {
+    ElMessage.error(e instanceof Error ? e.message : '复制失败')
+  }
+}
 const copySite = async (site: Website) => {
   if (copying.value) return
   copying.value = site.id

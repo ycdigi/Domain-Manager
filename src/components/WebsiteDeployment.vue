@@ -102,7 +102,7 @@ const safeUrl = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
 const availableResources = computed(() =>
   resources.value.filter(
     (r) =>
-      r.status !== '停用' &&
+      r.status !== '停用' && (r.account_id == null || accounts.value.some(account => account.id === r.account_id && account.status !== '停用')) &&
       resourceSupportsRole(r.provider, form.role)
   )
 )

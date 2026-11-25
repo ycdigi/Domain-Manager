@@ -1,3 +1,4 @@
-.provider-identity { display: inline-flex; align-items: center; gap: 8px; min-width: 0; vertical-align: middle; }
+.provider-identity { position: relative; display: inline-flex; align-items: center; gap: 8px; min-width: 0; vertical-align: middle; }
 .provider-identity img, .provider-identity .el-icon { flex: none; width: 18px; height: 18px; object-fit: contain; }
 .provider-identity > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.provider-identity-brand { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

@@ -1,6 +1,6 @@
 <template>
-  <el-dialog v-model="visible" :title="dialogTitle" :width="isMobile ? '100%' : 'min(980px, 96vw)'" :fullscreen="isMobile" destroy-on-close class="batch-assignment-dialog">
-    <div class="batch-assignment-body">
+  <el-dialog v-model="visible" :title="dialogTitle" :width="isMobile ? '100%' : 'min(980px, 96vw)'" :fullscreen="isMobile" :close-on-click-modal="!submitting" :close-on-press-escape="!submitting" :show-close="!submitting" destroy-on-close class="batch-assignment-dialog">
+    <div class="batch-assignment-body" :inert="submitting" :aria-busy="submitting">
       <div v-if="mode === 'import'" class="batch-assignment-import-hint">
         <strong>导入后的新网站将加入所选批次</strong>
         <p>先选择已有批次，或只填写名称创建一个新批次。网站组合导入完成后会统一建立批次成员关系。</p>
@@ -41,7 +41,7 @@
         <el-input v-else v-model="newBatchName" maxlength="200" placeholder="批次名称" aria-label="批次名称" />
       </section>
 
-      <section class="batch-assignment-section">
+      <section v-if="mode !== 'import'" class="batch-assignment-section">
         <div class="batch-assignment-section-heading"><h3>批量设置（可选）</h3><span>默认保留网站现有值</span></div>
         <div class="batch-assignment-fields">
           <div class="batch-assignment-field"><el-checkbox v-model="stageEnabled">统一设置阶段</el-checkbox><el-select v-model="stageValue" :disabled="!stageEnabled" placeholder="选择阶段" aria-label="统一设置阶段"><el-option v-for="item in stageOptions" :key="item" :label="item" :value="item" /></el-select></div>
@@ -49,7 +49,7 @@
         <el-input v-model="memberNote" maxlength="500" placeholder="共同成员备注（可选）" aria-label="共同成员备注" />
       </section>
     </div>
-    <template #footer><div class="dialog-footer"><el-button @click="visible = false">取消</el-button><el-button type="primary" :disabled="!canSubmit" :loading="submitting" @click="submit">{{ submitLabel }}</el-button></div></template>
+    <template #footer><div class="dialog-footer"><el-button :disabled="submitting" @click="visible = false">取消</el-button><el-button type="primary" :disabled="!canSubmit" :loading="submitting" @click="submit">{{ submitLabel }}</el-button></div></template>
   </el-dialog>
 </template>
 
@@ -73,11 +73,11 @@ const emit = defineEmits<{
   submit: [payload: { websiteIds: number[]; batchId?: number; batch?: { name: string }; memberNote?: string; websiteFields?: Record<string, unknown> }]
 }>()
 
-const visible = computed({ get: () => props.modelValue, set: value => emit('update:modelValue', value) })
+const visible = computed({ get: () => props.modelValue, set: value => { if (!props.submitting) emit('update:modelValue', value) } })
 const isMobile = ref(false)
 const search = ref(''); const ownership = ref(''); const platform = ref(''); const stage = ref('')
 const targetMode = ref<'existing' | 'new'>('existing'); const batchId = ref<number>(); const newBatchName = ref('')
-const stageEnabled = ref(false); const stageValue = ref<WebsiteStage>('待评估'); const memberNote = ref('')
+const stageEnabled = ref(false); const stageValue = ref<WebsiteStage>(); const memberNote = ref('')
 const selectedIds = reactive(new Set<number>())
 const stageOptions: WebsiteStage[] = ['待评估', '验证', '增长', '维护', '暂停']
 const ownershipOptions = ['未分类', '自营网站', '企业客户网站']
@@ -97,7 +97,7 @@ const filteredWebsites = computed(() => {
 const allFilteredSelected = computed(() => filteredWebsites.value.length > 0 && filteredWebsites.value.every(site => selectedIds.has(site.id)))
 const someFilteredSelected = computed(() => filteredWebsites.value.some(site => selectedIds.has(site.id)) && !allFilteredSelected.value)
 const dialogTitle = computed(() => props.mode === 'import' ? '选择导入批次' : props.fixedBatchId ? '批量加入当前批次' : '批量加入批次')
-const canSubmit = computed(() => (props.mode === 'import' || selectedIds.size > 0) && (targetMode.value === 'existing' ? Boolean(batchId.value) : Boolean(newBatchName.value.trim())))
+const canSubmit = computed(() => !props.submitting && (!stageEnabled.value || Boolean(stageValue.value)) && (props.mode === 'import' || selectedIds.size > 0 && selectedIds.size <= 200) && (targetMode.value === 'existing' ? Boolean(batchId.value) : Boolean(newBatchName.value.trim())))
 const submitLabel = computed(() => props.mode === 'import' ? targetMode.value === 'new' ? '创建导入批次' : '使用此批次' : targetMode.value === 'new' ? `创建批次并加入 ${selectedIds.size} 个网站` : `加入批次（${selectedIds.size}）`)
 const primaryDomain = (site: Website) => site.domains.find(domain => domain.is_primary)?.domain || site.domains[0]?.domain || ''
 const platformLabel = (site: Website) => site.platform === '其他' ? site.platform_other || '其他' : site.platform
@@ -106,7 +106,7 @@ const reset = () => {
   selectedIds.clear(); for (const id of props.selectedWebsiteIds) if (!props.excludeWebsiteIds.includes(id)) selectedIds.add(id)
   search.value = ''; ownership.value = ''; platform.value = ''; stage.value = ''
   targetMode.value = props.fixedBatchId ? 'existing' : 'existing'; batchId.value = props.fixedBatchId || undefined; newBatchName.value = ''
-  stageEnabled.value = false; stageValue.value = '待评估'; memberNote.value = ''
+  stageEnabled.value = false; stageValue.value = undefined; memberNote.value = ''
 }
 const pruneSelection = () => { const visibleIds = new Set(filteredWebsites.value.map(site => site.id)); for (const id of [...selectedIds]) if (!visibleIds.has(id)) selectedIds.delete(id) }
 const toggleSite = (id: number, value: boolean) => value ? selectedIds.add(id) : selectedIds.delete(id)

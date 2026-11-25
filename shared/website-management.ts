@@ -3,7 +3,7 @@ export type WorkKind = typeof workKinds[number]
 export type WorkStats = Record<WorkKind, { count: number; last_at: string | null }>
 export interface WorkRecord { id: number; website_id: number; kind: WorkKind; request_id: string; created_at: string; voided_at: string | null }
 export interface GscAccount { id: number; name: string; email: string; created_at: string; linked_websites?: number }
-export interface ManagementRow { id: number; name: string; domain: string | null; lifecycle: string; gsc_account: GscAccount | null; stats: WorkStats }
+export interface ManagementRow { id: number; name: string; domain: string | null; lifecycle: string; batch_ids: number[]; gsc_account: GscAccount | null; stats: WorkStats }
 export const emptyWorkStats = (): WorkStats => Object.fromEntries(workKinds.map(kind => [kind, { count: 0, last_at: null }])) as WorkStats
 export const isWorkKind = (value: unknown): value is WorkKind => typeof value === 'string' && workKinds.includes(value as WorkKind)
 

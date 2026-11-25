@@ -67,7 +67,7 @@ export const validateBackupRows = (input: Row) => {
     unique('provider_accounts', row => JSON.stringify([row.provider, row.name]))
     unique('provider_resources', row => row.account_id == null ? null : JSON.stringify([row.account_id, row.name]))
     unique('website_tasks', row => row.review_of_task_id ?? null)
-    unique('website_batch_members', row => JSON.stringify([row.batch_id, row.website_id, row.membership_status ?? 'active']))
+    unique('website_batch_members', row => row.membership_status === 'removed' ? null : JSON.stringify([row.batch_id, row.website_id]))
     unique('website_resources', row => row.is_primary === 1 ? JSON.stringify([row.website_id, row.role]) : null)
     return errors
 }

@@ -33,6 +33,10 @@ with sync_playwright() as p:
         elif url.endswith('/api/batches/1') and request.method == 'GET':
             route.fulfill(json={'status': 200, 'message': '成功', 'data': detail})
         elif url.endswith('/api/batches/1/members'):
+            if request.method=='POST':
+                body=request.post_data_json
+                for member in detail['members']:
+                    if member['website_id'] in body['website_ids']:member['member_note']=body.get('note') or None
             route.fulfill(json={'status': 200, 'message': '成功', 'data': detail['members']})
         elif url.endswith('/api/work-queue'):
             route.fulfill(json={'status': 200, 'message': '成功', 'data': queue})
@@ -57,6 +61,22 @@ with sync_playwright() as p:
     expect(page.get_by_role('heading', name='批次成员', exact=True)).not_to_be_visible()
     expect(page.locator('thead th').filter(has_text='网站 / 主域名')).to_be_visible()
     expect(page.locator('thead th').filter(has_text='内容规模')).to_be_visible()
+    page.locator('thead .el-checkbox').click()
+    search=page.get_by_role('textbox',name='搜索批次成员',exact=True)
+    search.fill('Astro')
+    expect(page.locator('.batch-member-selection')).to_contain_text('已选 1 个')
+    search.fill('')
+    page.locator('thead .el-checkbox').click()
+    toolbar=page.locator('.batch-member-bulk-toolbar')
+    expect(toolbar.get_by_role('button',name='设置阶段',exact=True)).to_be_disabled()
+    expect(toolbar.locator('.el-select')).to_contain_text('批量设置阶段')
+    toolbar.get_by_role('textbox',name='共同成员备注',exact=True).fill('Changed note')
+    toolbar.get_by_role('button',name='保存备注',exact=True).click()
+    expect(page.get_by_text('备注：Changed note',exact=True)).to_have_count(2)
+    toolbar.get_by_role('textbox',name='共同成员备注',exact=True).fill('')
+    toolbar.get_by_role('button',name='保存备注',exact=True).click()
+    expect(page.get_by_text('备注：Changed note',exact=True)).to_have_count(0)
+    toolbar.get_by_role('button',name='清空',exact=True).click()
     page.get_by_role('button', name='批次编辑', exact=True).click()
     expect(page.get_by_role('dialog', name='编辑批次信息', exact=True)).to_be_visible()
     page.get_by_role('button', name='取消', exact=True).click()
@@ -71,7 +91,7 @@ with sync_playwright() as p:
     expect(page.get_by_text('请求超时', exact=True)).to_be_visible()
     page.get_by_role('button', name='网站总表', exact=True).click()
     expect(page.get_by_role('heading', name='网站总表', exact=True)).to_be_visible()
-    expect(page.locator('.site-table thead th')).to_have_count(11)
+    expect(page.locator('.site-table thead th')).to_have_count(12)
     expect(page.locator('.site-table thead th').filter(has_text='服务器 IP')).to_have_count(0)
     page.get_by_role('button', name='Astro batch site', exact=True).click()
     drawer=page.locator('.website-detail-drawer')

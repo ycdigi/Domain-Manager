@@ -31,7 +31,7 @@ def call(path, body=None, method='GET', status=200):
 
 session = call('/api/login', {'username': 'preview', 'password': 'preview-local-only'}, 'POST')['token']
 stamp = str(time.time_ns())
-site_id = account_id = None
+site_id = account_id = batch_id = None
 errors = []
 try:
     created = call('/api/websites', {'name': '管理验收 ' + stamp, 'domain': {
@@ -43,15 +43,40 @@ try:
     call(prefix + '/operations', {'operation_date': '2026-11-21', 'operation_kind': 'SEO'}, 'POST', 201)
     account = call('/api/gsc/accounts', {'name': '验收 GSC ' + stamp, 'email': stamp + '@example.test'}, 'POST', 201)
     account_id = account['id']
+    batch = call('/api/batches', {'name': '验收批次 ' + stamp}, 'POST', 201)
+    batch_id = batch['id']
+    members_path = '/api/batches/' + str(batch_id) + '/members'
+    call(members_path, {'website_ids': [site_id]}, 'POST')
     with sync_playwright() as p:
         browser = p.chromium.launch(headless=True)
         page = browser.new_page(viewport={'width': 1440, 'height': 1000}, accept_downloads=True)
         page.on('pageerror', lambda error: errors.append(str(error)))
         token = base64.b64encode(json.dumps({'token': session}).encode()).decode()
         page.add_init_script(f"localStorage.setItem('auth_token', {json.dumps(token)})")
+        page.goto(BASE + '/home?q=' + domain + '&batch=' + str(batch_id))
+        page.wait_for_load_state('networkidle')
+        home_rows = page.locator('.site-table tbody tr')
+        home_batch = page.locator('.site-filters .el-select').filter(has=page.get_by_role('combobox', name='网站批次筛选', exact=True))
+        expect(home_rows).to_have_count(1); expect(home_batch).to_contain_text(batch['name'])
+        page.reload(); page.wait_for_load_state('networkidle'); expect(home_rows).to_have_count(1)
+        call(members_path, {'website_ids': [site_id]}, 'DELETE')
+        page.get_by_role('button', name='刷新', exact=True).click(); expect(home_rows).to_have_count(0)
+        home_batch.hover(); home_batch.locator('.el-select__clear').click(); expect(home_rows).to_have_count(1)
+        expect(page.get_by_role('textbox', name='搜索网站或域名', exact=True)).to_have_value(domain)
+        call(members_path, {'website_ids': [site_id]}, 'POST')
+        home_batch.locator('.el-select__wrapper').click(); page.get_by_role('option', name=batch['name'], exact=True).click()
+        page.get_by_role('button', name='刷新', exact=True).click(); expect(home_rows).to_have_count(1)
         page.goto(BASE + '/website-management?q=' + domain)
         page.wait_for_load_state('networkidle')
         row = page.locator('.management-table tbody tr')
+        expect(row).to_have_count(1)
+        filters = page.locator('.management-filters')
+        expect(filters).not_to_contain_text('Select')
+        filters.locator('.el-select').filter(has=page.get_by_role('combobox', name='网站批次筛选', exact=True)).locator('.el-select__wrapper').click()
+        page.get_by_role('option', name=batch['name'], exact=True).click()
+        expect(row).to_have_count(1)
+        page.reload(); page.wait_for_load_state('networkidle')
+        expect(filters.get_by_text(batch['name'], exact=True)).to_be_visible()
         expect(row).to_have_count(1)
         count = row.get_by_role('button', name='查看TDK调整记录：' + domain, exact=True)
         button = row.get_by_role('button', name='登记TDK调整：' + domain, exact=True)
@@ -80,7 +105,8 @@ try:
         detail.get_by_role('button', name='Close this dialog', exact=True).click()
         page.get_by_role('button', name='网站管理', exact=True).click()
         expect(row).to_have_count(1)
-        expect(row).to_contain_text('更新名称 ' + stamp)
+        row.get_by_role('link', name=domain, exact=True).hover()
+        expect(page.get_by_role('tooltip').filter(has_text='更新名称 ' + stamp)).to_be_visible()
         expect(count).to_have_text('0')
         row.get_by_role('link', name=domain, exact=True).click()
         detail.get_by_role('tab', name='基本资料', exact=True).click()
@@ -89,7 +115,8 @@ try:
         expect(detail.get_by_role('button', name='保存', exact=True)).to_be_disabled()
         detail.get_by_role('button', name='Close this dialog', exact=True).click()
         page.get_by_role('button', name='网站管理', exact=True).click()
-        expect(row).to_contain_text('再次更新 ' + stamp)
+        row.get_by_role('link', name=domain, exact=True).hover()
+        expect(page.get_by_role('tooltip').filter(has_text='再次更新 ' + stamp)).to_be_visible()
         row.get_by_role('button', name='登记文章开发：' + domain, exact=True).click()
         expect(row.get_by_role('button', name='查看文章开发记录：' + domain, exact=True)).to_have_text('1')
         snapshot = call('/api/backups')
@@ -128,6 +155,8 @@ try:
 finally:
     if site_id is not None:
         call('/api/websites/' + str(site_id), method='DELETE')
+    if batch_id is not None:
+        call('/api/batches/' + str(batch_id), method='DELETE')
     if account_id is not None:
         call('/api/gsc/accounts/' + str(account_id), method='DELETE')
 

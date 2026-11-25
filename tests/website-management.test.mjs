@@ -30,6 +30,13 @@ test('new table starts at zero; same-day records count separately and legacy day
  ;[row]=await call(overview,'onRequestGet',ctx());assert.equal(row.stats['TDK调整'].count,2);assert.match(row.stats['TDK调整'].last_at,/^\d{4}-.*Z$/)
  assert.equal(store.sql('SELECT COUNT(*) n FROM website_operations')[0].n,1)
 })
+test('management returns current batch memberships without duplicating websites or counting removed history',async()=>{
+ await site();store.sql("INSERT INTO websites(name,lifecycle) VALUES('Other','stopped'); INSERT INTO website_batches(id,name,status) VALUES(1,'First','进行中'),(2,'Archived','已归档'),(3,'Removed','进行中'); INSERT INTO website_batch_members(batch_id,website_id,membership_status) VALUES(1,1,'active'),(1,1,'removed'),(2,1,'active'),(3,1,'removed')")
+ const rows=await call(overview,'onRequestGet',ctx());assert.equal(rows.length,2)
+ assert.deepEqual(rows.find(row=>row.id===1).batch_ids,[1,2])
+ assert.deepEqual(rows.find(row=>row.id===2).batch_ids,[])
+ assert.equal(rows.find(row=>row.id===2).lifecycle,'stopped')
+})
 test('request retries are idempotent and cannot be reused for a different kind',async()=>{
  await site();await record();let result=await call(records,'onRequestPost',ctx({kind:'TDK调整',request_id:'request_00000001'},'POST'))
  assert.equal(result.stats['TDK调整'].count,1)

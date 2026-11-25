@@ -75,7 +75,7 @@ const validateMonitoring = (input: Row, websites: Row[], domains: Row[]) => {
     return errors
 }
 
-export const restoreBackup = async (db: D1Database, raw: unknown, options: { batchId?: number | null; dryRun?: boolean } = {}) => {
+export const restoreBackup = async (db: D1Database, raw: unknown, options: { batchId?: number | null; batchName?: string | null; dryRun?: boolean } = {}) => {
     const input = raw as Row
     const importBatchId = options.batchId ?? null
     if (!input || Array.isArray(input) || input.format_version !== backupFormatVersion) return result(null, 400, '仅支持 format_version=1 的当前备份；旧备份须在升级前一次转换并核验')
@@ -175,7 +175,7 @@ export const restoreBackup = async (db: D1Database, raw: unknown, options: { bat
     if (importBatchId != null) {
         const batch = await db.prepare('SELECT status FROM website_batches WHERE id=?').bind(importBatchId).first<{ status: string }>()
         if (!batch) return result(null, 404, '导入批次不存在')
-        if (batch.status === '已归档') return result(null, 400, '已归档批次不能加入网站')
+        if (batch.status === '已归档' || input.website_batches?.some((batch: Row) => Number(batch.id) === importBatchId && batch.status === '已归档')) return result(null, 409, '已归档批次不可继续加入网站')
     }
     const siteMap = new Map<number, number>()
     const noteMap = new Map<number, number>()
@@ -226,7 +226,7 @@ export const restoreBackup = async (db: D1Database, raw: unknown, options: { bat
         else write(db.prepare(`INSERT INTO website_batches (id,${columns.join(',')}) VALUES (?,${columns.map(() => '?').join(',')})`).bind(batchId, ...values))
         batchMap.set(oldId, batchId)
     }
-    for (const member of input.website_batch_members || []) {
+    for (const member of [...(input.website_batch_members || [])].sort((a, b) => Number(a.membership_status !== 'removed') - Number(b.membership_status !== 'removed'))) {
         const batchId = batchMap.get(Number(member.batch_id)); const websiteId = siteMap.get(Number(member.website_id)); if (!batchId || !websiteId) continue
         write(db.prepare(`INSERT INTO website_batch_members (id,batch_id,website_id,joined_at,member_note,membership_status,removed_at,removed_reason) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET batch_id=excluded.batch_id,website_id=excluded.website_id,joined_at=excluded.joined_at,member_note=excluded.member_note,membership_status=excluded.membership_status,removed_at=excluded.removed_at,removed_reason=excluded.removed_reason`).bind(member.id, batchId, websiteId, member.joined_at || new Date().toISOString(), member.member_note || null, member.membership_status || 'active', member.removed_at || null, member.removed_reason || null))
     }
@@ -429,8 +429,10 @@ export const restoreBackup = async (db: D1Database, raw: unknown, options: { bat
     for (const websiteId of siteMap.values()) write(db.prepare('UPDATE website_monitors SET lease_token=NULL,lease_until=NULL,next_check_at=?,config_version=config_version+1 WHERE website_id=?').bind(restoreTime, websiteId))
     // The runner belongs to this environment. Never import backup heartbeat/error fields.
     write(db.prepare('UPDATE monitor_runner SET lease_token=NULL,lease_until=NULL WHERE id=1'))
-    if (importBatchId != null) {
-        const members = [...new Set(siteMap.values())].map(websiteId => db.prepare(`INSERT INTO website_batch_members (batch_id,website_id,membership_status) VALUES (?,?,'active') ON CONFLICT(batch_id,website_id,membership_status) DO NOTHING`).bind(importBatchId, websiteId))
+    if (options.batchName) write(db.prepare("INSERT INTO website_batches(name,source) VALUES(?,'网站组合导入')").bind(options.batchName))
+    if (importBatchId != null || options.batchName) {
+        const target = options.batchName ? '(SELECT MAX(id) FROM website_batches)' : '?'
+        const members = [...new Set(siteMap.values())].map(websiteId => db.prepare(`INSERT INTO website_batch_members (batch_id,website_id,membership_status) VALUES (${target},?,'active') ON CONFLICT(batch_id,website_id) WHERE membership_status='active' DO NOTHING`).bind(...(options.batchName ? [] : [importBatchId]), websiteId))
         statements.push(...members)
     }
     const summary = { total: domains.length, created: websites.length, updated, success: options.dryRun ? 0 : domains.length, failed: 0, errors: [] }

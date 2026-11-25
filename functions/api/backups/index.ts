@@ -6,7 +6,7 @@ const json = (data: unknown, status = 200, message = '成功') => Response.json(
 
 const parseInput = async (request: Request) => {
     const type = request.headers.get('content-type') || ''
-    if (type.includes('application/json')) return { input: await request.json(), batchId: null as number | null }
+    if (type.includes('application/json')) return { input: await request.json(), batchId: null as number | null, batchName: null as string | null }
     if (!type.includes('multipart/form-data')) throw new Error('不支持的内容类型')
     const form = await request.formData()
     const file: unknown = form.get('file')
@@ -14,14 +14,17 @@ const parseInput = async (request: Request) => {
     const rawBatchId = form.get('batch_id')
     const batchId = rawBatchId == null || rawBatchId === '' ? null : Number(rawBatchId)
     if (batchId != null && (!Number.isSafeInteger(batchId) || batchId <= 0)) throw new Error('导入批次编号无效')
-    return { input: JSON.parse(await file.text()), batchId }
+    const rawBatchName = form.get('batch_name')
+    const batchName = typeof rawBatchName === 'string' ? rawBatchName.trim() : null
+    if (rawBatchName != null && (!batchName || batchName.length > 200 || batchId != null)) throw new Error('请提供一个新批次名称或选择已有批次')
+    return { input: JSON.parse(await file.text()), batchId, batchName }
 }
 
 export const onRequestPost: PagesFunction<Env> = async context => {
     const auth = await checkAuth(context); if (auth) return auth
     try {
-        const { input, batchId } = await parseInput(context.request)
-        const result = await restoreBackup(context.env.DB, input, { batchId, dryRun: new URL(context.request.url).searchParams.get('dry_run') === '1' })
+        const { input, batchId, batchName } = await parseInput(context.request)
+        const result = await restoreBackup(context.env.DB, input, { batchId, batchName, dryRun: new URL(context.request.url).searchParams.get('dry_run') === '1' })
         return json(result.data, result.status, result.message)
     } catch (error) { return json(null, error instanceof SyntaxError ? 400 : 500, error instanceof SyntaxError ? 'JSON 格式无效，未导入数据' : error instanceof Error ? error.message : '导入失败；请检查文件并重试') }
 }

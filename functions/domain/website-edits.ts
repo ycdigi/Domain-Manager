@@ -5,7 +5,7 @@ type Fields = Record<string, unknown>
 export type WebsiteEditSource = 'human' | 'ai' | 'batch'
 const humanFields = new Set<string>(websiteFields)
 const humanOnly = new Set(['stage', 'lifecycle', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override'])
-const batchFields = new Set(['stage', 'lifecycle'])
+const batchFields = new Set(['stage', 'lifecycle', 'computer_name', 'ownership', 'platform', 'platform_other', 'industry', 'new_site_override', 'adsense_account_id', 'adsense_connected', 'gsc_connected'])
 export class WebsiteEditError extends Error {
     constructor(message: string, readonly status = 400) { super(message) }
 }
@@ -16,7 +16,9 @@ export const prepareWebsiteEdit = async (db: D1Database, input: unknown, source:
     if (!input || typeof input !== 'object' || Array.isArray(input)) throw new WebsiteEditError('网站字段必须是对象')
     const raw = input as Fields
     if (Object.keys(raw).some(key => !humanFields.has(key) || source === 'ai' && humanOnly.has(key) || source === 'batch' && !batchFields.has(key))) throw new WebsiteEditError('网站更新包含不支持的字段')
+    if (source === 'batch' && Object.prototype.hasOwnProperty.call(raw, 'platform_other') && raw.platform !== '其他') throw new WebsiteEditError('自定义技术栈必须同时选择其他')
     const fields = normalizeWebsiteEdit(raw)
+    if (source === 'batch' && raw.platform !== undefined && raw.platform_other === undefined) fields.platform_other = null
     const validation = validateWebsiteFields(fields, current)
     if (validation) throw new WebsiteEditError(validation)
     const accountId = Object.prototype.hasOwnProperty.call(fields, 'adsense_account_id') ? fields.adsense_account_id : current.adsense_account_id
