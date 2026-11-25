@@ -261,12 +261,17 @@
   outline: 2px solid var(--color-brand);
   outline-offset: 2px;
 }
-.site-provider-cell { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; max-width: 100%; }
-.site-provider-cell .provider-identity { max-width: 100%; }
-.site-provider-cell > a, .site-provider-cell > .site-cell { max-width: 100%; }
+.site-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.site-name-row .site-name { min-width: 0; }
+.site-name-row .el-button { flex: none; min-width: 28px; min-height: 28px; padding: 4px; margin: 0; }
+.site-inline-select .provider-identity { max-width: 100%; }
+@media (max-width: 640px), (pointer: coarse) {
+  .site-name-row .el-button, html.dm-ui .site-inline-select .el-select__wrapper { min-width: 48px; min-height: 48px; }
+}
 .site-cell:disabled {
   cursor: default;
 }
+.site-adsense-total { display: block; font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .site-adsense-account { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-adsense-status { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 18px; color: var(--color-muted); }
 .site-adsense-status.is-connected { color: var(--el-color-success); }

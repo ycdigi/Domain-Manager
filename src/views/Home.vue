@@ -19,6 +19,7 @@
       <el-button type="primary" @click="createVisible = true">新增网站</el-button>
     </WorkspaceHeading>
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load(true)">重试</el-button></div>
+    <div v-if="accountError" class="page-error" role="alert">{{ accountError }}<el-button @click="load(true)">重试</el-button></div>
     <div class="site-toolbar">
       <div class="site-filters">
         <el-input v-model="search" clearable placeholder="搜索网站或域名" aria-label="搜索网站或域名" />
@@ -129,8 +130,10 @@
                     @change="(value) => select(site.id, Boolean(value))"
                   /><DomainFavicon :key="primaryDomain(site)?.domain" :domain-id="primaryDomain(site)?.id" />
                   <div>
-                    <button class="site-cell site-name" @click="openSite(site)">{{ site.name }}</button
-                    >
+                    <div class="site-name-row">
+                      <button class="site-cell site-name" @click="openSite(site)">{{ site.name }}</button>
+                      <el-button native-type="button" text size="small" :icon="CopyDocument" :aria-label="`复制网站分析资料：${site.name}`" title="复制网站信息供 AI 分析" @click="copyMarkdown([site])" />
+                    </div>
                     <div v-if="primaryDomain(site)" class="site-domain-links">
                       <a :href="`https://${primaryDomain(site)!.domain}`" :title="primaryDomain(site)!.domain"
                         target="_blank" rel="noopener noreferrer">{{ primaryDomain(site)!.domain }}</a>
@@ -176,24 +179,10 @@
                 </button>
               </td>
               <td>
-                <button class="site-cell site-provider-cell" @click="openSite(site, 'deployment')">
-                  <ProviderIdentity v-for="account in serviceProviders(site)" :key="account.key"
-                    :provider="account.provider" :provider-name="account.provider_name" :name="account.name" compact />
-                  <span v-if="!serviceProviders(site).length">—</span>
-                </button>
+                <WebsiteAccountSelect :site="site" kind="service" :accounts="accounts" :disabled="busy || loading || !!accountError || Boolean(metricEdit)" @change="id => changeAccount(site, 'service', id)" />
               </td>
               <td>
-                <div class="site-provider-cell">
-                  <template v-for="entry in githubEntries(site)" :key="entry.key">
-                    <a v-if="entry.url" :href="entry.url" :title="entry.url" target="_blank" rel="noopener noreferrer">
-                      <ProviderIdentity provider="github" :name="entry.name" compact />
-                    </a>
-                    <button v-else class="site-cell" @click="openSite(site, 'deployment')">
-                      <ProviderIdentity provider="github" :name="entry.name" compact />
-                    </button>
-                  </template>
-                  <button v-if="!githubEntries(site).length" class="site-cell" @click="openSite(site, 'deployment')">—</button>
-                </div>
+                <WebsiteAccountSelect :site="site" kind="github" :accounts="accounts" :disabled="busy || loading || !!accountError || Boolean(metricEdit)" @change="id => changeAccount(site, 'github', id)" />
               </td>
               <td>
                 <el-select class="site-inline-select" :model-value="site.computer_name || ''" :aria-label="`电脑：${site.name}`" :disabled="busy || loading || Boolean(metricEdit)" filterable allow-create clearable default-first-option @change="(value: string) => changeComputer(site, value)">
@@ -201,6 +190,9 @@
                 </el-select>
               </td>
               <td>
+                <span v-if="site.adsense_connected === '已开通'" class="site-adsense-total"
+                  :title="`网站累计美元收入（USD，不换算）：${usdTotalLabel(site)}`"
+                  :aria-label="`网站累计美元收入：${usdTotalLabel(site)}`">{{ usdTotalLabel(site) }}</span>
                 <span v-if="site.adsense_connected === '已开通' && site.adsense_account_name"
                   class="site-adsense-account" :title="`AdSense：${site.adsense_account_name}`">{{ site.adsense_account_name }}</span>
                 <span v-else class="site-adsense-status" :class="{ 'is-connected': site.adsense_connected === '已开通' }"
@@ -312,10 +304,12 @@ import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
 import WebsiteBulkSettingsDialog from '../components/WebsiteBulkSettingsDialog.vue'
 import DomainFavicon from '../components/DomainFavicon.vue'
 import TechStackIcon from '../components/TechStackIcon.vue'
-import ProviderIdentity from '../components/ProviderIdentity.vue'
+import WebsiteAccountSelect from '../components/WebsiteAccountSelect.vue'
+import type { ProviderAccount } from '../../functions/types'
 import { providerIdentity } from '../utils/provider-identity'
 import {
   getWebsites,
+  setWebsiteAccount,
   createWebsite,
   updateWebsite,
   deleteWebsite,
@@ -329,7 +323,7 @@ import { api } from '../utils/request'
 import { copyText } from '../utils/clipboard'
 import { websitesMarkdown } from '../utils/website-markdown'
 import { confirmAction, isDismissed } from '../utils/feedback'
-import { localDate } from '../utils/workspaceCache'
+import { cachedGet, localDate } from '../utils/workspaceCache'
 import '../styles/home/home.css'
 const route = useRoute()
 const router = useRouter()
@@ -356,6 +350,8 @@ const metricLabels: Record<MetricField, string> = { page_count: '总页面数', 
 const metricEdit = shallowRef<{ site: Website; field: MetricField; anchor: HTMLElement }>()
 const batches = ref<Batch[]>([])
 const websites = ref<Website[]>([])
+const accounts = ref<ProviderAccount[]>([])
+const accountError = ref('')
 const loading = ref(false)
 const error = ref('')
 const search = computed({ get: () => String(route.query.q || ''), set: value => { const query = { ...route.query }; if (value) query.q = value; else delete query.q; void router.replace({ query }) } })
@@ -400,22 +396,15 @@ const providerNames = computed(() => [...new Set(websites.value.flatMap(site => 
 const computerNames = computed(() => sortComputerNames(websites.value.map(site => site.computer_name)))
 const primaryDomain = (site: Website) => site.domains.find((d) => d.is_primary) || site.domains[0]
 const platformLabel = (site: Website) => (site.platform === '其他' ? site.platform_other || '其他' : site.platform)
-const safeExternal = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
-const githubEntries = (site: Website) => {
-  const url = safeExternal(site.repository?.resource_url || '')
-  const entries = (site.provider_accounts || []).filter(account => account.provider === 'github').map(account => ({
-    key: `account-${account.id}`, name: account.name, url: account.id === site.repository?.account_id ? url : undefined
-  }))
-  if (url && site.repository && !entries.some(entry => entry.url)) {
-    entries.push({ key: `repository-${site.repository.id}`, name: site.repository.name, url })
-  }
-  return entries
-}
+const directAccounts = (site: Website, github: boolean) => (site.provider_accounts || []).filter(account => site.direct_account_ids?.includes(account.id) && (account.provider === 'github') === github)
 const clickRanges: Record<string, string> = { under10: '＜10', '10to29': '10–29', '30to49': '30–49', '50to99': '50–99', over100: '≥100' }
 const clickRange = (count: number) => count < 10 ? 'under10' : count < 30 ? '10to29' : count < 50 ? '30to49' : count < 100 ? '50to99' : 'over100'
 const clickLabel = (site: Website) => site.daily_clicks != null
   ? `${clickRanges[clickRange(site.daily_clicks)]}（${site.daily_clicks}）`
   : clickRanges[site.daily_clicks_range || ''] || '—'
+const usdTotal = (site: Website) => site.income_totals?.find(item => item.currency === 'USD')?.amount
+const usdFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const usdTotalLabel = (site: Website) => { const amount = usdTotal(site); return amount == null ? '—' : usdFormatter.format(amount) }
 const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' })
 const sortValue = (s: Website, key: string): string | number =>
   countKeys.includes(key as (typeof countKeys)[number])
@@ -430,10 +419,10 @@ const sortValue = (s: Website, key: string): string | number =>
               s.daily_clicks_range || ''
             ] ??
             -1,
-          provider: serviceProviders(s).map(account => `${account.label} ${account.name}`).join(' '),
-          github: githubEntries(s).map(entry => entry.name).join(' '),
+          provider: directAccounts(s, false).map(account => `${providerIdentity(account.provider, account.provider_name).label} ${account.name}`).join(' '),
+          github: directAccounts(s, true).map(account => account.name).join(' '),
           computer: s.computer_name || '',
-          adsense: s.adsense_connected === '已开通' ? 1 : 0,
+          adsense: s.adsense_connected === '已开通' ? usdTotal(s) ?? -1 : -2,
           stage: stages.indexOf(s.stage)
         } as Record<string, string | number>
       )[key] ?? '')
@@ -461,7 +450,9 @@ const visibleSites = computed(() =>
       const x = sortValue(a, sortKey.value),
         y = sortValue(b, sortKey.value)
       return (
-        (typeof x === 'number' && typeof y === 'number' ? x - y : collator.compare(String(x), String(y))) *
+        ((typeof x === 'number' && typeof y === 'number' ? x - y : collator.compare(String(x), String(y))) ||
+          (sortKey.value === 'adsense' && a.adsense_connected === '已开通' && b.adsense_connected === '已开通'
+            ? collator.compare(a.adsense_account_name || '', b.adsense_account_name || '') : 0)) *
         (sortDirection.value === 'asc' ? 1 : -1)
       )
     })
@@ -508,7 +499,11 @@ const load = async (force = false) => {
   loading.value = true
   error.value = ''
   try {
-    websites.value = await getWebsites(force)
+    const [siteResult, accountResult] = await Promise.allSettled([getWebsites(force), cachedGet<ProviderAccount[]>('/api/resources/accounts', force)])
+    if (siteResult.status === 'rejected') throw siteResult.reason
+    websites.value = siteResult.value
+    accountError.value = accountResult.status === 'rejected' ? '服务账号读取失败，请重试' : ''
+    accounts.value = accountResult.status === 'fulfilled' ? accountResult.value : []
     try { batches.value = await getBatches(force) } catch { ElMessage.warning('批次暂时无法读取，网站仍可查看') }
   } catch (e) {
     error.value = e instanceof Error ? e.message : '网站加载失败'
@@ -535,6 +530,10 @@ const saveInline = (site: Website, fields: Record<string, unknown>) => {
     ElMessage.success('资料已保存')
   })
 }
+const changeAccount = (site: Website, kind: 'service' | 'github', id: number | null) => run(async () => {
+  await setWebsiteAccount(site.id, kind, id)
+  ElMessage.success('账号已保存')
+})
 const changeStage = (site: Website, stage: WebsiteStage) => saveInline(site, { stage })
 const changeComputer = (site: Website, value: string | undefined) => saveInline(site, { computer_name: value?.trim() || null })
 const changePlatform = (site: Website, value: string) => {
@@ -585,6 +584,9 @@ const assignSelectedBatch = (payload: BatchAssignmentPayload) =>
   })
 const copySelectedMarkdown = async () => {
   const sites = visibleSites.value.filter(site => selectedIds.has(site.id))
+  return copyMarkdown(sites)
+}
+const copyMarkdown = async (sites: Website[]) => {
   if (!sites.length) return
   try {
     await copyText(websitesMarkdown(sites, batches.value, localDate()))

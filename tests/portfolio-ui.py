@@ -6,6 +6,8 @@ from zoneinfo import ZoneInfo
 from playwright.sync_api import sync_playwright, expect
 
 sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=0,page_count=25,calculator_count=0,article_count=12,computer_name='Mac Mini YC',daily_clicks=8,content_stats_updated_date='2026-11-21',clicks_updated_date='2026-11-21',next_action_status='待做',adsense_connected='已开通',adsense_account_id=10,adsense_account_name='Google main',gsc_connected='未知',domains=[dict(id=1,website_id=1,domain='example.test',is_primary=1)],hosting=None,provider_accounts=[dict(id=3,provider='cloudflare',provider_name=None,name='Suscoding@Gmail.Com'),dict(id=4,provider='github',provider_name=None,name='Coder@Example.Com')],repository=dict(id=1,name='org/repo',resource_url='https://github.com/org/repo',account_id=4,status='正常')),dict(id=2,name='WordPress site',batch_ids=[],stage='增长',lifecycle='active',ownership='自营网站',platform='WordPress',priority_order=1,page_count=40,calculator_count=3,article_count=20,computer_name='Macbook Pro',daily_clicks=None,next_action_status='待做',adsense_account_id=99,adsense_account_name='Not enabled account',adsense_connected='未知',gsc_connected='未知',domains=[dict(id=2,website_id=2,domain='wordpress.test',is_primary=1)],provider_accounts=[dict(id=5,provider='github',provider_name=None,name='Unhosted@Example.Com'),dict(id=6,provider='github',provider_name=None,name='Second account')],hosting=dict(id=3,provider='vhost',provider_name='SiteGround',name='host',ip_address='203.0.113.10',status='正常'))]
+sites[0]['income_totals']=[dict(currency='USD',amount=1234.5),dict(currency='EUR',amount=9999)]
+for site in sites: site['direct_account_ids']=[a['id'] for a in site.get('provider_accounts',[])]
 state=dict(fail=False,copy_fail=False,empty=False,copies=0,stage_fail=False,stage_hold=False,stage_route=None,stage_requests=[])
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
@@ -25,6 +27,7 @@ with sync_playwright() as p:
    site=next(s for s in sites if s['id']==int(path.split('/')[1]))
    if code==200:site.update(fields)
    data=site
+  elif path=='resources/accounts':data=[dict(**a,status='正常') for site in sites for a in site.get('provider_accounts',[])]
   elif path=='batches':data=[dict(id=7,name='第一批',status='进行中'),dict(id=8,name='历史批次',status='已归档')]
   elif path=='monitor':data=dict(monitors=[],incidents=[],unread_count=0,runner=None)
   elif path.startswith('websites/') and path.endswith('/monitor'):
@@ -70,6 +73,7 @@ with sync_playwright() as p:
  # Remote additions coexist with metric editing: AdSense, batch filters and safe Markdown copy.
  ads=page.get_by_role('checkbox',name='只显示已开通 AdSense 的网站',exact=True)
  expect(row.locator('.site-adsense-account')).to_have_text('Google main')
+ expect(row.locator('.site-adsense-total')).to_have_text('$1,234.50')
  expect(table.locator('tbody tr').nth(1).locator('.site-adsense-status')).to_have_attribute('aria-label','AdSense：未知')
  page.locator('.site-results .el-checkbox').click();expect(table.locator('tbody tr')).to_have_count(1);page.reload();page.wait_for_load_state('networkidle')
  expect(ads).to_be_checked();page.locator('.site-results .el-checkbox').click();expect(table.locator('tbody tr')).to_have_count(2)
@@ -201,7 +205,7 @@ with sync_playwright() as p:
  expect(table.locator('tbody tr').first).to_contain_text('WordPress site')
  stage_select.locator('.el-select__wrapper').click();page.get_by_role('option',name='验证',exact=True).click()
  expect(table.locator('tbody tr').first).to_contain_text('Astro site')
- expect(row.locator('td').nth(3)).to_have_text('0');expect(row).to_contain_text('Cloudflare');expect(row.get_by_role('link',name='Coder')).to_have_attribute('href','https://github.com/org/repo')
+ expect(row.locator('td').nth(3)).to_have_text('0');expect(row).to_contain_text('Cloudflare');expect(row.locator('td').nth(7)).to_contain_text('Coder')
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('Astro site')
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('WordPress site')
  expect(table.locator('th[aria-sort]')).to_have_count(1)

@@ -59,6 +59,7 @@ export interface Website {
   review_count?: number
   resource_names?: string | null
   resource_ids?: number[]
+  direct_account_ids?: number[]
   provider_account_ids?: number[]
   provider_accounts?: Array<{ id: number; provider: string; provider_name: string | null; name: string }>
   current_income?: Array<{ id?: number | null; source: string; currency: string; amount: number; origin: 'website' | 'adsense_account' }>
@@ -93,3 +94,8 @@ export const updateWebsite = async (id: number, fields: Record<string, unknown>)
 export interface WebsiteBulkRelations { account_ids?: number[]; remove_account_ids?: number[]; gsc_account_id?: number | null; resource_assignments?: Array<{role:string;resource_id:number|null}>; batch_ids?:number[] }
 export const bulkUpdateWebsites = async (websiteIds: number[], fields: Record<string, unknown>, relations: WebsiteBulkRelations = {}) => { const result = await api.patch<{ accepted: number; website_ids: number[] }>('/api/websites/batch', { website_ids: websiteIds, fields, ...relations }); invalidateData('/api/websites', '/api/website-management', '/api/gsc/accounts', '/api/resources', '/api/batches', '/api/work-queue', '/api/adsense/accounts', '/api/monitor'); return result }
 export const deleteWebsite = async (id: number) => { const result = await api.delete(`/api/websites/${id}`); invalidateData('/api/websites', '/api/website-management', '/api/gsc/accounts', '/api/adsense/accounts', '/api/resources', '/api/batches', '/api/work-queue', '/api/monitor'); return result }
+
+export const setWebsiteAccount = async (websiteId: number, kind: 'service' | 'github', accountId: number | null) => {
+  await api.put('/api/resources/account-links', { website_id: websiteId, kind, account_id: accountId })
+  invalidateData('/api/websites', '/api/resources', '/api/website-management', '/api/batches')
+}
