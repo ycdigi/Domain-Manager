@@ -350,3 +350,6 @@
 .site-metric-editor form { display: grid; gap: var(--space-xs); margin-top: var(--space-xs); }
 .site-metric-editor .el-select { width: 100%; }
 .site-metric-editor .page-actions { justify-content: flex-end; }
+
+.site-stack-option { display: inline-flex; align-items: center; gap: 8px; }
+.site-stack-option > svg, .site-stack-option > .el-icon { flex: none; width: 18px; height: 18px; }

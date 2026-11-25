@@ -4,6 +4,7 @@ import json
 from playwright.sync_api import sync_playwright, expect
 
 accounts=[dict(id=1,provider='cloudflare',name='Old',status='正常'),dict(id=2,provider='vhost',provider_name='Hostinger',name='New',status='正常'),dict(id=3,provider='github',name='Coder',status='正常'),dict(id=4,provider='github',name='Next coder',status='正常'),dict(id=5,provider='github',name='Disabled',status='停用')]
+accounts += [dict(id=6,provider='cloudflare',name='Suscoding@Gmail.Com',status='正常'),dict(id=7,provider='github',name='GitUser@Example.Com',status='正常')]
 sites=[dict(id=i,name=name,stage='验证',lifecycle='active',ownership='自营网站',platform='Astro',priority_order=i,adsense_connected=status,adsense_account_name=account,gsc_connected='未知',next_action_status='待做',domains=[],direct_account_ids=[1,3],provider_accounts=[accounts[0],accounts[2]]) for i,name,status,account in [(1,'Zulu site','已开通','Zulu'),(2,'Alpha site','已开通','Alpha'),(3,'Unknown site','未知','Hidden account'),(4,'Closed site','未开通','Another hidden account'),(5,'Enabled site','已开通',None),(6,'No income site','已开通','Missing')]]
 sites[0]['income_totals']=[dict(currency='USD',amount=9),dict(currency='EUR',amount=9999)]
 sites[1]['income_totals']=[dict(currency='USD',amount=1000.5)]
@@ -44,6 +45,16 @@ with sync_playwright() as p:
  expect(page.locator('tbody tr').filter(has=page.get_by_role('button',name='Unknown site',exact=True)).locator('.site-adsense-total')).to_have_count(0)
  expect(page.locator('tbody tr').filter(has=page.get_by_role('button',name='Alpha site',exact=True)).locator('td').nth(7)).to_contain_text('多个账号（2）')
  assert not state['requests']
+ # Visible options share the compact selected label; complete accounts remain in tooltips.
+ for index,short,full in [(6,'Suscoding','Cloudflare · Suscoding@Gmail.Com'),(7,'GitUser','GitHub · GitUser@Example.Com')]:
+  row.locator('td').nth(index).locator('.el-select__wrapper').click()
+  identity=page.get_by_role('option').filter(has_text=short).locator('.provider-identity')
+  assert identity.locator(':scope > span').evaluate("el => [...el.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('').trim()")==short
+  assert identity.locator('.provider-identity-brand').evaluate('el => el.getBoundingClientRect().width <= 1')
+  expect(identity.locator('img')).to_have_count(1)
+  expect(identity).to_have_attribute('title',full)
+  page.screenshot(path=f'/tmp/domain-manager-compact-options-{index}.png',animations='disabled')
+  page.keyboard.press('Escape')
  row.locator('td').nth(7).locator('.el-select__wrapper').click()
  expect(page.get_by_role('option',name='GitHub · Disabled',exact=True)).to_have_count(0)
  page.keyboard.press('Escape')

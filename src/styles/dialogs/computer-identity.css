@@ -1,0 +1,4 @@
+.computer-identity { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; vertical-align: middle; }
+.computer-identity .el-icon, .computer-identity > svg { flex: none; width: 18px; height: 18px; }
+.computer-identity > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.computer-identity-model { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }

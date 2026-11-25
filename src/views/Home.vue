@@ -157,7 +157,7 @@
                   @change="(value: string) => changePlatform(site, value)"
                 >
                   <template #label><TechStackIcon :platform="site.platform" /><span class="sr-only">{{ platformLabel(site) }}</span></template>
-                  <el-option v-for="value in [...new Set([...platforms, platformLabel(site)])]" :key="value" :label="value" :value="value" />
+                  <el-option v-for="value in [...new Set([...platforms, platformLabel(site)])]" :key="value" :label="value" :value="value"><span class="site-stack-option"><TechStackIcon :platform="value" /><span>{{ value }}</span></span></el-option>
                 </el-select>
               </td>
               <td v-for="key in countKeys" :key="key">
@@ -186,7 +186,8 @@
               </td>
               <td>
                 <el-select class="site-inline-select" :model-value="site.computer_name || ''" :aria-label="`电脑：${site.name}`" :disabled="busy || loading || Boolean(metricEdit)" filterable allow-create clearable default-first-option @change="(value: string) => changeComputer(site, value)">
-                  <el-option v-for="name in computerNames" :key="name" :label="name" :value="name" />
+                  <template #label><ComputerIdentity v-if="site.computer_name" :name="site.computer_name" /></template>
+                  <el-option v-for="name in computerNames" :key="name" :label="name" :value="name"><ComputerIdentity :name="name" /></el-option>
                 </el-select>
               </td>
               <td>
@@ -304,6 +305,7 @@ import BatchAssignmentDialog from '../components/BatchAssignmentDialog.vue'
 import WebsiteBulkSettingsDialog from '../components/WebsiteBulkSettingsDialog.vue'
 import DomainFavicon from '../components/DomainFavicon.vue'
 import TechStackIcon from '../components/TechStackIcon.vue'
+import ComputerIdentity from '../components/ComputerIdentity.vue'
 import WebsiteAccountSelect from '../components/WebsiteAccountSelect.vue'
 import type { ProviderAccount } from '../../functions/types'
 import { providerIdentity } from '../utils/provider-identity'

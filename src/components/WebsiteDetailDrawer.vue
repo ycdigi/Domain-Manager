@@ -12,7 +12,7 @@
 <el-form-item label="网站归属"><el-select v-model="profile.ownership"><el-option v-for="item in ownerships" :key="item" :label="item" :value="item" /></el-select></el-form-item>
 <el-form-item label="技术栈"><el-select v-model="profile.platform"><el-option v-for="item in platforms" :key="item" :label="item" :value="item" /></el-select></el-form-item>
 <el-form-item label="网站类型"><el-select v-model="profile.industry" clearable placeholder="未设置"><el-option v-for="item in industries" :key="item" :label="item" :value="item" /></el-select></el-form-item>
-<el-form-item label="主要管理电脑"><el-select v-model="profile.computer_name" filterable allow-create clearable default-first-option><el-option v-for="name in computerNames" :key="name" :label="name" :value="name" /></el-select></el-form-item>
+<el-form-item label="主要管理电脑"><el-select v-model="profile.computer_name" filterable allow-create clearable default-first-option><template #label><ComputerIdentity v-if="profile.computer_name" :name="profile.computer_name" /></template><el-option v-for="name in computerNames" :key="name" :label="name" :value="name"><ComputerIdentity :name="name" /></el-option></el-select></el-form-item>
 <el-form-item v-if="profile.platform === '其他'" label="其他技术栈"><el-input v-model="profile.platform_other" maxlength="100" /></el-form-item>
 </el-form><section class="portfolio-detail-section"><div class="portfolio-detail-heading"><h2>网站图标</h2><el-button :loading="refreshingIcon" @click="refreshIcon">刷新图标</el-button></div><DomainFavicon :domain-id="domains.find(d=>d.is_primary)?.id" :revision="iconRevision" /><p class="page-muted">使用已保存的图标，刷新列表不会重复获取。</p></section></div></el-tab-pane>
         <el-tab-pane label="内容与点击" name="content" lazy><div v-loading="sectionLoading.content"><el-form label-position="top" class="portfolio-detail-grid">
@@ -139,6 +139,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { websiteQuery, websiteSections, type WebsiteSection } from '../utils/website-location'
 import { ElMessage } from 'element-plus'
 import DomainFavicon from './DomainFavicon.vue'
+import ComputerIdentity from './ComputerIdentity.vue'
 import WebsiteDeployment from './WebsiteDeployment.vue'
 import { sortComputerNames } from '../utils/computer-options'
 import WebsiteWorkHistory from './WebsiteWorkHistory.vue'

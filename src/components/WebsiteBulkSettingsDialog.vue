@@ -22,7 +22,7 @@
         <small v-if="role==='代码仓库'" class="page-muted">全部已选网站将使用同一主要仓库；各站仓库不同请仅关联 GitHub 账号。</small>
       </el-form-item>
       <el-form-item label="加入已有批次" class="page-form-full"><el-select v-model="batchIds" multiple :multiple-limit="20" filterable clearable placeholder="保留原有批次，追加所选批次" aria-label="批量加入已有批次"><el-option v-for="batch in batches.filter(item=>item.status!=='已归档')" :key="batch.id" :label="batch.name" :value="batch.id" /></el-select></el-form-item>
-      <el-form-item label="主要管理电脑"><el-select v-model="computer" filterable allow-create default-first-option clearable placeholder="不修改" aria-label="批量设置电脑" @clear="computer=undefined"><el-option label="清空电脑" :value="0" /><el-option v-for="name in computers" :key="name" :label="name" :value="name" /></el-select></el-form-item>
+      <el-form-item label="主要管理电脑"><el-select v-model="computer" filterable allow-create default-first-option clearable placeholder="不修改" aria-label="批量设置电脑" @clear="computer=undefined"><template #label="{ label }"><ComputerIdentity v-if="typeof computer === 'string'" :name="computer" /><span v-else>{{ label }}</span></template><el-option label="清空电脑" :value="0" /><el-option v-for="name in computers" :key="name" :label="name" :value="name"><ComputerIdentity :name="name" /></el-option></el-select></el-form-item>
       <el-form-item label="GSC 账号"><el-select v-model="gscAccountId" filterable clearable placeholder="不修改" aria-label="批量设置GSC账号" @clear="gscAccountId=undefined"><el-option label="解除 GSC 账号关联" :value="0" /><el-option v-for="account in gscAccounts" :key="account.id" :label="account.name+(account.email?' · '+account.email:'')" :value="account.id" /></el-select></el-form-item>
       <el-form-item label="AdSense 账号"><el-select v-model="adsenseAccountId" clearable filterable placeholder="不修改" aria-label="批量设置AdSense账号" @clear="adsenseAccountId=undefined"><el-option label="解除 AdSense 账号关联" :value="0" /><el-option v-for="account in adsenseAccounts" :key="account.id" :label="account.name" :value="account.id" /></el-select></el-form-item>
       <el-form-item label="新站分类"><el-select v-model="newSite" clearable placeholder="不修改" aria-label="批量设置新站分类"><el-option label="自动按域名注册日期判断" value="auto" /><el-option label="新站" value="new" /><el-option label="普通站" value="regular" /></el-select></el-form-item>
@@ -41,6 +41,7 @@ import { getBatches, type Batch } from '../api/batches'
 import { bulkUpdateWebsites, type Website, type WebsiteBulkRelations } from '../api/websites'
 import { getGscAccounts, type GscAccount } from '../api/website-management'
 import { cachedGet } from '../utils/workspaceCache'
+import ComputerIdentity from './ComputerIdentity.vue'
 import { sortComputerNames } from '../utils/computer-options'
 import { confirmDiscard, useUnsavedChanges } from '../composables/useUnsavedChanges'
 const props=defineProps<{visible:boolean;websites:Website[];computerNames:string[]}>()

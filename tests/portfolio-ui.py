@@ -86,9 +86,19 @@ with sync_playwright() as p:
  assert 'example.test' in markdown and 'AdSense：已开通' in markdown and 'fixture-token' not in markdown,markdown
  table.locator('thead .el-checkbox').click()
  page.get_by_role('button',name='清除全部条件',exact=True).click();expect(table.locator('tbody tr')).to_have_count(2)
+ # Computer options use device icons and short names but retain the full saved values.
+ row.locator('td').nth(8).locator('.el-select__wrapper').click()
+ computer_option=page.get_by_role('option',name='Mac Mini YC',exact=True)
+ assert computer_option.locator('.computer-identity > span').evaluate("el => [...el.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('').trim()")=='YC'
+ assert computer_option.locator('.computer-identity-model').evaluate('el => el.getBoundingClientRect().width <= 1')
+ expect(computer_option.locator('svg')).to_have_count(1)
+ expect(computer_option.locator('.computer-identity')).to_have_attribute('title','Mac Mini YC')
+ page.screenshot(path='/tmp/domain-manager-compact-computers.png',animations='disabled')
+ page.keyboard.press('Escape')
  # Stack and computer are editable without opening the full detail drawer.
  def choose(label,option):
   row.locator('.el-select').filter(has=page.get_by_role('combobox',name=label,exact=True)).locator('.el-select__wrapper').click()
+  if label.startswith('技术栈') and option in ['Next.js','Astro','其他']: expect(page.get_by_role('option',name=option,exact=True).locator('svg')).to_have_count(1)
   page.get_by_role('option',name=option,exact=True).click()
   expect(row.get_by_role('combobox',name=label,exact=True)).to_be_enabled()
  choose('技术栈：Astro site','Next.js')

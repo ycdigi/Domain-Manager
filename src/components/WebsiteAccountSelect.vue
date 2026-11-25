@@ -10,7 +10,7 @@
     <el-option v-if="selected.length > 1" :value="-1" label="多个账号，选择后替换" disabled />
     <el-option :value="0" label="不关联账号" />
     <el-option v-for="account in options" :key="account.id" :value="account.id!" :label="accountLabel(account)" :disabled="account.status === '停用'">
-      <ProviderIdentity :provider="account.provider" :provider-name="account.provider_name" :name="account.name" />
+      <ProviderIdentity :provider="account.provider" :provider-name="account.provider_name" :name="account.name" compact />
     </el-option>
   </el-select>
 </template>
