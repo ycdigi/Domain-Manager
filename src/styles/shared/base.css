@@ -6,8 +6,21 @@ html.dm-ui body { margin: 0; overflow-x: clip; background: var(--color-paper-2);
 html.dm-ui #app { min-height: 100svh; }
 html.dm-ui *, html.dm-ui *::before, html.dm-ui *::after { box-sizing: border-box; }
 html.dm-ui :focus-visible { outline: 2px solid var(--color-focus); outline-offset: 2px; }
-html.dm-ui .el-input__inner:focus-visible, html.dm-ui .el-textarea__inner:focus-visible { outline-offset: -2px; }
-html.dm-ui .el-input__wrapper.is-focus, html.dm-ui .el-select__wrapper.is-focused { box-shadow: 0 0 0 2px var(--color-focus) inset; }
+/* Wrapped fields own one focus border; their inner inputs must not draw another. */
+html.dm-ui .el-input__wrapper .el-input__inner:focus-visible,
+html.dm-ui .el-select__wrapper .el-select__input:focus-visible,
+html.dm-ui .el-range-editor .el-range-input:focus-visible,
+html.dm-ui .el-textarea__inner:focus-visible { outline: none; }
+html.dm-ui .el-input__wrapper.is-focus,
+html.dm-ui .el-select__wrapper.is-focused,
+html.dm-ui .el-range-editor.is-active,
+html.dm-ui .el-textarea__inner:focus { box-shadow: 0 0 0 1px var(--color-focus) inset; }
+@media (forced-colors: active) {
+  html.dm-ui .el-input__wrapper.is-focus,
+  html.dm-ui .el-select__wrapper.is-focused,
+  html.dm-ui .el-range-editor.is-active,
+  html.dm-ui .el-textarea__inner:focus { box-shadow: none; outline: 1px solid CanvasText; outline-offset: -1px; }
+}
 
 /* One button hierarchy for the workbench, nested managers and confirmations. */
 html.dm-ui .el-button { min-height: var(--control-height); padding-inline: var(--space-sm); border-radius: var(--radius-control); font-family: var(--font-body); font-size: var(--text-sm); font-weight: var(--weight-medium); transition: none; }

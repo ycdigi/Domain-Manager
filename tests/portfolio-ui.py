@@ -1,6 +1,7 @@
 """Website table/browser acceptance. Run with Vite at port 5173; API fixtures contain no real credentials."""
 import base64
 import json
+import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from playwright.sync_api import sync_playwright, expect
@@ -9,6 +10,13 @@ sites=[dict(id=1,name='Astro site',batch_ids=[7,8],stage='验证',lifecycle='act
 sites[0]['income_totals']=[dict(currency='USD',amount=1234.5),dict(currency='EUR',amount=9999)]
 for site in sites: site['direct_account_ids']=[a['id'] for a in site.get('provider_accounts',[])]
 state=dict(fail=False,copy_fail=False,empty=False,copies=0,stage_fail=False,stage_hold=False,stage_route=None,stage_requests=[])
+def expect_single_field_focus(control):
+ expect(control).to_be_focused()
+ expect(control).to_have_css('outline-width','0px')
+ frame=control.locator('xpath=ancestor::*[contains(@class,"el-input__wrapper") or contains(@class,"el-select__wrapper")][1]')
+ if not frame.count():frame=control
+ expect(frame).to_have_css('box-shadow',re.compile(r'0px 0px 0px 1px inset$'))
+
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
  context=browser.new_context(viewport={'width':1600,'height':1000},permissions=['clipboard-read','clipboard-write'])
@@ -44,6 +52,13 @@ with sync_playwright() as p:
  expect(page.locator('.site-table tbody tr')).to_have_count(2)
  page.goto('http://127.0.0.1:5173/home');page.wait_for_load_state('networkidle')
  table=page.locator('.site-table');expect(table.locator('thead th')).to_have_count(12)
+ search=page.get_by_role('textbox',name='搜索网站或域名',exact=True)
+ search.focus();expect_single_field_focus(search)
+ stage_filter=page.get_by_role('combobox',name='阶段筛选',exact=True)
+ stage_filter.focus();expect_single_field_focus(stage_filter)
+ page.keyboard.press('Escape')
+ refresh=page.get_by_role('button',name='刷新',exact=True)
+ refresh.focus();expect(refresh).to_have_css('outline-width','2px')
  index_link=table.locator('tbody tr').first.get_by_role('link',name='Google 收录查询：example.test（新标签页打开）',exact=True)
  expect(index_link).to_have_attribute('href','https://www.google.com/search?q=site%3Aexample.test')
  expect(index_link).to_have_attribute('target','_blank');expect(index_link).to_have_text('')
@@ -61,8 +76,9 @@ with sync_playwright() as p:
  assert page.locator('.portfolio-table-wrap').evaluate('e => e.scrollWidth <= e.clientWidth + 1'),'all twelve columns should fit at 1600px'
  for width in [1600,1920]:
   page.set_viewport_size(dict(width=width,height=1000))
+  page.wait_for_function("document.querySelector('.site-table tbody td:nth-child(2)').getBoundingClientRect().width <= 60")
   cells=row.locator('td')
-  assert cells.nth(1).bounding_box()['width']<=80,'stack icon column wastes horizontal space'
+  assert cells.nth(1).bounding_box()['width']<=60,'stack icon column wastes horizontal space'
   for index in [2,3,4,5]:
    assert cells.nth(index).bounding_box()['width']<=96,'numeric column expands into spare space'
   for index in [1,2,3,4,5]:
@@ -87,36 +103,36 @@ with sync_playwright() as p:
  table.locator('thead .el-checkbox').click()
  page.get_by_role('button',name='清除全部条件',exact=True).click();expect(table.locator('tbody tr')).to_have_count(2)
  # Computer options use device icons and short names but retain the full saved values.
- row.locator('td').nth(8).locator('.el-select__wrapper').click()
+ row.get_by_role('button',name='电脑：Astro site',exact=True).click()
  computer_option=page.get_by_role('option',name='Mac Mini YC',exact=True)
  assert computer_option.locator('.computer-identity > span').evaluate("el => [...el.childNodes].filter(n => n.nodeType === Node.TEXT_NODE).map(n => n.textContent).join('').trim()")=='YC'
  assert computer_option.locator('.computer-identity-model').evaluate('el => el.getBoundingClientRect().width <= 1')
- expect(computer_option.locator('svg')).to_have_count(1)
+ expect(computer_option.locator('.computer-identity svg')).to_have_count(1)
  expect(computer_option.locator('.computer-identity')).to_have_attribute('title','Mac Mini YC')
  page.screenshot(path='/tmp/domain-manager-compact-computers.png',animations='disabled')
  page.keyboard.press('Escape')
  # Stack and computer are editable without opening the full detail drawer.
  def choose(label,option):
-  row.locator('.el-select').filter(has=page.get_by_role('combobox',name=label,exact=True)).locator('.el-select__wrapper').click()
-  if label.startswith('技术栈') and option in ['Next.js','Astro','其他']: expect(page.get_by_role('option',name=option,exact=True).locator('svg')).to_have_count(1)
+  row.get_by_role('button',name=label,exact=True).click()
+  if label.startswith('技术栈') and option in ['Next.js','Astro','其他']: expect(page.get_by_role('option',name=option,exact=True).locator('.site-choice-identity > svg, .site-choice-identity > .el-icon > svg')).to_have_count(1)
   page.get_by_role('option',name=option,exact=True).click()
-  expect(row.get_by_role('combobox',name=label,exact=True)).to_be_enabled()
+  expect(page.locator('.site-choice-editor')).to_have_count(0)
+  expect(row.get_by_role('button',name=label,exact=True)).to_be_enabled()
  choose('技术栈：Astro site','Next.js')
  assert state['stage_requests'][-1]=={'platform':'Next.js','platform_other':None}
- stack=row.get_by_role('combobox',name='技术栈：Astro site',exact=True)
- stack.fill('Hugo');page.get_by_role('option',name='Hugo',exact=True).click();expect(stack).to_be_enabled()
+ stack=row.get_by_role('button',name='技术栈：Astro site',exact=True)
+ stack.click();page.get_by_role('textbox',name='搜索技术栈',exact=True).fill('Hugo');page.get_by_role('option',name='使用“Hugo”',exact=True).click();expect(page.locator('.site-choice-editor')).to_have_count(0)
  assert state['stage_requests'][-1]=={'platform':'其他','platform_other':'Hugo'}
- page.reload();page.wait_for_load_state('networkidle');expect(row.locator('.el-select').filter(has=page.get_by_role('combobox',name='技术栈：Astro site',exact=True))).to_contain_text('Hugo')
+ page.reload();page.wait_for_load_state('networkidle');expect(stack).to_contain_text('Hugo')
  choose('技术栈：Astro site','其他')
  assert state['stage_requests'][-1]=={'platform':'其他','platform_other':None}
  choose('技术栈：Astro site','Astro')
  choose('电脑：Astro site','Macbook Pro')
  assert state['stage_requests'][-1]=={'computer_name':'Macbook Pro'}
- computer=row.get_by_role('combobox',name='电脑：Astro site',exact=True)
- computer.fill('Office PC');page.get_by_role('option',name='Office PC',exact=True).click();expect(computer).to_be_enabled()
+ computer=row.get_by_role('button',name='电脑：Astro site',exact=True)
+ computer.click();page.get_by_role('textbox',name='搜索电脑',exact=True).fill('Office PC');page.get_by_role('option',name='使用“Office PC”',exact=True).click();expect(page.locator('.site-choice-editor')).to_have_count(0)
  assert state['stage_requests'][-1]=={'computer_name':'Office PC'}
- row.locator('.el-select').filter(has=page.get_by_role('combobox',name='电脑：Astro site',exact=True)).hover()
- row.locator('.el-select__clear').click();expect(computer).to_be_enabled()
+ computer.click();page.get_by_role('option',name='清空电脑',exact=True).click();expect(page.locator('.site-choice-editor')).to_have_count(0)
  assert state['stage_requests'][-1]=={'computer_name':None}
  choose('电脑：Astro site','Mac Mini YC')
  # Each metric sends only its own value and the explicitly entered statistics date.
@@ -124,6 +140,13 @@ with sync_playwright() as p:
   row.get_by_role('button',name=f'编辑{label}：Astro site',exact=True).click()
   editor=page.get_by_role('dialog',name=f'编辑{label}',exact=True)
   expect(editor.get_by_role('spinbutton',name=label,exact=True)).to_be_focused()
+  expect_single_field_focus(editor.get_by_role('spinbutton',name=label,exact=True))
+  if key=='calculator_count':
+   editor.screenshot(path='/tmp/domain-manager-single-focus.png',animations='disabled')
+   page.emulate_media(forced_colors='active')
+   expect(editor.locator('.el-input__wrapper').first).to_have_css('outline-width','1px')
+   expect(editor.locator('.el-input__wrapper').first).to_have_css('box-shadow','none')
+   page.emulate_media(forced_colors='none')
   editor.get_by_role('spinbutton',name=label,exact=True).fill(value)
   editor.get_by_label('统计日期',exact=True).fill('2026-11-20')
   editor.get_by_role('button',name='保存',exact=True).click()
@@ -154,6 +177,8 @@ with sync_playwright() as p:
  row.get_by_role('button',name='编辑总页面数：Astro site',exact=True).click()
  counts_editor=page.get_by_role('dialog',name='编辑总页面数',exact=True)
  counts_editor.get_by_role('spinbutton',name='总页面数',exact=True).fill('99')
+ expect(row.get_by_role('button',name='阶段：Astro site',exact=True)).to_be_disabled()
+ expect(page.locator('.site-choice-editor')).to_have_count(0)
  page.get_by_role('textbox',name='搜索网站或域名',exact=True).fill('wordpress')
  confirm=page.get_by_role('dialog',name='离开编辑',exact=True)
  expect(confirm).to_be_visible();confirm.get_by_role('button',name='继续编辑',exact=True).click()
@@ -174,46 +199,49 @@ with sync_playwright() as p:
  expect(page.locator('.website-detail-drawer')).not_to_be_visible()
  state['stage_requests']=[]
  # Inline stage saves only the changed field; pending writes cannot be repeated.
- stage=row.get_by_role('combobox',name='阶段：Astro site',exact=True)
- stage_select=row.locator('.site-stage-select')
+ stage=row.get_by_role('button',name='阶段：Astro site',exact=True)
+ stage_select=stage
  expect(stage_select).to_contain_text('验证')
  state['stage_hold']=True
- stage_select.locator('.el-select__wrapper').click()
+ stage.click()
  expect(page.get_by_role('option')).to_have_text(['待评估','验证','增长','维护','暂停'])
  page.get_by_role('option',name='维护',exact=True).click()
  expect(stage).to_be_disabled()
- expect(table.get_by_role('combobox',name='阶段：WordPress site',exact=True)).to_be_disabled()
+ expect(table.get_by_role('button',name='阶段：WordPress site',exact=True)).to_be_disabled()
  expect(page.locator('.website-detail-drawer')).not_to_be_visible()
  assert state['stage_requests']==[{'stage':'维护'}]
  sites[0]['stage']='维护';state['stage_hold']=False
  state['stage_route'].fulfill(json=dict(status=200,message='成功',data=sites[0]))
  expect(stage).to_be_enabled();expect(stage_select).to_contain_text('维护')
  page.reload();page.wait_for_load_state('networkidle');expect(stage_select).to_contain_text('维护')
- stage_select.locator('.el-select__wrapper').click();page.get_by_role('option',name='验证',exact=True).click()
+ stage.click();page.get_by_role('option',name='验证',exact=True).click()
  expect(stage_select).to_contain_text('验证');expect(stage).to_be_enabled()
  # A rejected save keeps the original selection and allows retry.
  state['stage_fail']=True
- stage_select.locator('.el-select__wrapper').click();page.get_by_role('option',name='暂停',exact=True).click()
- expect(page.get_by_text('模拟保存失败，请重试',exact=True)).to_be_visible()
+ stage.click();page.get_by_role('option',name='暂停',exact=True).click()
+ expect(page.locator('.site-choice-error')).to_contain_text('模拟保存失败，请重试')
  expect(stage_select).to_contain_text('验证');expect(stage).to_be_enabled()
+ expect(page.locator('.site-choice-editor')).to_be_visible();page.keyboard.press('Escape')
  state['stage_fail']=False
  # A stage-filtered row leaves the result only after its new stage is saved.
  page.goto('http://127.0.0.1:5173/home?stage=验证');page.wait_for_load_state('networkidle')
- stage_select.locator('.el-select__wrapper').click();page.get_by_role('option',name='维护',exact=True).click()
+ stage.click();page.get_by_role('option',name='维护',exact=True).click()
  expect(table.locator('tbody tr')).to_have_count(0)
+ expect(table.get_by_role('button',name='网站 / 主域名',exact=True)).to_be_focused()
  expect(page.locator('.site-results').get_by_role('status')).to_contain_text('0 / 2 个网站')
  page.get_by_role('button',name='清除全部条件',exact=True).click()
  expect(stage_select).to_contain_text('维护')
  # Keyboard operation restores the previous stage without opening details.
- stage.focus();stage.press('Enter');stage.press('ArrowUp');stage.press('ArrowUp');stage.press('Enter')
+ stage.focus();stage.press('Enter');page.keyboard.press('ArrowUp');page.keyboard.press('ArrowUp');page.keyboard.press('Enter')
  expect(stage_select).to_contain_text('验证');expect(stage).to_be_enabled()
  expect(page.locator('.website-detail-drawer')).not_to_be_visible()
  # Stage sorting reacts to a saved stage while the other website stays intact.
  page.get_by_role('button',name='阶段',exact=True).click()
  expect(table.locator('tbody tr').first).to_contain_text('Astro site')
- stage_select.locator('.el-select__wrapper').click();page.get_by_role('option',name='维护',exact=True).click()
+ stage.click();page.get_by_role('option',name='维护',exact=True).click()
  expect(table.locator('tbody tr').first).to_contain_text('WordPress site')
- stage_select.locator('.el-select__wrapper').click();page.get_by_role('option',name='验证',exact=True).click()
+ expect(stage).to_be_focused()
+ stage.click();page.get_by_role('option',name='验证',exact=True).click()
  expect(table.locator('tbody tr').first).to_contain_text('Astro site')
  expect(row.locator('td').nth(3)).to_have_text('0');expect(row).to_contain_text('Cloudflare');expect(row.locator('td').nth(7)).to_contain_text('Coder')
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('Astro site')
@@ -235,6 +263,15 @@ with sync_playwright() as p:
  page.get_by_role('button',name='WordPress site',exact=True).click();drawer=page.locator('.website-detail-drawer');expect(drawer).to_be_visible();expect(drawer.get_by_text('主要管理电脑',exact=True)).to_be_visible();expect(drawer.get_by_text('经营场景',exact=True)).to_have_count(0)
  expect(drawer.get_by_role('tab')).to_have_count(7)
  drawer.get_by_role('tab',name='任务与记录',exact=True).click()
+ potential=drawer.get_by_role('textbox',name='潜力判断',exact=True)
+ potential.focus();expect_single_field_focus(potential)
+ drawer.locator('.portfolio-task-form .el-select__wrapper').click()
+ page.get_by_role('option',name='SEO',exact=True).click()
+ range_input=drawer.get_by_placeholder('修改前开始',exact=True)
+ range_input.focus();expect_single_field_focus(range_input)
+ range_input.press('Tab')
+ expect_single_field_focus(drawer.get_by_placeholder('修改前结束',exact=True))
+ page.keyboard.press('Escape')
  drawer.get_by_placeholder('任务标题').fill('保留的任务草稿')
  page.locator('.website-detail-drawer .el-drawer__close-btn').click()
  confirm=page.get_by_role('dialog',name='离开编辑')
@@ -250,6 +287,7 @@ with sync_playwright() as p:
  state['empty']=False;page.get_by_role('button',name='刷新',exact=True).click();expect(table.locator('tbody tr')).to_have_count(2)
  page.screenshot(path='/tmp/domain-manager-structure-desktop.png',full_page=True)
  page.set_viewport_size({'width':952,'height':876})
+ page.wait_for_function('document.documentElement.scrollWidth <= innerWidth+1',timeout=5000)
  filter_boxes=[item.bounding_box() for item in filters.locator(':scope > *').all()]
  assert max(box['y'] for box in filter_boxes)-min(box['y'] for box in filter_boxes)<2,filter_boxes
  assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+1')
@@ -260,14 +298,15 @@ with sync_playwright() as p:
  table.locator('tbody tr').first.locator('td').nth(10).scroll_into_view_if_needed()
  page.screenshot(path='/tmp/domain-manager-adsense-952.png',full_page=True)
  page.set_viewport_size({'width':390,'height':844});expect(table).to_be_visible()
+ page.wait_for_function('document.documentElement.scrollWidth <= innerWidth+1',timeout=5000)
  wrap=page.locator('.portfolio-table-wrap');assert wrap.evaluate('e=>e.scrollWidth>e.clientWidth')
  for label in ['总页面数','计算器数量','文章数量','日点击']:
   box=row.get_by_role('button',name=f'编辑{label}：Astro site',exact=True).bounding_box()
   assert box['width']>=44 and box['height']>=44,(label,box)
- expect(row.locator('.site-stack-select .el-select__wrapper')).to_have_css('min-height','44px')
- assert row.locator('.site-stack-select .el-select__wrapper').bounding_box()['height']>=44
+ expect(row.get_by_role('button',name='技术栈：Astro site',exact=True)).to_have_css('min-height','44px')
+ assert row.get_by_role('button',name='技术栈：Astro site',exact=True).bounding_box()['height']>=44
  assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+1')
- stage.scroll_into_view_if_needed();stage_select.locator('.el-select__wrapper').click()
+ stage.scroll_into_view_if_needed();stage.click()
  page.get_by_role('option',name='维护',exact=True).click()
  expect(stage_select).to_contain_text('维护');expect(stage).to_be_enabled()
  expect(page.locator('.website-detail-drawer')).not_to_be_visible()

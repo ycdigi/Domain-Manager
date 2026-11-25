@@ -96,8 +96,8 @@ try:
         expect(page.locator('.site-table thead')).not_to_contain_text('经营场景')
         # Inline stage selection persists through the real API and a browser reload.
         row = page.locator('.site-table tbody tr').filter(has=page.get_by_role('button', name=f'验收网站 A {stamp}', exact=True))
-        stage = row.get_by_role('combobox', name=f'阶段：验收网站 A {stamp}', exact=True)
-        row.locator('.site-stage-select .el-select__wrapper').click()
+        stage = row.get_by_role('button', name=f'阶段：验收网站 A {stamp}', exact=True)
+        stage.click()
         with page.expect_response(lambda response: response.url.endswith(prefix) and response.request.method == 'PATCH') as stage_response:
             page.get_by_role('option', name='增长', exact=True).click()
         assert stage_response.value.ok, stage_response.value.text()
@@ -105,13 +105,14 @@ try:
         expect(stage).to_be_enabled()
         assert call(prefix)['stage'] == '增长'
         page.reload();page.wait_for_load_state('networkidle')
-        expect(row.locator('.site-stage-select')).to_contain_text('增长')
+        expect(stage).to_contain_text('增长')
         expect(page.locator('.website-detail-drawer')).not_to_be_visible()
         # Quick edits use the same field validation and persisted records as details.
         for label,option in [(f'技术栈：验收网站 A {stamp}','Next.js'),(f'电脑：验收网站 A {stamp}','Macbook Pro')]:
-            row.locator('.el-select').filter(has=page.get_by_role('combobox',name=label,exact=True)).locator('.el-select__wrapper').click()
+            row.get_by_role('button',name=label,exact=True).click()
             page.get_by_role('option',name=option,exact=True).click()
-            expect(row.get_by_role('combobox',name=label,exact=True)).to_be_enabled()
+            expect(page.locator('.site-choice-editor')).to_have_count(0)
+            expect(row.get_by_role('button',name=label,exact=True)).to_be_enabled()
         for label,key,value in [('总页面数','page_count','20'),('计算器数量','calculator_count','0'),('文章数量','article_count','9'),('日点击','daily_clicks','0')]:
             row.get_by_role('button',name=f'编辑{label}：验收网站 A {stamp}',exact=True).click()
             editor=page.get_by_role('dialog',name=f'编辑{label}',exact=True)

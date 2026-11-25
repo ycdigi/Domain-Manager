@@ -243,7 +243,7 @@
 .site-domain-links > a {
   font-size: var(--text-xs);
 }
-.site-domain-links > a:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.site-domain-links > a:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-domain-links > .site-index-link { display: inline-flex; flex: none; align-items: center; gap: 2px; min-height: 24px; white-space: nowrap; }
 .site-index-link:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
 .site-cell {
@@ -262,11 +262,24 @@
   outline-offset: 2px;
 }
 .site-name-row { display: flex; align-items: center; gap: 4px; min-width: 0; }
-.site-name-row .site-name { min-width: 0; }
+.site-name-row .site-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-name-row .el-button { flex: none; min-width: 28px; min-height: 28px; padding: 4px; margin: 0; }
-.site-inline-select .provider-identity { max-width: 100%; }
+.site-edit-hint { color: var(--color-muted); font-size: 12px; }
+/* Contain visually hidden labels inside the table's horizontal scroll area. */
+.site-choice-trigger { position: relative; display: inline-flex; align-items: center; gap: 4px; width: 100%; min-height: 32px; padding: 0; border: 0; border-radius: 4px; background: transparent; font-size: 14px; white-space: nowrap; }
+.site-choice-trigger:hover:not(:disabled) { background: var(--color-paper-3); }
+.site-choice-trigger[aria-expanded="true"] { background: var(--color-accent-paper); }
+.site-choice-trigger > span:not(.sr-only) { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.site-choice-trigger:disabled { opacity: 0.6; }
+.site-choice-empty-value { color: var(--color-muted); }
+.site-stack-trigger { justify-content: center; }
+.site-table .site-choice-trigger .provider-identity, .site-table .site-choice-trigger .computer-identity { max-width: 100%; gap: 4px; }
+.site-table .site-choice-trigger .provider-identity img, .site-table .site-choice-trigger .provider-identity .el-icon,
+.site-table .site-choice-trigger .computer-identity .el-icon, .site-table .site-choice-trigger .computer-identity > svg,
+.site-stack-trigger > svg, .site-stack-trigger > .el-icon { flex: none; width: 16px; height: 16px; }
+.site-identity > div { min-width: 0; flex: 1; }
 @media (max-width: 640px), (pointer: coarse) {
-  .site-name-row .el-button, html.dm-ui .site-inline-select .el-select__wrapper { min-width: 48px; min-height: 48px; }
+  .site-name-row .el-button { min-width: 44px; min-height: 44px; }
 }
 .site-cell:disabled {
   cursor: default;
@@ -275,9 +288,6 @@
 .site-adsense-account { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-adsense-status { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 18px; color: var(--color-muted); }
 .site-adsense-status.is-connected { color: var(--el-color-success); }
-.site-inline-select, .site-stage-select, .site-stack-select {
-  width: 100%;
-}
 .site-name {
   font-weight: var(--weight-semibold);
 }
@@ -288,23 +298,16 @@
   margin-left: 0;
 }
 .site-actions .el-button {
-  min-width: 32px;
+  min-width: 28px;
   min-height: 32px;
-  padding: 6px;
-  font-size: 17px;
-}
-.site-stack-select .el-select__wrapper { padding-inline: 5px; gap: 4px; }
-.site-stack-select .el-select__selected-item svg,
-.site-stack-select .el-select__selected-item .el-icon {
-  display: block;
-  width: 22px;
-  height: 22px;
-  font-size: 22px;
+  padding: 4px;
+  font-size: 16px;
 }
 .site-table td:nth-child(n + 3):nth-child(-n + 6) { font-variant-numeric: tabular-nums; }
 .site-table td:nth-child(n + 3):nth-child(-n + 6) .site-cell { min-width: 28px; }
 @media (max-width: 640px), (pointer: coarse) {
-  html.dm-ui .site-stack-select .el-select__wrapper,
+  .site-actions .el-button { min-width: 44px; min-height: 44px; }
+  .site-choice-trigger,
   .site-table td:nth-child(n + 3):nth-child(-n + 6) .site-cell { min-width: 44px; min-height: 44px; }
 }
 .sr-only {
@@ -317,10 +320,6 @@
   white-space: nowrap;
 }
 @media (max-width: 640px) {
-  .site-actions .el-button {
-    min-width: 36px;
-    min-height: 44px;
-  }
   .site-filters {
     width: 100%;
   }
@@ -350,6 +349,3 @@
 .site-metric-editor form { display: grid; gap: var(--space-xs); margin-top: var(--space-xs); }
 .site-metric-editor .el-select { width: 100%; }
 .site-metric-editor .page-actions { justify-content: flex-end; }
-
-.site-stack-option { display: inline-flex; align-items: center; gap: 8px; }
-.site-stack-option > svg, .site-stack-option > .el-icon { flex: none; width: 18px; height: 18px; }

@@ -1,0 +1,23 @@
+.site-choice-popper { max-width: calc(100vw - 24px); }
+.site-choice-editor { font-size: 14px; color: var(--color-ink); }
+.site-choice-editor header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.site-choice-editor header strong { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: 14px; }
+.site-choice-close { display: inline-flex; flex: none; align-items: center; justify-content: center; width: 32px; height: 32px; padding: 0; border: 0; background: transparent; color: inherit; cursor: pointer; }
+.site-choice-options { margin: 8px 0 0; padding: 0; list-style: none; max-height: min(320px, calc(100dvh - 180px)); overflow-y: auto; overscroll-behavior: contain; }
+.site-choice-options button { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 36px; padding: 6px 8px; border: 0; border-radius: 4px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.site-choice-options button > :first-child { min-width: 0; overflow-wrap: anywhere; }
+.site-choice-options button:hover, .site-choice-close:hover { background: var(--color-paper-3); }
+.site-choice-options button:focus-visible, .site-choice-close:focus-visible { outline: 2px solid var(--color-focus); outline-offset: -2px; }
+.site-choice-options button.is-selected { color: var(--color-link); font-weight: var(--weight-semibold); background: var(--color-accent-paper); }
+.site-choice-options button:disabled, .site-choice-close:disabled { opacity: 0.55; cursor: default; }
+.site-choice-check { flex: none; margin-inline-start: auto; }
+.site-choice-identity { display: inline-flex; align-items: center; gap: 4px; }
+.site-choice-options .provider-identity, .site-choice-options .computer-identity { max-width: 100%; gap: 4px; }
+.site-choice-identity > svg, .site-choice-identity > .el-icon, .site-choice-options .provider-identity img, .site-choice-options .provider-identity .el-icon, .site-choice-options .computer-identity > svg, .site-choice-options .computer-identity .el-icon { flex: none; width: 16px; height: 16px; }
+.site-choice-empty, .site-choice-error { margin: 8px 0 0; font-size: 14px; }
+.site-choice-empty { color: var(--color-muted); }
+.site-choice-error { color: var(--color-error); }
+@media (max-width: 640px), (pointer: coarse) {
+  .site-choice-options button, .site-choice-close { min-height: 44px; }
+  .site-choice-close { min-width: 44px; }
+}

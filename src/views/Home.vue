@@ -57,17 +57,28 @@
           ><el-option v-for="value in stages" :key="value" :label="value" :value="value"
         /></el-select>
         <el-select
-          :model-value="String(route.query.provider || '')"
+          :model-value="providerFilterValue"
           clearable
+          filterable
+          :filter-method="(query: string) => providerSearch = query"
           placeholder="全部服务商"
           aria-label="服务商筛选"
-          @change="(value) => filter('provider', value)"
-          ><el-option v-for="value in providerNames" :key="value" :label="value" :value="value"
-        /></el-select>
+          @change="changeProviderFilter"
+          @visible-change="visible => { if (!visible) providerSearch = '' }"
+        >
+          <template #label="{ label }"><ProviderIdentity v-if="selectedProviderAccount" :provider="selectedProviderAccount.provider" :provider-name="selectedProviderAccount.provider_name" :name="selectedProviderAccount.name" compact /><span v-else>{{ label }}</span></template>
+          <el-option-group v-for="group in providerGroups" :key="group.label" :label="group.label">
+            <el-option v-if="group.showAll" :label="`${group.label} · 全部账号`" :value="`provider:${group.label}`" />
+            <el-option v-for="account in group.accounts" :key="account.id" :label="`${group.label} · ${account.name}`" :value="`account:${account.id}`">
+              <ProviderIdentity :provider="account.provider" :provider-name="account.provider_name" :name="account.name" compact />
+            </el-option>
+          </el-option-group>
+        </el-select>
       </div>
       <div class="site-results">
         <el-checkbox :model-value="adsOnly" aria-label="只显示已开通 AdSense 的网站"
           @change="value => filter('ads', value ? '1' : '')">Ads</el-checkbox>
+        <span class="site-edit-hint">点击表格内容可修改</span>
         <span role="status">{{ visibleSites.length }} / {{ websites.length }} 个网站</span>
         <el-tag v-for="condition in activeFilters" :key="condition.key" closable @close="filter(condition.key, '')">{{ condition.label }}</el-tag>
         <el-button v-if="activeFilters.length" text @click="clearFilters">清除全部条件</el-button>
@@ -83,8 +94,8 @@
       ><el-button @click="selectedIds.clear()">取消选择</el-button>
     </div>
     <section class="portfolio-stage portfolio-list" :aria-busy="loading">
-      <div class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动">
-        <table class="portfolio-table site-table" :style="{ minWidth: columns.reduce((sum, col) => sum + col.width, 0) + 'px' }">
+      <div ref="tableWrap" class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动">
+        <table class="portfolio-table site-table" :style="tableStyle">
           <caption class="sr-only">
             网站总表，共
             {{
@@ -93,7 +104,7 @@
             个网站
           </caption>
           <colgroup>
-            <col v-for="col in columns" :key="col.key" :style="col.key === 'identity' ? undefined : { width: col.width + 'px' }" />
+            <col v-for="col in columns" :key="col.key" :style="{ width: `calc(${col.width}px + var(--site-extra) * ${col.grow || 0} + ${col.key === 'actions' ? 'var(--site-action-extra)' : '0px'})` }" />
           </colgroup>
           <thead>
             <tr>
@@ -131,7 +142,7 @@
                   /><DomainFavicon :key="primaryDomain(site)?.domain" :domain-id="primaryDomain(site)?.id" />
                   <div>
                     <div class="site-name-row">
-                      <button class="site-cell site-name" @click="openSite(site)">{{ site.name }}</button>
+                      <button class="site-cell site-name" :title="site.name" @click="openSite(site)">{{ site.name }}</button>
                       <el-button native-type="button" text size="small" :icon="CopyDocument" :aria-label="`复制网站分析资料：${site.name}`" title="复制网站信息供 AI 分析" @click="copyMarkdown([site])" />
                     </div>
                     <div v-if="primaryDomain(site)" class="site-domain-links">
@@ -147,18 +158,7 @@
                 </div>
               </td>
               <td>
-                <el-select
-                  class="site-stack-select"
-                  :title="platformLabel(site)"
-                  :model-value="platformLabel(site)"
-                  :aria-label="`技术栈：${site.name}`"
-                  :disabled="busy || loading || Boolean(metricEdit)"
-                  filterable allow-create default-first-option
-                  @change="(value: string) => changePlatform(site, value)"
-                >
-                  <template #label><TechStackIcon :platform="site.platform" /><span class="sr-only">{{ platformLabel(site) }}</span></template>
-                  <el-option v-for="value in [...new Set([...platforms, platformLabel(site)])]" :key="value" :label="value" :value="value"><span class="site-stack-option"><TechStackIcon :platform="value" /><span>{{ value }}</span></span></el-option>
-                </el-select>
+                <button type="button" class="site-cell site-choice-trigger site-stack-trigger" :title="`${platformLabel(site)}，点击修改技术栈`" :aria-label="`技术栈：${site.name}`" :data-choice-key="`${site.id}-platform`" :aria-expanded="isChoice(site, 'platform')" aria-controls="website-choice-panel" :disabled="busy || loading || Boolean(metricEdit)" @click="openChoice(site, 'platform', $event)"><TechStackIcon :platform="site.platform" /><span class="sr-only">{{ platformLabel(site) }}</span></button>
               </td>
               <td v-for="key in countKeys" :key="key">
                 <button
@@ -179,16 +179,19 @@
                 </button>
               </td>
               <td>
-                <WebsiteAccountSelect :site="site" kind="service" :accounts="accounts" :disabled="busy || loading || !!accountError || Boolean(metricEdit)" @change="id => changeAccount(site, 'service', id)" />
+                <button type="button" class="site-cell site-choice-trigger" :aria-label="`服务商：${site.name}`" :data-choice-key="`${site.id}-service`" :aria-expanded="isChoice(site, 'service')" aria-controls="website-choice-panel" :title="'点击修改服务账号'" :disabled="busy || loading || !!accountError || Boolean(metricEdit)" @click="openChoice(site, 'service', $event)">
+                  <ProviderIdentity v-if="directAccounts(site, false).length === 1" :provider="directAccounts(site, false)[0]!.provider" :provider-name="directAccounts(site, false)[0]!.provider_name" :name="directAccounts(site, false)[0]!.name" compact />
+                  <span v-else :class="{ 'site-choice-empty-value': !directAccounts(site, false).length }">{{ accountSummary(site, false) }}</span>
+                </button>
               </td>
               <td>
-                <WebsiteAccountSelect :site="site" kind="github" :accounts="accounts" :disabled="busy || loading || !!accountError || Boolean(metricEdit)" @change="id => changeAccount(site, 'github', id)" />
+                <button type="button" class="site-cell site-choice-trigger" :aria-label="`GitHub：${site.name}`" :data-choice-key="`${site.id}-github`" :aria-expanded="isChoice(site, 'github')" aria-controls="website-choice-panel" title="点击修改 GitHub 账号" :disabled="busy || loading || !!accountError || Boolean(metricEdit)" @click="openChoice(site, 'github', $event)">
+                  <ProviderIdentity v-if="directAccounts(site, true).length === 1" provider="github" :name="directAccounts(site, true)[0]!.name" compact />
+                  <span v-else :class="{ 'site-choice-empty-value': !directAccounts(site, true).length }">{{ accountSummary(site, true) }}</span>
+                </button>
               </td>
               <td>
-                <el-select class="site-inline-select" :model-value="site.computer_name || ''" :aria-label="`电脑：${site.name}`" :disabled="busy || loading || Boolean(metricEdit)" filterable allow-create clearable default-first-option @change="(value: string) => changeComputer(site, value)">
-                  <template #label><ComputerIdentity v-if="site.computer_name" :name="site.computer_name" /></template>
-                  <el-option v-for="name in computerNames" :key="name" :label="name" :value="name"><ComputerIdentity :name="name" /></el-option>
-                </el-select>
+                <button type="button" class="site-cell site-choice-trigger" :aria-label="`电脑：${site.name}`" :data-choice-key="`${site.id}-computer`" :aria-expanded="isChoice(site, 'computer')" aria-controls="website-choice-panel" :title="site.computer_name || '未设置电脑，点击设置'" :disabled="busy || loading || Boolean(metricEdit)" @click="openChoice(site, 'computer', $event)"><ComputerIdentity v-if="site.computer_name" :name="site.computer_name" /><span v-else class="site-choice-empty-value">—</span></button>
               </td>
               <td>
                 <span v-if="site.adsense_connected === '已开通'" class="site-adsense-total"
@@ -203,16 +206,7 @@
                 </span>
               </td>
               <td>
-                <el-select
-                  class="site-stage-select"
-                  :model-value="site.stage"
-                  :disabled="busy || loading || Boolean(metricEdit)"
-                  :aria-label="`阶段：${site.name}`"
-                  title="选择后自动保存阶段"
-                  @change="(stage: WebsiteStage) => changeStage(site, stage)"
-                >
-                  <el-option v-for="stage in stages" :key="stage" :label="stage" :value="stage" />
-                </el-select>
+                <button type="button" class="site-cell site-choice-trigger" :aria-label="`阶段：${site.name}`" :data-choice-key="`${site.id}-stage`" :aria-expanded="isChoice(site, 'stage')" aria-controls="website-choice-panel" title="点击修改阶段" :disabled="busy || loading || Boolean(metricEdit)" @click="openChoice(site, 'stage', $event)">{{ site.stage }}</button>
               </td>
               <td>
                 <div class="site-actions">
@@ -281,6 +275,7 @@
       :submitting="busy"
       @submit="assignSelectedBatch"
     />
+    <WebsiteChoiceEditor v-if="choiceEdit" :key="`${choiceEdit.site.id}-${choiceEdit.field}`" :label="choiceLabels[choiceEdit.field]" :website-name="choiceEdit.site.name" :anchor="choiceEdit.anchor" :options="choiceOptions" :current="choiceCurrent" :searchable="choiceEdit.field !== 'stage'" :allow-create="choiceEdit.field === 'computer' || choiceEdit.field === 'platform'" :busy="busy" :error="choiceError" @choose="saveChoice" @cancel="closeChoice" />
     <WebsiteMetricEditor v-if="metricEdit" :key="`${metricEdit.site.id}-${metricEdit.field}`" :website="metricEdit.site" :field="metricEdit.field" :label="metricLabels[metricEdit.field]" :anchor="metricEdit.anchor" :busy="busy" @save="saveMetric" @cancel="closeMetric" />
     <el-dialog v-model="createVisible" title="新增网站" width="min(560px,94vw)"
       ><el-form label-position="top" @submit.prevent="createSite"
@@ -293,7 +288,7 @@
 </template>
 <script setup lang="ts">
 import { websiteEditPatch } from '../../shared/website-edits'
-import { computed, reactive, ref, shallowRef, watch, onActivated } from 'vue'
+import { computed, reactive, ref, shallowRef, watch, onActivated, onDeactivated, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, CopyDocument, MoreFilled, Search, Check, Close } from '@element-plus/icons-vue'
@@ -306,7 +301,8 @@ import WebsiteBulkSettingsDialog from '../components/WebsiteBulkSettingsDialog.v
 import DomainFavicon from '../components/DomainFavicon.vue'
 import TechStackIcon from '../components/TechStackIcon.vue'
 import ComputerIdentity from '../components/ComputerIdentity.vue'
-import WebsiteAccountSelect from '../components/WebsiteAccountSelect.vue'
+import ProviderIdentity from '../components/ProviderIdentity.vue'
+import WebsiteChoiceEditor, { type ChoiceValue, type WebsiteChoiceOption } from '../components/WebsiteChoiceEditor.vue'
 import type { ProviderAccount } from '../../functions/types'
 import { providerIdentity } from '../utils/provider-identity'
 import {
@@ -334,19 +330,43 @@ const platforms = ['WordPress', 'Astro', 'Next.js', '其他']
 const ownerships = ['自营网站', '企业客户网站', '未分类']
 const countKeys = ['page_count', 'calculator_count', 'article_count'] as const
 const columns = [
-  { key: 'identity', label: '网站 / 主域名', width: 225 },
-  { key: 'platform', label: '技术栈', width: 76 },
-  { key: 'page_count', label: '总页面数', width: 82 },
-  { key: 'calculator_count', label: '计算器数量', width: 92 },
-  { key: 'article_count', label: '文章数量', width: 82 },
-  { key: 'clicks', label: '日点击', width: 86 },
-  { key: 'provider', label: '服务商', width: 112 },
-  { key: 'github', label: 'GitHub', width: 124 },
-  { key: 'computer', label: '电脑', width: 130 },
-  { key: 'adsense', label: 'AdSense', width: 100 },
-  { key: 'stage', label: '阶段', width: 104 },
-  { key: 'actions', label: '操作', width: 116 }
+  { key: 'identity', label: '网站 / 主域名', width: 240, grow: 0.25 },
+  { key: 'platform', label: '技术栈', width: 56 },
+  { key: 'page_count', label: '总页面数', width: 78 },
+  { key: 'calculator_count', label: '计算器数量', width: 90 },
+  { key: 'article_count', label: '文章数量', width: 78 },
+  { key: 'clicks', label: '日点击', width: 88 },
+  { key: 'provider', label: '服务商', width: 144, grow: 0.30 },
+  { key: 'github', label: 'GitHub', width: 144, grow: 0.30 },
+  { key: 'computer', label: '电脑', width: 120, grow: 0.15 },
+  { key: 'adsense', label: 'AdSense', width: 112 },
+  { key: 'stage', label: '阶段', width: 80 },
+  { key: 'actions', label: '操作', width: 100 }
 ]
+const tableWrap = ref<HTMLElement>()
+const tableBaseWidth = columns.reduce((sum, column) => sum + column.width, 0)
+const tableWidth = ref(tableBaseWidth), touchLayout = ref(false)
+const tableStyle = computed(() => ({
+  minWidth: `${tableBaseWidth + (touchLayout.value ? 44 : 0)}px`,
+  '--site-action-extra': `${touchLayout.value ? 44 : 0}px`,
+  '--site-extra': `${Math.max(0, tableWidth.value - tableBaseWidth - (touchLayout.value ? 44 : 0))}px`
+}))
+let tableObserver: ResizeObserver | undefined
+const touchMedia = window.matchMedia('(max-width: 640px), (pointer: coarse)')
+const measureTable = () => { tableWidth.value = tableWrap.value?.clientWidth || tableBaseWidth; touchLayout.value = touchMedia.matches }
+onMounted(() => {
+  measureTable()
+  tableObserver = new ResizeObserver(measureTable)
+  if (tableWrap.value) tableObserver.observe(tableWrap.value)
+  touchMedia.addEventListener('change', measureTable)
+})
+onUnmounted(() => { tableObserver?.disconnect(); touchMedia.removeEventListener('change', measureTable) })
+type ChoiceField = 'platform' | 'service' | 'github' | 'computer' | 'stage'
+const choiceLabels: Record<ChoiceField, string> = { platform: '技术栈', service: '服务商', github: 'GitHub', computer: '电脑', stage: '阶段' }
+const choiceEdit = shallowRef<{ site: Website; field: ChoiceField; anchor: HTMLElement }>()
+const choiceError = ref('')
+const isChoice = (site: Website, field: ChoiceField) => choiceEdit.value?.site.id === site.id && choiceEdit.value?.field === field
+
 type MetricField = (typeof countKeys)[number] | 'daily_clicks'
 const metricLabels: Record<MetricField, string> = { page_count: '总页面数', calculator_count: '计算器数量', article_count: '文章数量', daily_clicks: '日点击' }
 const metricEdit = shallowRef<{ site: Website; field: MetricField; anchor: HTMLElement }>()
@@ -374,7 +394,7 @@ const sortKey = computed({ get: () => columns.some(column => column.key !== 'act
 const adsOnly = computed(() => route.query.ads === '1')
 const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')
 const filterLabels: Record<string, string> = { batch: '批次', ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', ads: 'Ads', new: '新站', view: '状态', q: '搜索' }
-const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => key === 'ads' ? adsOnly.value : route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'ads' ? '已开通' : key === 'new' ? '是' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : route.query[key]}` })))
+const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => key === 'ads' ? adsOnly.value : route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'ads' ? '已开通' : key === 'new' ? '是' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : key === 'provider_account' ? providerAccountFilterLabel.value : route.query[key]}` })))
 const clearFilters = () => { const query = { ...route.query }; for (const key of Object.keys(filterLabels)) delete query[key]; void router.push({ query }) }
 const views = [
   { value: 'active', label: '经营中' },
@@ -395,10 +415,42 @@ const serviceProviders = (site: Website) => {
   return accounts
 }
 const providerNames = computed(() => [...new Set(websites.value.flatMap(site => serviceProviders(site).map(account => account.label)))].sort())
+const filterAccounts = computed(() => [...new Map([
+  ...websites.value.flatMap(site => site.provider_accounts || []), ...accounts.value
+].map(account => [account.id, account] as const)).values()])
+const selectedProviderAccount = computed(() => filterAccounts.value.find(account => account.id === Number(route.query.provider_account)))
+const providerAccountFilterLabel = computed(() => {
+  const account = selectedProviderAccount.value
+  if (!account) return route.query.provider_account
+  const { label, accountName } = providerIdentity(account.provider, account.provider_name, account.name)
+  return `${label}${accountName ? ` · ${accountName.split('@')[0]}` : ''}`
+})
+const providerSearch = ref('')
+const providerGroups = computed(() => {
+  const serviceAccounts = filterAccounts.value.filter(account => account.provider !== 'github')
+  const labelOf = (account: typeof serviceAccounts[number]) => providerIdentity(account.provider, account.provider_name, account.name).label
+  const query = providerSearch.value.trim().toLocaleLowerCase()
+  return [...new Set([...providerNames.value, ...serviceAccounts.map(labelOf)])].sort().map(label => ({
+    label, showAll: `${label} 全部账号`.toLocaleLowerCase().includes(query),
+    accounts: serviceAccounts.filter(account => labelOf(account) === label && `${label} ${account.name} ${'login_email' in account ? account.login_email || '' : ''}`.toLocaleLowerCase().includes(query)).sort((a, b) => a.name.localeCompare(b.name))
+  })).filter(group => group.showAll || group.accounts.length)
+})
+const providerFilterValue = computed(() => route.query.provider_account ? `account:${route.query.provider_account}` : route.query.provider ? `provider:${route.query.provider}` : '')
+const changeProviderFilter = (value: string) => {
+  const query = { ...route.query }
+  delete query.provider
+  delete query.provider_account
+  delete query.site
+  delete query.section
+  if (value.startsWith('account:')) query.provider_account = value.slice('account:'.length)
+  else if (value.startsWith('provider:')) query.provider = value.slice('provider:'.length)
+  void router.push({ query })
+}
 const computerNames = computed(() => sortComputerNames(websites.value.map(site => site.computer_name)))
 const primaryDomain = (site: Website) => site.domains.find((d) => d.is_primary) || site.domains[0]
 const platformLabel = (site: Website) => (site.platform === '其他' ? site.platform_other || '其他' : site.platform)
 const directAccounts = (site: Website, github: boolean) => (site.provider_accounts || []).filter(account => site.direct_account_ids?.includes(account.id) && (account.provider === 'github') === github)
+const accountSummary = (site: Website, github: boolean) => { const count = directAccounts(site, github).length; return count ? `多个账号（${count}）` : '—' }
 const clickRanges: Record<string, string> = { under10: '＜10', '10to29': '10–29', '30to49': '30–49', '50to99': '50–99', over100: '≥100' }
 const clickRange = (count: number) => count < 10 ? 'under10' : count < 30 ? '10to29' : count < 50 ? '30to49' : count < 100 ? '50to99' : 'over100'
 const clickLabel = (site: Website) => site.daily_clicks != null
@@ -439,7 +491,7 @@ const visibleSites = computed(() =>
         (!route.query.platform || s.platform === route.query.platform) &&
         (!route.query.provider || serviceProviders(s).some(account => account.label === route.query.provider)) &&
         (!route.query.resource || s.resource_ids?.includes(Number(route.query.resource))) &&
-        (!route.query.provider_account || s.provider_account_ids?.includes(Number(route.query.provider_account))) &&
+        (!route.query.provider_account || s.provider_account_ids?.includes(Number(route.query.provider_account)) || s.provider_accounts?.some(account => account.id === Number(route.query.provider_account))) &&
         (!route.query.adsense_account || s.adsense_account_id === Number(route.query.adsense_account)) &&
         (!adsOnly.value || s.adsense_connected === '已开通') &&
         (!route.query.new || s.is_new_site) &&
@@ -525,30 +577,62 @@ const run = async (action: () => Promise<void>) => {
     busy.value = false
   }
 }
-const saveInline = (site: Website, fields: Record<string, unknown>) => {
-  if (loading.value || Object.entries(fields).every(([key, value]) => (site[key as keyof Website] ?? null) === value)) return
-  return run(async () => {
-    await updateWebsite(site.id, websiteEditPatch(fields, site))
-    ElMessage.success('资料已保存')
-  })
-}
-const changeAccount = (site: Website, kind: 'service' | 'github', id: number | null) => run(async () => {
-  await setWebsiteAccount(site.id, kind, id)
-  ElMessage.success('账号已保存')
+const choiceCurrent = computed<ChoiceValue>(() => {
+  const edit = choiceEdit.value
+  if (!edit) return null
+  if (edit.field === 'service' || edit.field === 'github') { const accounts = directAccounts(edit.site, edit.field === 'github'); return accounts.length > 1 ? -1 : accounts[0]?.id ?? null }
+  return edit.field === 'computer' ? edit.site.computer_name || null : edit.field === 'platform' ? platformLabel(edit.site) : edit.site.stage
 })
-const changeStage = (site: Website, stage: WebsiteStage) => saveInline(site, { stage })
-const changeComputer = (site: Website, value: string | undefined) => saveInline(site, { computer_name: value?.trim() || null })
-const changePlatform = (site: Website, value: string) => {
-  const platform = platforms.includes(value) ? value : '其他'
-  return saveInline(site, { platform, platform_other: platform === '其他' && value !== '其他' ? value : null })
+const choiceOptions = computed<WebsiteChoiceOption[]>(() => {
+  const edit = choiceEdit.value
+  if (!edit) return []
+  if (edit.field === 'stage') return stages.map(value => ({ value, label: value }))
+  if (edit.field === 'platform') return [...new Set([...platforms, platformLabel(edit.site)])].map(value => ({ value, label: value, platform: value }))
+  if (edit.field === 'computer') return [{ value: null, label: '清空电脑' }, ...computerNames.value.map(value => ({ value, label: value, computer: value }))]
+  return [{ value: null, label: '不关联账号' }, ...accounts.value.filter(account => (account.provider === 'github') === (edit.field === 'github') && (account.status !== '停用' || edit.site.direct_account_ids?.includes(account.id!))).map(account => ({ value: account.id!, label: account.name, search: `${providerIdentity(account.provider, account.provider_name).label} ${account.login_email || ''}`, provider: account.provider, providerName: account.provider_name, name: account.name, disabled: account.status === '停用' }))]
+})
+const openChoice = (site: Website, field: ChoiceField, event: MouseEvent) => {
+  if (busy.value || loading.value || metricEdit.value) return
+  if (isChoice(site, field)) { closeChoice(); return }
+  choiceError.value = ''
+  choiceEdit.value = { site, field, anchor: event.currentTarget as HTMLElement }
+}
+const closeChoice = (restoreFocus = true) => {
+  const edit = choiceEdit.value
+  if (!edit || busy.value) return
+  choiceEdit.value = undefined
+  choiceError.value = ''
+  if (restoreFocus) void nextTick(() => (document.querySelector<HTMLElement>(`[data-choice-key="${edit.site.id}-${edit.field}"]`) || document.querySelector<HTMLElement>('.site-table .portfolio-sort-trigger'))?.focus({ preventScroll: true }))
+}
+const saveChoice = async (value: ChoiceValue) => {
+  const edit = choiceEdit.value
+  if (!edit || busy.value) return
+  if (value === choiceCurrent.value) { closeChoice(); return }
+  busy.value = true
+  choiceError.value = ''
+  try {
+    if (edit.field === 'service' || edit.field === 'github') await setWebsiteAccount(edit.site.id, edit.field, value as number | null)
+    else {
+      const platform = typeof value === 'string' && platforms.includes(value) ? value : '其他'
+      const fields = edit.field === 'computer' ? { computer_name: value || null } : edit.field === 'stage' ? { stage: value } : { platform, platform_other: platform === '其他' && value !== '其他' ? value : null }
+      await updateWebsite(edit.site.id, websiteEditPatch(fields, edit.site))
+    }
+    await load(true)
+    busy.value = false
+    closeChoice()
+    ElMessage.success('资料已保存')
+  } catch (e) { choiceError.value = e instanceof Error ? e.message : '保存失败，请重试' }
+  finally { busy.value = false }
 }
 const openMetric = (site: Website, field: MetricField, event: MouseEvent) => {
   if (busy.value || loading.value) return
   if (metricEdit.value) { ElMessage.warning('请先保存或取消当前编辑'); return }
+  closeChoice(false)
   metricEdit.value = { site, field, anchor: event.currentTarget as HTMLElement }
 }
 const closeMetric = () => { const anchor = metricEdit.value?.anchor; metricEdit.value = undefined; anchor?.focus() }
-watch(() => route.fullPath, () => { if (metricEdit.value) closeMetric() })
+watch(() => route.fullPath, () => { if (metricEdit.value) closeMetric(); closeChoice(false) })
+onDeactivated(() => { choiceEdit.value = undefined })
 const saveMetric = (fields: Record<string, unknown>) => {
   const edit = metricEdit.value
   if (!edit) return
