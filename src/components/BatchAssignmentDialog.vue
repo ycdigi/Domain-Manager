@@ -54,6 +54,7 @@
 </template>
 
 <script setup lang="ts">
+import { websiteStages } from '../../shared/website-classification'
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import type { Batch } from '../api/batches'
 import type { Website, WebsiteStage } from '../api/websites'
@@ -79,7 +80,7 @@ const search = ref(''); const ownership = ref(''); const platform = ref(''); con
 const targetMode = ref<'existing' | 'new'>('existing'); const batchId = ref<number>(); const newBatchName = ref('')
 const stageEnabled = ref(false); const stageValue = ref<WebsiteStage>(); const memberNote = ref('')
 const selectedIds = reactive(new Set<number>())
-const stageOptions: WebsiteStage[] = ['待评估', '验证', '增长', '维护', '暂停']
+const stageOptions = websiteStages
 const ownershipOptions = ['未分类', '自营网站', '企业客户网站']
 const platformOptions = ['WordPress', 'Astro', 'Next.js', '其他']
 const activeBatches = computed(() => props.batches.filter(batch => batch.status !== '已归档'))

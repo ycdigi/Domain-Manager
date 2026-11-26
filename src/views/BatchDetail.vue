@@ -36,6 +36,7 @@
 </template>
 
 <script setup lang="ts">
+import { websiteStages } from '../../shared/website-classification'
 import '../styles/workspace/batches.css'
 import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
@@ -49,7 +50,7 @@ import { addBatchMembers, assignBatch, completeBatchReview, getBatch, removeBatc
 import { bulkUpdateWebsites, getWebsites, type Website, type WebsiteStage } from '../api/websites'
 
 const route = useRoute(); const router = useRouter(); const batch = ref<BatchDetail>(); const sites = ref<Website[]>([]); const loading = ref(false); const saving = ref(false); const batchInfoVisible = ref(false); const memberSaving = ref(false); const selectedWebsite = computed(() => sites.value.find(site => site.id === Number(route.query.site))); const websiteDrawerVisible = computed({ get: () => Boolean(selectedWebsite.value), set: value => { if (!value) { const query = { ...route.query }; delete query.site; delete query.section; void router.replace({ query }) } } }); const bulkSaving = ref(false); const reviewSaving = ref(false); const error = ref(''); const search = ref(''); const stageFilter = ref(''); const selectedIds = reactive(new Set<number>()); const reviewVisible = ref(false); const batchAssignmentVisible = ref(false); const bulkNote = ref('')
-const statuses = ['进行中', '待复盘', '已复盘', '已归档']; const stages: WebsiteStage[] = ['待评估', '验证', '增长', '维护', '暂停']; const bulkStage = ref<WebsiteStage>(); const reviewForm = reactive({ conclusion: '', next_action: '' }); const form = reactive({ name: '', source: '', goal: '', hypothesis: '', status: '进行中', review_conclusion: '', next_action: '' }); const baseline = ref('')
+const statuses = ['进行中', '待复盘', '已复盘', '已归档']; const stages = websiteStages; const bulkStage = ref<WebsiteStage>(); const reviewForm = reactive({ conclusion: '', next_action: '' }); const form = reactive({ name: '', source: '', goal: '', hypothesis: '', status: '进行中', review_conclusion: '', next_action: '' }); const baseline = ref('')
 const activeMembers = computed(() => (batch.value?.members || []).filter(member => member.membership_status === 'active'))
 const activeMemberIds = computed(() => activeMembers.value.map(member => member.website_id))
 const memberDomain = (member: BatchDetail['members'][number]) => sites.value.find(site => site.id === member.website_id)?.domains.find(domain => domain.is_primary)?.domain || sites.value.find(site => site.id === member.website_id)?.domains[0]?.domain || ''

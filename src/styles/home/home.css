@@ -284,6 +284,8 @@
 .site-cell:disabled {
   cursor: default;
 }
+.site-new-label { display: block; color: var(--color-muted); font-size: 11px; line-height: 1.3; }
+.site-table .site-stage-cell .site-choice-trigger { min-height: 24px; }
 .site-adsense-total { display: block; font-weight: var(--weight-semibold); font-variant-numeric: tabular-nums; white-space: nowrap; }
 .site-adsense-account { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .site-adsense-status { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; font-size: 18px; color: var(--color-muted); }
@@ -308,6 +310,7 @@
 @media (max-width: 640px), (pointer: coarse) {
   .site-actions .el-button { min-width: 44px; min-height: 44px; }
   .site-choice-trigger,
+  .site-table .site-stage-cell .site-choice-trigger,
   .site-table td:nth-child(n + 3):nth-child(-n + 6) .site-cell { min-width: 44px; min-height: 44px; }
 }
 .sr-only {

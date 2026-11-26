@@ -38,3 +38,11 @@ test('multiline names and Markdown characters cannot create additional headings 
  assert.ok(md.includes('\\[x\\]') && md.includes('\\*bold\\*') && !md.includes('<script>'))
  assert.ok(md.includes('- 下一步：one two'))
 })
+
+test('analysis exports new-site classification separately from growth or decline',()=>{
+ const md=websitesMarkdown([{...site,stage:'下降',is_new_site:true},{...site,name:'Regular',stage:'平稳',is_new_site:false}],[], '2026-11-26')
+ assert.ok(md.includes('- 阶段：下降；经营状态：经营中'))
+ assert.ok(md.includes('- 新站分类：新站'))
+ assert.ok(md.includes('- 阶段：平稳；经营状态：经营中'))
+ assert.ok(md.includes('- 新站分类：普通站'))
+})

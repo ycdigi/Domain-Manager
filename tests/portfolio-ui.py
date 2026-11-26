@@ -42,7 +42,7 @@ with sync_playwright() as p:
    site=next(s for s in sites if s['id']==int(path.split('/')[1]));data=dict(monitor=dict(website_id=site['id'],enabled=True,effective_enabled=True,status='unchecked',allowed_redirect_hosts=[],title=None),history=[],incidents=[])
   elif path=='work-queue':data=dict(counts=dict(monitor=0,next_action=0,task=0,batch=0,total=0),items=[])
   elif path=='websites/1/copy':
-   state['copies']+=1;code=400 if state['copy_fail'] else 200;message='请设置有效且未到期的默认 Token' if state['copy_fail'] else '成功';data=dict(text='域名：example.test\n\nGithub地址：https://github.com/org/repo\nGithub Email：user@example.test\nGithub Token：fixture-token')
+   state['copies']+=1;code=400 if state['copy_fail'] else 200;message='请设置有效且未到期的默认 Token' if state['copy_fail'] else '成功';data=dict(text='地址：https://github.com/org/repo\nToken：fixture-token\nEmail：user@example.test\n最后将整站所有的修正Github推送,包含但不限于当前对话;')
   elif path.endswith('/favicon'):route.fulfill(status=404,body='');return
   route.fulfill(status=code,json=dict(status=code,message=message,data=data))
  page.route('http://127.0.0.1:5173/api/**',handle)
@@ -204,7 +204,7 @@ with sync_playwright() as p:
  expect(stage_select).to_contain_text('验证')
  state['stage_hold']=True
  stage.click()
- expect(page.get_by_role('option')).to_have_text(['待评估','验证','增长','维护','暂停'])
+ expect(page.get_by_role('option')).to_have_text(['待评估','验证','增长','平稳','下降','维护','暂停'])
  page.get_by_role('option',name='维护',exact=True).click()
  expect(stage).to_be_disabled()
  expect(table.get_by_role('button',name='阶段：WordPress site',exact=True)).to_be_disabled()
@@ -232,7 +232,7 @@ with sync_playwright() as p:
  page.get_by_role('button',name='清除全部条件',exact=True).click()
  expect(stage_select).to_contain_text('维护')
  # Keyboard operation restores the previous stage without opening details.
- stage.focus();stage.press('Enter');page.keyboard.press('ArrowUp');page.keyboard.press('ArrowUp');page.keyboard.press('Enter')
+ stage.focus();stage.press('Enter');page.keyboard.press('Home');page.keyboard.press('ArrowDown');page.keyboard.press('Enter')
  expect(stage_select).to_contain_text('验证');expect(stage).to_be_enabled()
  expect(page.locator('.website-detail-drawer')).not_to_be_visible()
  # Stage sorting reacts to a saved stage while the other website stays intact.
@@ -247,12 +247,16 @@ with sync_playwright() as p:
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('Astro site')
  page.get_by_role('button',name='总页面数',exact=True).click();expect(table.locator('tbody tr').first).to_contain_text('WordPress site')
  expect(table.locator('th[aria-sort]')).to_have_count(1)
- row.get_by_role('button',name='复制资料').click();expect(page.get_by_text('开发资料已复制',exact=True)).to_be_visible()
- assert page.evaluate('navigator.clipboard.readText()').endswith('Github Token：fixture-token')
+ row.get_by_role('button',name='复制 GitHub 推送资料：Astro site',exact=True).click();expect(page.get_by_text('GitHub 推送资料已复制',exact=True)).to_be_visible()
+ assert 'Token：fixture-token' in page.evaluate('navigator.clipboard.readText()')
  wp=table.locator('tbody tr').filter(has=page.get_by_role('button',name='WordPress site',exact=True))
- expect(wp.get_by_role('button',name='复制资料')).to_be_disabled()
+ expect(wp.get_by_role('button',name='复制 GitHub 推送资料：WordPress site',exact=True)).to_be_enabled()
  expect(table.get_by_role('button',name='203.0.113.10',exact=True)).to_have_count(0)
- state['copy_fail']=True;row.get_by_role('button',name='复制资料').click();expect(page.get_by_text('请设置有效且未到期的默认 Token',exact=True)).to_be_visible()
+ state['copy_fail']=True;row.get_by_role('button',name='复制 GitHub 推送资料：Astro site',exact=True).click();expect(page.get_by_role('status').filter(has_text='请设置有效且未到期的默认 Token')).to_be_visible()
+ expect(page.locator('.website-detail-drawer')).to_be_visible()
+ page.locator('.website-detail-drawer .el-drawer__close-btn').click()
+ expect(page.locator('.website-detail-drawer')).not_to_be_visible()
+ expect(page).not_to_have_url(re.compile(r'[?&]site='))
  page.get_by_role('textbox',name='搜索网站或域名',exact=True).fill('wordpress');expect(table.locator('tbody tr')).to_have_count(1)
  expect(page).to_have_url(__import__('re').compile('q=wordpress'))
  page.reload();page.wait_for_load_state('networkidle');expect(page.get_by_role('textbox',name='搜索网站或域名',exact=True)).to_have_value('wordpress')
@@ -289,7 +293,10 @@ with sync_playwright() as p:
  page.set_viewport_size({'width':952,'height':876})
  page.wait_for_function('document.documentElement.scrollWidth <= innerWidth+1',timeout=5000)
  filter_boxes=[item.bounding_box() for item in filters.locator(':scope > *').all()]
- assert max(box['y'] for box in filter_boxes)-min(box['y'] for box in filter_boxes)<2,filter_boxes
+ # Seven filters keep readable widths and wrap within the available toolbar.
+ assert len(filter_boxes)==7
+ assert len({round(box['y']) for box in filter_boxes})==2,filter_boxes
+ assert all(box['x']>=0 and box['x']+box['width']<=952 for box in filter_boxes),filter_boxes
  assert page.evaluate('document.documentElement.scrollWidth <= window.innerWidth+1')
  ads=page.get_by_role('checkbox',name='只显示已开通 AdSense 的网站',exact=True)
  ads_toggle=page.locator('.site-results .el-checkbox')

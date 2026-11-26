@@ -5,3 +5,6 @@ export const isSiteOwnership = (value: unknown): value is SiteOwnership =>
 
 export const websiteIndustries = ['计算器', '资讯站', '其他'] as const
 export type WebsiteIndustry = typeof websiteIndustries[number]
+
+export const websiteStages = ['待评估', '验证', '增长', '平稳', '下降', '维护', '暂停'] as const
+export type WebsiteStage = typeof websiteStages[number]

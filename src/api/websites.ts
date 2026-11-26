@@ -1,7 +1,8 @@
 import { api } from '../utils/request'
 import { cachedGet, invalidateData } from '../utils/workspaceCache'
 
-export type WebsiteStage = '待评估' | '验证' | '增长' | '维护' | '暂停'
+import type { WebsiteStage } from '../../shared/website-classification'
+export type { WebsiteStage } from '../../shared/website-classification'
 export type WebsiteTaskType = 'SEO' | '内容' | '技术' | '其他' | 'SEO复查'
 export type WebsiteTaskStatus = '待做' | '处理中' | '已完成' | '待跟进'
 

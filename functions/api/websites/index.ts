@@ -5,6 +5,7 @@ import { normalizeDomain, validateDomain } from '../../utils/domain-validation'
 import { websiteFields } from '../../../shared/website-edits'
 import { prepareWebsiteEdit, WebsiteEditError } from '../../domain/website-edits'
 import { websiteIncomeRowsCte } from '../../domain/website-income'
+import { websiteStages } from '../../../shared/website-classification'
 import { isWebsiteNew } from '../../../shared/website-newness'
 
 const json = (data: unknown, status = 200, message = '成功') => Response.json({ status, message, data }, { status })
@@ -39,7 +40,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 (SELECT json_group_array(json_object('id',a.id,'provider',a.provider,'provider_name',a.provider_name,'name',a.name)) FROM (SELECT pa.id,pa.provider,pa.provider_name,pa.name FROM provider_accounts pa WHERE pa.id IN (SELECT r.account_id FROM website_resources wr JOIN provider_resources r ON r.id=wr.resource_id WHERE wr.website_id=w.id UNION SELECT wa.account_id FROM website_accounts wa WHERE wa.website_id=w.id) ORDER BY pa.id) a) AS provider_accounts_json,
                 (SELECT GROUP_CONCAT(DISTINCT r.provider || ': ' || r.name) FROM website_resources wr JOIN provider_resources r ON r.id = wr.resource_id WHERE wr.website_id = w.id) AS resource_names
             FROM websites w ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-            ORDER BY CASE w.stage WHEN '验证' THEN 1 WHEN '增长' THEN 2 WHEN '维护' THEN 3 WHEN '暂停' THEN 4 ELSE 0 END, w.lifecycle, w.priority_order, w.id
+            ORDER BY CASE w.stage ${websiteStages.map((stage,index) => `WHEN '${stage}' THEN ${index}`).join(' ')} ELSE ${websiteStages.length} END, w.lifecycle, w.priority_order, w.id
         `).bind(...values).all<Record<string, unknown>>(), context.env.DB.prepare(`
             ${websiteIncomeRowsCte}
             , latest_months AS (
@@ -94,7 +95,7 @@ export const onRequestGet: PagesFunction<Env> = async context => {
                 provider_account_ids: JSON.parse(String(accountIds || '[]')),
                 provider_accounts: JSON.parse(String(accountsJson || '[]')),
             }
-        }))
+        }).filter(site => params.get('new') === '1' ? site.is_new_site : params.get('new') === '0' ? !site.is_new_site : true))
     } catch (error) { return json(null, 500, error instanceof Error ? error.message : '获取网站失败') }
 }
 

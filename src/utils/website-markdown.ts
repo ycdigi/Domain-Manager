@@ -27,6 +27,7 @@ export const websitesMarkdown = (sites: Website[], batches: Pick<Batch, 'id' | '
       `- 批次：${batchNames}`,
       `- 归属：${text(site.ownership)}；类型：${text(site.industry)}；技术栈：${text(site.platform === '其他' ? site.platform_other || '其他' : site.platform)}`,
       `- 阶段：${text(site.stage)}；经营状态：${site.lifecycle === 'stopped' ? '停止经营' : '经营中'}`,
+      `- 新站分类：${site.is_new_site === true ? '新站' : site.is_new_site === false ? '普通站' : '未判定'}`,
       `- 内容规模：总页面 ${text(site.page_count)}；计算器 ${text(site.calculator_count)}；文章 ${text(site.article_count)}；更新日期：${text(site.content_stats_updated_date)}`,
       `- 日点击：${clicks}；更新日期：${text(site.clicks_updated_date)}`,
       `- AdSense：${text(site.adsense_connected)}；GSC：${text(site.gsc_connected)}`,

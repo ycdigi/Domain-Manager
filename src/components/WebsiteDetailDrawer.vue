@@ -133,6 +133,7 @@
 </template>
 
 <script setup lang="ts">
+import { websiteStages } from '../../shared/website-classification'
 import { websiteEditPatch } from '../../shared/website-edits'
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -169,7 +170,7 @@ const queue = getWriteQueue()
 const visible = computed({ get: () => props.visible, set: value => emit('update:visible', value) })
 const drawerSize = ref('760px')
 const updateDrawerSize = () => { drawerSize.value = `${Math.max(320, Math.min(760, Math.floor(window.innerWidth * 0.96)))}px` }
-const stages = ['待评估', '验证', '增长', '维护', '暂停']
+const stages = websiteStages
 const ownerships = ['未分类', '自营网站', '企业客户网站']
 const platforms = ['WordPress', 'Astro', 'Next.js', '其他']
 const industries = ['计算器', '资讯站', '其他']

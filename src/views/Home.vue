@@ -56,6 +56,9 @@
           @change="(value) => filter('stage', value)"
           ><el-option v-for="value in stages" :key="value" :label="value" :value="value"
         /></el-select>
+        <el-select :model-value="String(route.query.new || '')" clearable placeholder="全部新站分类" aria-label="新站分类筛选" @change="(value) => filter('new', value)">
+          <el-option label="新站" value="1" /><el-option label="普通站" value="0" />
+        </el-select>
         <el-select
           :model-value="providerFilterValue"
           clearable
@@ -206,8 +209,8 @@
                   <el-icon aria-hidden="true"><Check v-if="site.adsense_connected === '已开通'" /><Close v-else /></el-icon>
                 </span>
               </td>
-              <td>
-                <button type="button" class="site-cell site-choice-trigger" :aria-label="`阶段：${site.name}`" :data-choice-key="`${site.id}-stage`" :aria-expanded="isChoice(site, 'stage')" aria-controls="website-choice-panel" title="点击修改阶段" :disabled="busy || loading || Boolean(metricEdit)" @click="openChoice(site, 'stage', $event)">{{ site.stage }}</button>
+              <td class="site-stage-cell">
+                <button type="button" class="site-cell site-choice-trigger" :aria-label="`阶段：${site.name}`" :data-choice-key="`${site.id}-stage`" :aria-expanded="isChoice(site, 'stage')" aria-controls="website-choice-panel" :aria-describedby="site.is_new_site ? `site-new-${site.id}` : undefined" title="点击修改阶段" :disabled="busy || loading || Boolean(metricEdit)" @click="openChoice(site, 'stage', $event)">{{ site.stage }}</button><small v-if="site.is_new_site" :id="`site-new-${site.id}`" class="site-new-label" :title="site.new_site_override === 1 ? '手动标记为新站' : '主域名注册日期在最近三个月内'">新站</small>
               </td>
               <td>
                 <div class="site-actions">
@@ -285,6 +288,7 @@
   </div>
 </template>
 <script setup lang="ts">
+import { websiteStages } from '../../shared/website-classification'
 import { websiteMaintenance } from '../../shared/website-maintenance'
 import { websiteEditPatch } from '../../shared/website-edits'
 import { computed, reactive, ref, shallowRef, watch, onActivated, onDeactivated, onMounted, onUnmounted, nextTick } from 'vue'
@@ -311,8 +315,7 @@ import {
   updateWebsite,
   deleteWebsite,
   bulkUpdateWebsites,
-  type Website,
-  type WebsiteStage
+  type Website
 } from '../api/websites'
 import { getBatches, assignBatch, type Batch, type BatchAssignmentPayload } from '../api/batches'
 import { websiteQuery, type WebsiteSection } from '../utils/website-location'
@@ -324,7 +327,7 @@ import { cachedGet, localDate } from '../utils/workspaceCache'
 import '../styles/home/home.css'
 const route = useRoute()
 const router = useRouter()
-const stages: WebsiteStage[] = ['待评估', '验证', '增长', '维护', '暂停']
+const stages = websiteStages
 const platforms = ['WordPress', 'Astro', 'Next.js', '其他']
 const ownerships = ['自营网站', '企业客户网站', '未分类']
 const countKeys = ['page_count', 'calculator_count', 'article_count'] as const
@@ -392,8 +395,8 @@ const createVisible = ref(false)
 const sortKey = computed({ get: () => columns.some(column => column.key !== 'actions' && column.key === route.query.sort) ? String(route.query.sort) : '', set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
 const adsOnly = computed(() => route.query.ads === '1')
 const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')
-const filterLabels: Record<string, string> = { batch: '批次', ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', ads: 'Ads', new: '新站', view: '状态', q: '搜索' }
-const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => key === 'ads' ? adsOnly.value : route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'ads' ? '已开通' : key === 'new' ? '是' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : key === 'provider_account' ? providerAccountFilterLabel.value : route.query[key]}` })))
+const filterLabels: Record<string, string> = { batch: '批次', ownership: '归属', platform: '技术栈', stage: '阶段', provider: '服务商', resource: '资源', provider_account: '服务账号', adsense_account: 'AdSense 账号', ads: 'Ads', new: '新站分类', view: '状态', q: '搜索' }
+const activeFilters = computed(() => Object.entries(filterLabels).filter(([key]) => key === 'ads' ? adsOnly.value : route.query[key]).map(([key, label]) => ({ key, label: `${label}：${key === 'ads' ? '已开通' : key === 'new' ? route.query.new === '0' ? '普通站' : '新站' : key === 'view' ? '停止经营' : key === 'batch' ? batches.value.find(batch => batch.id === Number(route.query.batch))?.name || route.query.batch : key === 'provider_account' ? providerAccountFilterLabel.value : route.query[key]}` })))
 const clearFilters = () => { const query = { ...route.query }; for (const key of Object.keys(filterLabels)) delete query[key]; void router.push({ query }) }
 const views = [
   { value: 'active', label: '经营中' },
@@ -493,7 +496,7 @@ const visibleSites = computed(() =>
         (!route.query.provider_account || s.provider_account_ids?.includes(Number(route.query.provider_account)) || s.provider_accounts?.some(account => account.id === Number(route.query.provider_account))) &&
         (!route.query.adsense_account || s.adsense_account_id === Number(route.query.adsense_account)) &&
         (!adsOnly.value || s.adsense_connected === '已开通') &&
-        (!route.query.new || s.is_new_site) &&
+        (route.query.new === '1' ? s.is_new_site : route.query.new === '0' ? !s.is_new_site : true) &&
         `${s.name} ${s.domains.map((d) => d.domain).join(' ')}`
           .toLowerCase()
           .includes(search.value.trim().toLowerCase())

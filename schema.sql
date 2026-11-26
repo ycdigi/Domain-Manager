@@ -3,7 +3,6 @@
 CREATE TABLE IF NOT EXISTS websites (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
-    stage TEXT NOT NULL DEFAULT '待评估' CHECK (stage IN ('待评估', '验证', '增长', '维护', '暂停')),
     lifecycle TEXT NOT NULL DEFAULT 'active' CHECK (lifecycle IN ('active', 'stopped')),
     ownership TEXT NOT NULL DEFAULT '自营网站' CHECK (ownership IN ('未分类', '自营网站', '企业客户网站')),
     industry TEXT,
@@ -31,6 +30,7 @@ CREATE TABLE IF NOT EXISTS websites (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     github_push_url TEXT,
     wp_login_url TEXT,
+    stage TEXT NOT NULL DEFAULT '待评估' CHECK (stage IN ('待评估', '验证', '增长', '平稳', '下降', '维护', '暂停')),
     FOREIGN KEY (adsense_account_id) REFERENCES adsense_accounts(id)
 );
 

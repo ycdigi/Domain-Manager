@@ -1,9 +1,9 @@
 import { dailyClicksRanges, isValidDate } from '../utils/domain-validation'
 import { githubPushUrl, httpLoginUrl } from '../../shared/website-maintenance'
-import { websiteIndustries } from '../../shared/website-classification'
+import { websiteIndustries, websiteStages } from '../../shared/website-classification'
 
 const choices: Record<string, Array<string | number>> = {
-    stage: ['待评估', '验证', '增长', '维护', '暂停'],
+    stage: [...websiteStages],
     lifecycle: ['active', 'stopped'],
     ownership: ['未分类', '自营网站', '企业客户网站'],
     industry: [...websiteIndustries],

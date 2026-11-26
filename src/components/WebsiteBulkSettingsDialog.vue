@@ -33,6 +33,7 @@
   </el-dialog>
 </template>
 <script setup lang="ts">
+import { websiteStages } from '../../shared/website-classification'
 import { computed, onDeactivated, reactive, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import type { ProviderAccount, ProviderResource } from '../../functions/types'
@@ -47,7 +48,7 @@ import { confirmDiscard, useUnsavedChanges } from '../composables/useUnsavedChan
 const props=defineProps<{visible:boolean;websites:Website[];computerNames:string[]}>()
 const emit=defineEmits<{'update:visible':[value:boolean];saved:[count:number]}>()
 const providers=[{value:'cloudflare',label:'Cloudflare'},{value:'github',label:'GitHub'},{value:'vhost',label:'虚拟主机'},{value:'vps',label:'VPS'}]
-const editableFields=[{key:'ownership',label:'网站归属',values:['自营网站','企业客户网站','未分类']},{key:'platform',label:'技术栈',values:['WordPress','Astro','Next.js','其他']},{key:'stage',label:'阶段',values:['待评估','验证','增长','维护','暂停']},{key:'industry',label:'网站类型',values:['计算器','资讯站','其他']},{key:'adsense_connected',label:'AdSense 开通状态',values:['未知','已开通','未开通']},{key:'gsc_connected',label:'GSC 开通状态',values:['未知','已开通','未开通']}]
+const editableFields=[{key:'ownership',label:'网站归属',values:['自营网站','企业客户网站','未分类']},{key:'platform',label:'技术栈',values:['WordPress','Astro','Next.js','其他']},{key:'stage',label:'阶段',values:websiteStages},{key:'industry',label:'网站类型',values:['计算器','资讯站','其他']},{key:'adsense_connected',label:'AdSense 开通状态',values:['未知','已开通','未开通']},{key:'gsc_connected',label:'GSC 开通状态',values:['未知','已开通','未开通']}]
 const accounts=ref<ProviderAccount[]>([]),gscAccounts=ref<GscAccount[]>([]),accountIds=ref<number[]>([]),gscAccountId=ref<number>(),computer=ref<string|number>()
 const accountMode=ref('add'),resources=ref<ProviderResource[]>([]),resourceIds=reactive<Record<string,number|undefined>>({}),batches=ref<Batch[]>([]),batchIds=ref<number[]>([])
 const adsenseAccounts=ref<Array<{id:number;name:string;status:string}>>([]),adsenseAccountId=ref<number>(),newSite=ref<string>(),platformOther=ref('')
