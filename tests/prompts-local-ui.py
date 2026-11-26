@@ -67,7 +67,7 @@ try:
   page.get_by_role('textbox',name='搜索提示词',exact=True).fill(stamp);page.get_by_role('button',name='搜索',exact=True).click()
   page.reload();expect(page.get_by_role('textbox',name='搜索提示词',exact=True)).to_have_value(stamp)
   page.get_by_role('button',name='查看提示词：'+title,exact=True).click();expect(detail.get_by_role('heading',name=title,exact=True)).to_be_visible()
-  detail.get_by_role('button',name='编辑标题与分类',exact=True).click();editor=page.get_by_role('dialog',name='编辑提示词',exact=True)
+  detail.get_by_role('button',name='编辑',exact=True).click();editor=page.get_by_role('dialog',name='编辑提示词',exact=True)
   editor.locator('[id$="-title"]').fill(title+' v2');editor.get_by_role('button',name='取消',exact=True).click()
   page.get_by_role('button',name='继续编辑',exact=True).click();expect(editor).to_be_visible()
   editor.get_by_role('button',name='保存提示词',exact=True).click();expect(editor).not_to_be_visible();expect(detail.get_by_role('heading',name=title+' v2',exact=True)).to_be_visible()
@@ -81,12 +81,12 @@ try:
   page.evaluate("Object.defineProperty(navigator.clipboard,'writeText',{configurable:true,value:()=>Promise.reject(new Error('blocked'))});document.execCommand=()=>false")
   page.locator('.prompt-card').get_by_role('button',name='复制正文',exact=True).click();expect(page.get_by_text('复制失败，请在详情中手动选中正文复制',exact=True)).to_be_visible()
   # Dirty fields remain on API failure and route changes require explicit discard.
-  detail.get_by_role('button',name='编辑标题与分类',exact=True).click();editor=page.get_by_role('dialog',name='编辑提示词',exact=True);editor.locator('[id$="-title"]').fill(title+' final')
+  detail.get_by_role('button',name='编辑',exact=True).click();editor=page.get_by_role('dialog',name='编辑提示词',exact=True);editor.locator('[id$="-title"]').fill(title+' final')
   page.route('**/api/prompts/'+str(item['id']),lambda r:r.fulfill(status=500,content_type='application/json',body=json.dumps({'status':500,'message':'模拟保存失败','data':None})))
   editor.get_by_role('button',name='保存提示词',exact=True).click();expect(editor.get_by_text('模拟保存失败',exact=True)).to_be_visible();expect(editor.locator('[id$="-title"]')).to_have_value(title+' final')
   page.unroute('**/api/prompts/'+str(item['id']));editor.get_by_role('button',name='保存提示词',exact=True).click();expect(editor).not_to_be_visible()
   # Browser back while editing must close the abandoned form, not retain a stale target.
-  detail.get_by_role('button',name='编辑标题与分类',exact=True).click();editor=page.get_by_role('dialog',name='编辑提示词',exact=True);editor.locator('[id$="-title"]').fill('discarded')
+  detail.get_by_role('button',name='编辑',exact=True).click();editor=page.get_by_role('dialog',name='编辑提示词',exact=True);editor.locator('[id$="-title"]').fill('discarded')
   page.go_back(wait_until='commit');page.get_by_role('button',name='放弃修改',exact=True).click();expect(editor).not_to_be_visible()
   page.go_forward(wait_until='commit');expect(detail.get_by_role('heading',name=title+' final',exact=True)).to_be_visible()
   page.screenshot(path='/tmp/domain-prompts-desktop.png',full_page=True)

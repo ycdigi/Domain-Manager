@@ -17,7 +17,7 @@
           <el-form-item label="分类" :for="editorId+'-category'"><div class="prompt-category-field"><el-select :id="editorId+'-category'" v-model="form.category_name" filterable allow-create default-first-option clearable placeholder="未分类；可输入新分类" aria-label="提示词分类"><el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.name" /></el-select><el-button :icon="Plus" @click="createCategory()">新增分类</el-button></div><p class="prompt-field-help">选择已有分类，也可以直接输入新名称。</p></el-form-item>
           <el-form-item label="标题" :for="editorId+'-title'" required><el-input ref="titleInput" :id="editorId+'-title'" v-model="form.title" name="title" maxlength="200" show-word-limit placeholder="例如：重复任务自动化" required /><p class="prompt-field-help">这里只填写标题，不需要再加“运营.”分类前缀。</p></el-form-item>
           <h3 class="prompt-form-heading">提示词正文</h3>
-          <el-form-item label="正文" :for="editorId+'-content'" required><el-input ref="contentInput" :id="editorId+'-content'" v-model="form.content" name="content" type="textarea" :rows="14" required /></el-form-item>
+          <el-form-item label="正文" :for="editorId+'-content'" required><el-input :id="editorId+'-content'" v-model="form.content" name="content" type="textarea" :rows="14" required /></el-form-item>
           <p class="page-muted">{{ form.content.length.toLocaleString() }} / 100,000 字符 · 保存前可直接修改识别结果</p>
         </el-form>
       </div>
@@ -36,7 +36,7 @@ import { confirmAction, isDismissed } from '../utils/feedback'
 import { useUnsavedChanges } from '../composables/useUnsavedChanges'
 import { createPromptCategory } from '../utils/create-prompt-category'
 import '../styles/dialogs/prompt-editor.css'
-const props=withDefaults(defineProps<{prompt?:Prompt;initialFocus?:'metadata'|'content'}>(),{initialFocus:'metadata'})
+const props=defineProps<{prompt?:Prompt}>()
 const visible=defineModel<boolean>({default:false})
 const emit=defineEmits<{saved:[prompt:Prompt];categoriesChanged:[]}>()
 const route=useRoute(),editorId='prompt-editor-'+useId(),formId=editorId+'-form'
@@ -60,8 +60,8 @@ watch(()=>route.fullPath,()=>{visible.value=false})
 const closeEditor=async()=>{if(await canDiscard())visible.value=false}
 const beforeEditorClose=async(done:()=>void)=>{if(await canDiscard())done()}
 const openEditor=(row?:Prompt)=>{identified.value=false;editingId.value=row?.id;Object.assign(form,{category_name:row?.category_name||'',title:row?.title||'',content:row?.content||''});pasteText.value='';formError.value='';duplicateId.value=0;duplicate.value=undefined;baseline.value=snapshot();visible.value=true}
-const titleInput=ref<InputInstance>(),contentInput=ref<InputInstance>(),pasteInput=ref<InputInstance>(),editFocus=ref<'metadata'|'content'>('metadata')
-const focusEditor=(event?:Event)=>{event?.preventDefault();const isPaste=!editingId.value&&entryMode.value==='paste';const isContent=editFocus.value==='content'&&!isPaste;const input=isPaste?pasteInput.value:isContent?contentInput.value:titleInput.value;input?.focus();(isPaste||isContent?input?.textarea:input?.input)?.scrollIntoView({block:'nearest'})}
+const titleInput=ref<InputInstance>(),pasteInput=ref<InputInstance>()
+const focusEditor=(event?:Event)=>{event?.preventDefault();const isPaste=!editingId.value&&entryMode.value==='paste';const input=isPaste?pasteInput.value:titleInput.value;input?.focus();(isPaste?input?.textarea:input?.input)?.scrollIntoView({block:'nearest'})}
 const recognize=async()=>{
  try{const parsed=parsePromptPaste(pasteText.value);if(form.title||form.content||form.category_name)await confirmAction('重新识别将替换当前分类、标题和正文，是否继续？','重新识别');Object.assign(form,parsed);formError.value='';duplicateId.value=0;duplicate.value=undefined;identified.value=true}
  catch(e){if(!isDismissed(e))formError.value=message(e)}
@@ -74,12 +74,12 @@ const save=async()=>{
  finally{saving.value=false}
 }
 const viewDuplicate=async()=>{try{duplicate.value=await getPrompt(duplicateId.value)}catch(e){formError.value=message(e)}}
-const editDuplicate=async()=>{if(duplicate.value&&await canDiscard()){editFocus.value='metadata';openEditor(duplicate.value);await nextTick();focusEditor()}}
+const editDuplicate=async()=>{if(duplicate.value&&await canDiscard()){openEditor(duplicate.value);await nextTick();focusEditor()}}
 const createCategory=async()=>{
  try{
   const name=await createPromptCategory()
   form.category_name=name;emit('categoriesChanged');await loadCategories();notify('success','分类已新增')
  }catch(e){if(!isDismissed(e))formError.value=message(e)}
 }
-watch(visible,open=>{if(open){entryMode.value='paste';editFocus.value=props.initialFocus;openEditor(props.prompt);void loadCategories()}},{immediate:true})
+watch(visible,open=>{if(open){entryMode.value='paste';openEditor(props.prompt);void loadCategories()}},{immediate:true})
 </script>

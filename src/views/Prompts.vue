@@ -37,7 +37,7 @@
       <p v-if="detailError" role="alert">{{ detailError }} <el-button @click="loadDetail">重试</el-button></p>
       <PromptDetail v-else-if="selected&&!detailLoading" :prompt="selected" @copy="copySelected" @edit="editSelected" @delete="removeSelected" /><p v-else>正在读取正文…</p>
     </el-drawer>
-    <PromptEditorDialog v-model="editorVisible" :prompt="editingPrompt" :initial-focus="editFocus" @saved="onPromptSaved" @categories-changed="refresh" />
+    <PromptEditorDialog v-model="editorVisible" :prompt="editingPrompt" @saved="onPromptSaved" @categories-changed="refresh" />
     <el-dialog v-model="manageVisible" title="管理分类" width="min(580px, 94vw)" :close-on-click-modal="false">
       <form class="prompt-category-create" @submit.prevent="addCategory"><el-input v-model="newCategory" aria-label="新分类名称" placeholder="新分类名称" maxlength="50" /><el-button native-type="submit" :disabled="categoryBusy">新增分类</el-button></form>
       <p v-if="categoryError" class="prompt-error" role="alert">{{ categoryError }}</p>
@@ -105,9 +105,9 @@ const copyItem=async(id:number)=>{try{await copyValue(await getPrompt(id))}catch
 const copySelected=(full:boolean)=>{if(selected.value)void copyValue(selected.value,full)}
 const favoriteBusy=ref(0)
 const toggleFavorite=async(item:PromptSummary)=>{favoriteBusy.value=item.id;try{const row=await favoritePrompt(item.id,!item.is_favorite);if(selected.value?.id===row.id)selected.value=row;await refresh()}catch(e){notify('error',message(e))}finally{favoriteBusy.value=0}}
-const editorVisible=ref(false),editingPrompt=ref<Prompt>(),editFocus=ref<'metadata'|'content'>('metadata')
-const newPrompt=()=>{editingPrompt.value=undefined;editFocus.value='metadata';editorVisible.value=true}
-const editSelected=(field:'metadata'|'content'='metadata')=>{if(selected.value){editingPrompt.value=selected.value;editFocus.value=field;editorVisible.value=true}}
+const editorVisible=ref(false),editingPrompt=ref<Prompt>()
+const newPrompt=()=>{editingPrompt.value=undefined;editorVisible.value=true}
+const editSelected=()=>{if(selected.value){editingPrompt.value=selected.value;editorVisible.value=true}}
 const onPromptSaved=async(saved:Prompt)=>{
  await refresh();await selectPrompt(saved.id);await loadDetail()
  if(!listing.value.items.some(i=>i.id===saved.id))notify('info','已保存并打开详情；条目可能不在当前筛选或分页中')
