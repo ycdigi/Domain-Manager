@@ -1,4 +1,5 @@
 import { dailyClicksRanges, isValidDate } from '../utils/domain-validation'
+import { githubPushUrl, httpLoginUrl } from '../../shared/website-maintenance'
 import { websiteIndustries } from '../../shared/website-classification'
 
 const choices: Record<string, Array<string | number>> = {
@@ -24,6 +25,8 @@ export const validateWebsiteFields = (fields: Record<string, unknown>, current: 
     if (fields.platform_other != null && (typeof fields.platform_other !== 'string' || fields.platform_other.length > 100)) return '其他技术栈名称不能超过 100 个字符'
     if (fields.next_action != null && (typeof fields.next_action !== 'string' || fields.next_action.length > 300)) return '下一步行动不能超过 300 个字符'
     if (fields.potential != null && (typeof fields.potential !== 'string' || fields.potential.length > 2000)) return '潜力说明不能超过 2000 个字符'
+    if (fields.github_push_url != null && (typeof fields.github_push_url !== 'string' || fields.github_push_url.length > 2048 || !githubPushUrl(fields.github_push_url))) return '请填写有效的 GitHub 仓库推送地址'
+    if (fields.wp_login_url != null && (typeof fields.wp_login_url !== 'string' || fields.wp_login_url.length > 2048 || !httpLoginUrl(fields.wp_login_url))) return '后台登录地址必须是不含账号密码的 HTTP 或 HTTPS 地址'
     for (const key of counts) if (fields[key] !== undefined && (key === 'priority_order' && fields[key] == null || fields[key] != null && (!Number.isInteger(fields[key]) || Number(fields[key]) < 0))) return `${key} 必须是非负整数`
     if (fields.adsense_account_id != null && (!Number.isInteger(fields.adsense_account_id) || Number(fields.adsense_account_id) <= 0)) return 'AdSense 账号编号无效'
     if (fields.daily_clicks_range != null && !dailyClicksRanges.includes(fields.daily_clicks_range as typeof dailyClicksRanges[number])) return 'daily_clicks_range 无效'

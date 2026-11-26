@@ -1,5 +1,5 @@
 // The field vocabulary and coupled edit groups are shared by every live editor.
-export const websiteFields = ['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'page_count'] as const
+export const websiteFields = ['name', 'stage', 'lifecycle', 'ownership', 'industry', 'platform', 'platform_other', 'github_push_url', 'wp_login_url', 'adsense_account_id', 'adsense_connected', 'adsense_opened_date', 'gsc_connected', 'seo_last_date', 'daily_clicks', 'daily_clicks_range', 'clicks_updated_date', 'calculator_count', 'article_count', 'computer_name', 'content_stats_updated_date', 'potential', 'priority_order', 'next_action', 'next_action_due_date', 'next_action_status', 'new_site_override', 'page_count'] as const
 export const websiteContentCounts = ['page_count', 'calculator_count', 'article_count'] as const
 const groups = [
     ['platform', 'platform_other'],

@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS websites (
     new_site_override INTEGER CHECK (new_site_override IN (0, 1)),
     page_count INTEGER CHECK (page_count IS NULL OR page_count >= 0),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    github_push_url TEXT,
+    wp_login_url TEXT,
     FOREIGN KEY (adsense_account_id) REFERENCES adsense_accounts(id)
 );
 

@@ -1,3 +1,4 @@
+import { legacyGithubToken } from '../../shared/github-token'
 import { backupColumns, backupFormatVersion } from '../../shared/backup-format'
 import { resourceBindingWrites } from './resource-bindings'
 import { resourceSupportsRole } from '../../shared/resource-roles'
@@ -442,5 +443,7 @@ export const restoreBackup = async (db: D1Database, raw: unknown, options: { bat
 
 export const exportBackup = async (db: D1Database) => {
     const rows = await Promise.all(Object.entries(backupColumns).map(async ([table, columns]) => [table, (await db.prepare(`SELECT ${columns.join(',')} FROM ${table} ORDER BY ${columns[0]}`).all()).results || []] as const))
-    return { format_version: backupFormatVersion, ...Object.fromEntries(rows) }
+    const output = Object.fromEntries(rows)
+    output.provider_accounts = output.provider_accounts.map((row: Row) => row.provider === 'github' && legacyGithubToken(row.memo) ? { ...row, memo: '' } : row)
+    return { format_version: backupFormatVersion, ...output }
 }

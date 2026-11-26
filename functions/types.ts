@@ -92,6 +92,7 @@ export interface AdsenseIncome {
 export type ProviderType = 'github' | 'cloudflare' | 'vhost' | 'vps'
 
 export interface ProviderAccount {
+    legacy_token_pending?: boolean
     default_token_last4?: string | null
     default_token_status?: string | null
     provider_name?: string | null

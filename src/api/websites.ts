@@ -36,6 +36,8 @@ export interface Website {
   ownership: '未分类' | '自营网站' | '企业客户网站'
   industry: '计算器' | '资讯站' | '其他' | null
   platform: 'WordPress' | 'Astro' | 'Next.js' | '其他'
+  github_push_url?: string | null
+  wp_login_url?: string | null
   platform_other?: string | null
   page_count?: number | null
   adsense_account_id?: number | null

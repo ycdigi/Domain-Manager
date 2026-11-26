@@ -18,6 +18,7 @@ export const copyText = async (text: string): Promise<void> => {
     }
 
     if (typeof document === 'undefined' || !document.body) throw new ClipboardError()
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const textarea = document.createElement('textarea')
     textarea.value = text
     textarea.setAttribute('readonly', '')
@@ -34,6 +35,7 @@ export const copyText = async (text: string): Promise<void> => {
         copied = document.execCommand('copy')
     } finally {
         textarea.remove()
+        previousFocus?.focus({ preventScroll: true })
     }
     if (!copied) throw new ClipboardError()
 }

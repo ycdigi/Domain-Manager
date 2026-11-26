@@ -9,6 +9,8 @@ export const backupColumns: Record<string, readonly string[]> = {
     "industry",
     "platform",
     "platform_other",
+    "github_push_url",
+    "wp_login_url",
     "adsense_account_id",
     "adsense_connected",
     "adsense_opened_date",

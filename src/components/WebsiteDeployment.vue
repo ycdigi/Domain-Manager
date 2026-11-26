@@ -6,6 +6,7 @@
     </div>
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load">重试</el-button></div>
     <div v-if="cloudflareMissing" class="page-muted">Cloudflare 托管尚未关联主要 GitHub 仓库，可在下方补充。</div>
+    <WebsiteMaintenanceForm ref="maintenancePanel" :website="website" @changed="emit('changed')" />
     <h3>关联账号</h3><p class="page-muted">账号归属不代表托管位置；请在下方关联实际主机、项目或仓库。</p>
     <ul class="page-list"><li v-for="link in accountLinks" :key="link.id"><ProviderIdentity :provider="link.provider" :provider-name="link.provider_name" :name="link.account_name" /><el-button text :disabled="saving" @click="unlinkAccount(link.id)">解除账号关联</el-button></li></ul>
     <el-form label-position="top" @submit.prevent="saveAccount">
@@ -64,6 +65,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
+import WebsiteMaintenanceForm from './WebsiteMaintenanceForm.vue'
 import ProviderIdentity from './ProviderIdentity.vue'
 import { providerIdentity } from '../utils/provider-identity'
 import { api } from '../utils/request'
@@ -92,12 +94,13 @@ const selectedAccount = computed(() => accounts.value.find(account => account.id
 const accountLabel = (account: ProviderAccount) => { const identity = providerIdentity(account.provider, account.provider_name, account.name); return identity.label + (identity.accountName ? ` · ${identity.accountName}` : '') }
 const links = ref<Link[]>([])
 const resources = ref<ProviderResource[]>([])
+const maintenancePanel = ref<InstanceType<typeof WebsiteMaintenanceForm>>()
 const saving = ref(false)
 const error = ref('')
 const form = reactive({ resource_id: undefined as number | undefined, role: '托管', is_primary: true })
 const baseline = ref(JSON.stringify({ form, accountForm }))
-const dirty = computed(() => JSON.stringify({ form, accountForm }) !== baseline.value)
-defineExpose({ dirty, busy: saving })
+const dirty = computed(() => JSON.stringify({ form, accountForm }) !== baseline.value || !!maintenancePanel.value?.dirty)
+defineExpose({ dirty, busy: computed(() => saving.value || !!maintenancePanel.value?.busy) })
 const safeUrl = (url: string) => (/^https?:\/\//i.test(url) ? url : undefined)
 const availableResources = computed(() =>
   resources.value.filter(

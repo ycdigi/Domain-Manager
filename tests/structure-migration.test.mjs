@@ -81,6 +81,7 @@ CREATE TABLE alertcfg(id INTEGER PRIMARY KEY,tg_token TEXT);`)
   assert.equal(store.sql("SELECT count(*) AS n FROM sqlite_schema WHERE name='alertcfg' OR name LIKE 'trg_counts_%'")[0].n,0)
   store.script(fs.readFileSync(new URL('../schema-migration-v1.27.0.sql',import.meta.url),'utf8'))
   store.script(fs.readFileSync(new URL('../schema-migration-v1.28.0.sql',import.meta.url),'utf8'))
+  store.script(fs.readFileSync(new URL('../schema-migration-v1.29.0.sql',import.meta.url),'utf8'))
   fresh.init()
   const structure=db=>db.sql("SELECT name FROM sqlite_schema WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name").map(({name})=>({name,columns:db.sql(`PRAGMA table_info(${name})`).map(({cid,...column})=>column).sort((a,b)=>a.name.localeCompare(b.name)),foreignKeys:db.sql(`PRAGMA foreign_key_list(${name})`).sort((a,b)=>JSON.stringify(a).localeCompare(JSON.stringify(b)))}))
   assert.deepEqual(structure(store),structure(fresh))
@@ -89,4 +90,17 @@ CREATE TABLE alertcfg(id INTEGER PRIMARY KEY,tg_token TEXT);`)
   assert.deepEqual(store.sql("SELECT name FROM sqlite_schema WHERE type='trigger' ORDER BY name"),fresh.sql("SELECT name FROM sqlite_schema WHERE type='trigger' ORDER BY name"))
   assert.deepEqual(store.sql('PRAGMA foreign_key_check'),[])
  }finally{store.close();fresh.close()}
+})
+
+test('v1.29 adds maintenance destinations while preserving websites and encrypted credentials',()=>{
+ const store=database()
+ try{
+  const current=fs.readFileSync(new URL('../schema.sql',import.meta.url),'utf8')
+  store.init(current.replace('    github_push_url TEXT,\n    wp_login_url TEXT,\n',''))
+  store.sql("INSERT INTO websites(id,name) VALUES(1,'Keep'); INSERT INTO provider_accounts(id,provider,name) VALUES(1,'github','Main'); INSERT INTO provider_credentials(account_id,label,ciphertext,is_default) VALUES(1,'Default','encrypted-original',1)")
+  store.script(fs.readFileSync(new URL('../schema-migration-v1.29.0.sql',import.meta.url),'utf8'))
+  assert.deepEqual(store.sql('SELECT name,github_push_url,wp_login_url FROM websites'),[{name:'Keep',github_push_url:null,wp_login_url:null}])
+  assert.equal(store.sql('SELECT ciphertext FROM provider_credentials')[0].ciphertext,'encrypted-original')
+  assert.deepEqual(store.sql('PRAGMA foreign_key_check'),[])
+ }finally{store.close()}
 })

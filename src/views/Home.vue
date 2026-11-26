@@ -95,7 +95,8 @@
     </div>
     <section class="portfolio-stage portfolio-list" :aria-busy="loading">
       <div ref="tableWrap" class="portfolio-table-wrap" tabindex="0" role="region" aria-label="网站总表，可横向滚动">
-        <table class="portfolio-table site-table" :style="tableStyle">
+        <span role="status" aria-live="polite" class="page-muted">{{ maintenanceFeedback }}</span>
+          <table class="portfolio-table site-table" :style="tableStyle">
           <caption class="sr-only">
             网站总表，共
             {{
@@ -218,16 +219,13 @@
                     title="查看详情"
                     @click="openSite(site)"
                   />
-                  <el-button
-                    text
-                    size="small"
-                    :icon="CopyDocument"
-                    aria-label="复制资料"
-                    :disabled="!site.repository"
-                    :loading="copying === site.id"
-                    :title="site.repository ? '复制 GitHub 开发资料' : '请关联主要 GitHub 仓库'"
-                    @click="copySite(site)"
-                  />
+                  <a v-if="websiteMaintenance(site).kind === 'login'" class="el-button el-button--small is-text"
+                    :href="websiteMaintenance(site).url" target="_blank" rel="noopener noreferrer"
+                    :aria-label="`登录后台：${site.name}`" title="打开 WordPress 自定义后台"><el-icon aria-hidden="true"><Link /></el-icon></a>
+                  <el-button v-else text size="small" :icon="websiteMaintenance(site).kind === 'github' ? CopyDocument : Setting"
+                    :aria-label="`${websiteMaintenance(site).label}：${site.name}`"
+                    :aria-busy="copying === site.id" :title="websiteMaintenance(site).label"
+                    @click="websiteMaintenance(site).kind === 'github' ? copySite(site) : openSite(site, 'deployment')" />
                   <el-dropdown trigger="click" @command="(command) => more(site, String(command))"
                     ><el-button
                       text
@@ -287,11 +285,12 @@
   </div>
 </template>
 <script setup lang="ts">
+import { websiteMaintenance } from '../../shared/website-maintenance'
 import { websiteEditPatch } from '../../shared/website-edits'
 import { computed, reactive, ref, shallowRef, watch, onActivated, onDeactivated, onMounted, onUnmounted, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { View, CopyDocument, MoreFilled, Search, Check, Close } from '@element-plus/icons-vue'
+import { View, CopyDocument, MoreFilled, Search, Check, Close, Link, Setting } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
 import WebsiteMetricEditor from '../components/WebsiteMetricEditor.vue'
 import { sortComputerNames } from '../utils/computer-options'
@@ -681,15 +680,19 @@ const copyMarkdown = async (sites: Website[]) => {
     ElMessage.error(e instanceof Error ? e.message : '复制失败')
   }
 }
+const maintenanceFeedback = ref('')
 const copySite = async (site: Website) => {
   if (copying.value) return
   copying.value = site.id
   try {
     const result = await api.post<{ text: string }>(`/api/websites/${site.id}/copy`, {})
     await copyText(result.text)
-    ElMessage.success('开发资料已复制')
+    maintenanceFeedback.value = `${site.name}：GitHub 推送资料已复制`
+    ElMessage.success('GitHub 推送资料已复制')
   } catch (e) {
-    ElMessage.error(e instanceof Error ? e.message : '复制失败')
+    maintenanceFeedback.value = e instanceof Error ? e.message : '复制失败'
+    ElMessage.error(maintenanceFeedback.value)
+    openSite(site, 'deployment')
   } finally {
     copying.value = undefined
   }

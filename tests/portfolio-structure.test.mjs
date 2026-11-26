@@ -111,7 +111,7 @@ test('copy uses account defaults and refuses missing credentials', async () => {
   const result = await call(copy.onRequestPost, ctx({}, 'POST'))
   assert.equal(
     result.text,
-    '域名：example.com\n\nGithub地址：https://github.com/org/repo\nGithub Email：user@example.com\nGithub Token：test-secret'
+    '地址：https://github.com/org/repo.git\nToken：test-secret\nEmail：user@example.com\n最后将整站所有的修正Github推送,包含但不限于当前对话;'
   )
   const [site] = await call(sites.onRequestGet, ctx())
   assert.ok(!JSON.stringify(site).includes('test-secret'))
