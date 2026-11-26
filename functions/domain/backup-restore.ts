@@ -1,3 +1,4 @@
+import { validatePromptBackup, planPromptRestore } from './prompt-backup'
 import { legacyGithubToken } from '../../shared/github-token'
 import { backupColumns, backupFormatVersion } from '../../shared/backup-format'
 import { resourceBindingWrites } from './resource-bindings'
@@ -89,6 +90,7 @@ export const restoreBackup = async (db: D1Database, raw: unknown, options: { bat
     if (!Array.isArray(websites) || !Array.isArray(domains) || websites.length > 500 || domains.length > 1000) return result(null, 400, '备份必须包含最多 500 个网站和 1000 个域名')
     const seen = new Set<string>()
     const errors = validateBackupRows(input)
+    errors.push(...validatePromptBackup(input))
     for (const item of domains) {
         const key = normalizeDomain(String(item.domain || ''))
         if (!key || seen.has(key)) errors.push({ domain: String(item.domain || '未知'), error: '域名缺失或重复' })
@@ -185,7 +187,8 @@ export const restoreBackup = async (db: D1Database, raw: unknown, options: { bat
     const resourceMap = new Map<number, number>()
     const batchMap = new Map<number, number>()
 
-    const statements: D1PreparedStatement[] = []
+    const promptRestore = await planPromptRestore(db,input)
+    const statements: D1PreparedStatement[] = [...promptRestore.statements]
     const write = (statement: D1PreparedStatement) => { statements.push(statement) }
     const nextIds = new Map<string, number>()
     const allocateId = async (table: string) => {
@@ -436,7 +439,7 @@ export const restoreBackup = async (db: D1Database, raw: unknown, options: { bat
         const members = [...new Set(siteMap.values())].map(websiteId => db.prepare(`INSERT INTO website_batch_members (batch_id,website_id,membership_status) VALUES (${target},?,'active') ON CONFLICT(batch_id,website_id) WHERE membership_status='active' DO NOTHING`).bind(...(options.batchName ? [] : [importBatchId]), websiteId))
         statements.push(...members)
     }
-    const summary = { total: domains.length, created: websites.length, updated, success: options.dryRun ? 0 : domains.length, failed: 0, errors: [] }
+    const summary = { prompts_overwritten: promptRestore.overwritten, total: domains.length, created: websites.length, updated, success: options.dryRun ? 0 : domains.length, failed: 0, errors: [] }
     if (!options.dryRun && statements.length) await db.batch(statements)
     return result(summary, 200, options.dryRun ? '预览完成，尚未写入' : '导入完成')
 }

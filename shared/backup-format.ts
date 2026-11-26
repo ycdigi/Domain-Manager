@@ -1,5 +1,7 @@
 export const backupFormatVersion = 1
 export const backupColumns: Record<string, readonly string[]> = {
+  "prompt_categories": ["id", "name", "created_at", "updated_at"],
+  "prompts": ["id", "category_id", "title", "content", "is_favorite", "created_at", "updated_at"],
   "websites": [
     "id",
     "name",

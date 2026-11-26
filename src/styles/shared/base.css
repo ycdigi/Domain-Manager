@@ -45,9 +45,9 @@ html.dm-ui .el-dialog__header { margin: 0; padding: var(--space-md) 52px var(--s
 html.dm-ui .el-dialog__title { display: block; color: var(--color-ink); font-size: var(--text-lg); font-weight: var(--weight-semibold); line-height: 1.5; overflow-wrap: anywhere; }
 html.dm-ui .el-dialog__headerbtn { top: 4px; right: 4px; width: var(--touch-target); height: var(--touch-target); }
 html.dm-ui .el-dialog__body { max-height: min(70svh, 760px); overflow-y: auto; padding: var(--space-lg); color: var(--color-ink-2); }
+html.dm-ui .el-dialog__footer, html.dm-ui .el-drawer__footer { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:var(--space-xs); }
 html.dm-ui .el-dialog__footer { padding: var(--space-sm) var(--space-lg); border-top: 1px solid var(--color-rule); }
-html.dm-ui .dialog-footer { display: flex; justify-content: flex-end; gap: var(--space-xs); }
-html.dm-ui .el-dialog__footer > .el-button + .el-button { margin-left: var(--space-xs); }
+html.dm-ui .dialog-footer { width:100%; display: flex; flex-wrap:wrap; justify-content: flex-end; gap: var(--space-xs); }
 html.dm-ui .el-dialog .el-input, html.dm-ui .el-dialog .el-select, html.dm-ui .el-dialog .el-date-editor { max-width: 100%; }
 html.dm-ui .el-dialog .el-select, html.dm-ui .el-dialog .el-date-editor { width: 100%; }
 html.dm-ui .el-message-box { width: 440px; max-width: calc(100% - 32px); padding: var(--space-lg); border: 1px solid var(--color-rule); border-radius: var(--radius-panel); }

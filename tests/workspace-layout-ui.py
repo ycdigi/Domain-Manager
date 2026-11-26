@@ -1,7 +1,7 @@
 """Shared heading and toolbar layout across every workspace at desktop/tablet/mobile widths."""
 import base64,json
 from playwright.sync_api import sync_playwright,expect
-routes={'home':'网站总表','website-management':'网站管理','domains':'域名资产','resources':'部署与账号','adsense':'AdSense','finance':'收入与投入','work':'待处理','batches':'网站批次','batches/1':'布局验收批次','monitor':'网站监控','data':'数据管理'}
+routes={'home':'网站总表','website-management':'网站管理','domains':'域名资产','resources':'部署与账号','adsense':'AdSense','finance':'收入与投入','work':'待处理','batches':'网站批次','batches/1':'布局验收批次','monitor':'网站监控','data':'数据管理','prompts':'提示词库'}
 with sync_playwright() as p:
  browser=p.chromium.launch(headless=True)
  page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
@@ -9,7 +9,9 @@ with sync_playwright() as p:
  def handle(route):
   path=route.request.url.split('?')[0].split('/api/')[-1]
   data=[]
-  if path=='monitor':data=dict(monitors=[],incidents=[],unread_count=0,runner=None)
+  if path=='prompts':data=dict(items=[],total=0,page=1,page_size=30)
+  elif path=='prompt-categories':data=dict(items=[],total=0,favorites=0,uncategorized=0)
+  elif path=='monitor':data=dict(monitors=[],incidents=[],unread_count=0,runner=None)
   elif path=='work-queue':data=dict(counts=dict(monitor=0,next_action=0,task=0,batch=0,total=0),items=[])
   elif path=='finance':data=dict(websites=[],website_income=[],website_effort=[])
   elif path=='batches/1':data=dict(id=1,name='布局验收批次',status='进行中',members=[],reviews=[],member_count=0,content_totals={},stage_counts={},review_requested=0)
@@ -31,7 +33,10 @@ with sync_playwright() as p:
     refresh=heading.get_by_role('button',name='刷新',exact=True)
     assert abs(status.bounding_box()['y']-refresh.bounding_box()['y'])<12,'monitor status and refresh must share a row'
    if route=='home':
-    assert heading.bounding_box()['height']<=(66 if width>=768 else 140),(route,width,heading.bounding_box())
+    # On phones the added quick-collection action needs a separate action row.
+    assert heading.bounding_box()['height']<=(66 if width>=768 else 180),(route,width,heading.bounding_box())
+    actions=heading.locator('.workspace-heading-actions button').all()
+    assert max(button.bounding_box()['y'] for button in actions)-min(button.bounding_box()['y'] for button in actions)<2,(route,width,'actions must share a row')
     page.get_by_role('textbox',name='搜索网站或域名',exact=True).fill('no result')
     expect(page.get_by_role('button',name='清除全部条件',exact=True)).to_be_visible()
     page.get_by_role('button',name='清除全部条件',exact=True).click()
@@ -39,4 +44,4 @@ with sync_playwright() as p:
     page.screenshot(path='/tmp/domain-layout-'+route.replace('/','-')+'-mobile.png',full_page=True)
  assert not errors,errors
  browser.close()
-print('All 11 workspace routes passed at 5 viewport widths')
+print('All 12 workspace routes passed at 5 viewport widths')

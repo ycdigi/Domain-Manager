@@ -23,6 +23,7 @@ const router = createRouter({
             component: WorkspaceLayout,
             meta: { requiresAuth: true },
             children: [
+                { path: 'prompts', name: 'Prompts', component: () => import('../views/Prompts.vue') },
                 { path: 'finance', name: 'Finance', component: () => import('../views/Finance.vue') },
                 { path: 'website-management', name: 'WebsiteManagement', component: () => import('../views/WebsiteManagement.vue') },
                 { path: 'home', name: 'Home', component: () => import('../views/Home.vue') },

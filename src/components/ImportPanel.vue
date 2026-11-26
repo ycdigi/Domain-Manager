@@ -25,6 +25,7 @@
                 <h3>导入结果:</h3>
                 <p role="status">{{ imported ? '导入已完成' : '仅预览，尚未写入数据' }}</p>
                 <div class="result-summary">
+                    <div class="result-item">提示词覆盖 {{ importResult.prompts_overwritten || 0 }} 条</div>
                     <div class="result-item">新增 {{ importResult.created || 0 }}</div><div class="result-item">更新 {{ importResult.updated || 0 }}</div>
                     <div class="result-item">
                         <p>总数: <span>{{ importResult.total }}</span></p>
@@ -85,6 +86,7 @@ interface ImportError {
 }
 
 interface ImportResult {
+    prompts_overwritten?: number;
     total: number;
     created?: number;
     updated?: number;
@@ -171,7 +173,7 @@ const handleImport = async () => {
             return
         }
         const preview = importResult.value!
-        await confirmAction(`本次备份涉及 ${preview.total} 个域名及相关网站记录。确认导入？`, '导入预览', { confirmButtonText: '确认导入' })
+        await confirmAction(`本次备份涉及 ${preview.total} 个域名及相关网站记录，将覆盖 ${preview.prompts_overwritten || 0} 条同分类同标题提示词。确认导入？`, '导入预览', { confirmButtonText: '确认导入' })
         const result = await sendImport(false)
         imported.value = true
         previewReady.value = false

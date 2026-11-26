@@ -16,6 +16,7 @@
         </nav>
       </template>
       <el-button :loading="loading" @click="load(true)">刷新</el-button>
+      <el-button @click="promptEditorVisible = true">新增提示词</el-button>
       <el-button type="primary" @click="createVisible = true">新增网站</el-button>
     </WorkspaceHeading>
     <div v-if="error" class="page-error" role="alert">{{ error }}<el-button @click="load(true)">重试</el-button></div>
@@ -266,6 +267,7 @@
           : ''
       }}
     </p>
+    <PromptEditorDialog v-model="promptEditorVisible" />
     <WebsiteDetailDrawer v-model:visible="detailVisible" :website="selectedSite" @changed="load(true)" />
     <WebsiteBulkSettingsDialog v-model:visible="bulkSettingsVisible" :websites="bulkSettingsSites" :computer-names="websites.map(site=>site.computer_name || '')" @saved="bulkSettingsSaved" />
     <BatchAssignmentDialog
@@ -296,6 +298,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { View, CopyDocument, MoreFilled, Search, Check, Close, Link, Setting } from '@element-plus/icons-vue'
 import WorkspaceHeading from '../components/WorkspaceHeading.vue'
+import PromptEditorDialog from '../components/PromptEditorDialog.vue'
 import WebsiteMetricEditor from '../components/WebsiteMetricEditor.vue'
 import { sortComputerNames } from '../utils/computer-options'
 import WebsiteDetailDrawer from '../components/WebsiteDetailDrawer.vue'
@@ -392,6 +395,7 @@ const openBulkSettings = () => {
 const bulkSettingsSaved = () => { selectedIds.clear(); void load(true) }
 const batchVisible = ref(false)
 const createVisible = ref(false)
+const promptEditorVisible = ref(false)
 const sortKey = computed({ get: () => columns.some(column => column.key !== 'actions' && column.key === route.query.sort) ? String(route.query.sort) : '', set: value => { const query = { ...route.query }; if (value) query.sort = value; else { delete query.sort; delete query.direction }; void router.replace({ query }) } })
 const adsOnly = computed(() => route.query.ads === '1')
 const sortDirection = computed(() => route.query.direction === 'desc' ? 'desc' : 'asc')

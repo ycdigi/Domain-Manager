@@ -1,0 +1,50 @@
+.prompt-toolbar { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:var(--space-md); margin-bottom:var(--space-md); }
+.prompt-toolbar search { width:min(100%,560px); }
+.prompt-toolbar > .page-muted { font-size:.875rem; }
+.prompt-search { display:flex; align-items:center; gap:var(--space-xs); }
+.prompt-search .el-input { flex:1; min-width:0; }
+.prompt-workspace { display:grid; grid-template-columns:176px minmax(260px, .7fr) minmax(0,1.3fr); border:1px solid var(--color-rule); border-radius:var(--radius-panel); background:var(--color-paper); align-items:stretch; min-height:560px; }
+.prompt-categories, .prompt-list-panel, .prompt-detail { min-width:0; }
+.prompt-categories { padding:var(--space-md) var(--space-sm); background:var(--color-paper-2); border-radius:var(--radius-panel) 0 0 var(--radius-panel); }
+.prompt-categories .panel-heading { padding-inline:var(--space-xs); margin-bottom:var(--space-xs); }
+.prompt-categories h2, .prompt-list-meta h2 { font-size:.9375rem; margin:0; font-weight:600; }
+.prompt-add-category { width:calc(100% - 16px); margin:0 var(--space-xs) var(--space-md); }
+.prompt-filter { display:flex; justify-content:space-between; gap:var(--space-xs); text-align:left; width:100%; padding:var(--space-sm); border:0; border-radius:var(--radius-control); background:transparent; color:var(--color-ink-2); cursor:pointer; overflow-wrap:anywhere; font:inherit; min-height:44px; }
+.prompt-filter:hover { background:var(--color-paper-3); }
+.prompt-filter.is-active { color:var(--color-link); background:var(--color-accent-paper); font-weight:600; }
+.prompt-filter-label { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.prompt-filter span:last-child { flex-shrink:0; font-size:.8125rem; font-variant-numeric:tabular-nums; }
+.prompt-list-panel { border-inline:1px solid var(--color-rule); }
+.prompt-list-meta { display:flex; align-items:center; justify-content:space-between; gap:var(--space-xs); padding:var(--space-sm) var(--space-md); min-height:54px; border-bottom:1px solid var(--color-rule); }
+.prompt-list-meta h2 span { margin-left:var(--space-xs); font-size:.8125rem; color:var(--color-muted); font-weight:400; }
+.prompt-list { list-style:none; margin:0; padding:0; }
+.prompt-card { border-bottom:1px solid var(--color-rule); }
+.prompt-card:hover { background:var(--color-paper-2); }
+.prompt-card.is-active { background:var(--color-accent-paper); }
+.prompt-open { display:flex; flex-direction:column; gap:var(--space-xs); width:100%; border:0; padding:var(--space-md) var(--space-md) var(--space-sm); text-align:left; background:transparent; color:inherit; cursor:pointer; font:inherit; overflow-wrap:anywhere; }
+.prompt-card-heading { display:flex; align-items:baseline; justify-content:space-between; gap:var(--space-sm); width:100%; min-width:0; }
+.prompt-open strong { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:1rem; font-weight:600; line-height:1.55; }
+.prompt-card-category { flex:0 1 auto; min-width:0; max-width:38%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.8125rem; color:var(--color-muted); }
+.prompt-excerpt { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; color:var(--color-muted); font-size:.875rem; line-height:1.65; white-space:pre-wrap; }
+.prompt-card-actions { display:flex; justify-content:space-between; align-items:center; padding:0 var(--space-md) var(--space-sm); flex-wrap:wrap; gap:var(--space-xs); }
+.prompt-card-actions .el-icon { margin-right:var(--space-2xs); }
+.prompt-detail { padding:var(--space-lg); }
+.prompt-detail-header { margin-bottom:var(--space-md); }
+.prompt-detail-content h2 { font-size:1.375rem; line-height:1.5; margin:0 0 var(--space-sm); overflow-wrap:anywhere; font-weight:600; }
+.prompt-detail-meta { display:flex; align-items:center; flex-wrap:wrap; gap:var(--space-sm); color:var(--color-muted); font-size:.8125rem; }
+.prompt-category-tag { max-width:100%; min-width:0; overflow-wrap:anywhere; background:var(--color-paper-3); color:var(--color-ink-2); padding:var(--space-2xs) var(--space-xs); border-radius:var(--radius-control); }
+.prompt-edit-metadata { margin-top:var(--space-xs); }
+.prompt-detail-actions { display:flex; flex-wrap:wrap; gap:var(--space-xs); padding-bottom:var(--space-lg); border-bottom:1px solid var(--color-rule); }
+.prompt-detail-actions .el-button, .prompt-card-actions .el-button { margin-left:0; }
+.prompt-body-label { margin:var(--space-lg) 0 var(--space-sm); font-size:.875rem; font-weight:600; color:var(--color-ink-2); }
+.prompt-body { white-space:pre-wrap; overflow-wrap:anywhere; font-family:var(--font-body); font-size:.9375rem; line-height:1.85; margin:0; max-width:75ch; tab-size:4; }
+.prompt-empty { color:var(--color-muted); line-height:1.7; padding:var(--space-lg); font-size:.9375rem; }
+.prompt-error { color:var(--color-error); white-space:pre-wrap; overflow-wrap:anywhere; }
+.prompt-category-create { display:flex; gap:var(--space-xs); align-items:center; }
+.prompt-category-create .el-input { flex:1; min-width:0; }
+.prompt-category-management { list-style:none; margin:var(--space-md) 0; padding:0; }
+.prompt-category-management li { display:flex; align-items:center; border-bottom:1px solid var(--color-rule); padding:var(--space-xs) 0; gap:var(--space-xs); }
+.prompt-category-management li span { flex:1; min-width:0; overflow-wrap:anywhere; }
+.prompt-open:focus-visible, .prompt-filter:focus-visible, .prompt-body:focus-visible { outline:2px solid var(--color-focus); outline-offset:-2px; }
+@media(max-width:1100px) and (min-width:901px) { .prompt-workspace { grid-template-columns:152px minmax(220px,.8fr) minmax(0,1fr); } .prompt-detail { padding:var(--space-md); } }
+@media(max-width:900px) { .prompt-workspace { grid-template-columns:minmax(0,1fr); min-height:360px; } .prompt-categories { display:flex; flex-wrap:wrap; gap:var(--space-2xs); border-bottom:1px solid var(--color-rule); border-radius:var(--radius-panel) var(--radius-panel) 0 0; } .prompt-categories .panel-heading { width:100%; } .prompt-add-category { width:auto; margin:0 0 var(--space-xs); } .prompt-filter { width:auto; max-width:100%; } .prompt-list-panel { border:0; } }

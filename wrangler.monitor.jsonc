@@ -16,7 +16,7 @@
     "preview": {
       "name": "domain-manager-monitor-preview",
       "vars": { "MONITOR_ENABLED": "false" },
-      "d1_databases": [{ "binding": "DB", "database_name": "domains-db-preview", "database_id": "REPLACE_WITH_PREVIEW_DATABASE_ID" }],
+      "d1_databases": [{ "binding": "DB", "database_name": "domains-db-preview", "database_id": "b00f4ca0-eb41-48d2-9a30-275ae134dd64" }],
       "triggers": { "crons": [] }
     }
   }

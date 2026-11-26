@@ -1,0 +1,27 @@
+.prompt-editor-dialog { display:flex; flex-direction:column; max-height:90dvh; }
+.prompt-editor-dialog .el-dialog__body { overflow:auto; overscroll-behavior:contain; min-height:0; }
+.prompt-editor-dialog .el-dialog__header, .prompt-editor-dialog .el-dialog__footer { flex-shrink:0; }
+.prompt-editor-error { color:var(--color-error); white-space:pre-wrap; overflow-wrap:anywhere; }
+.prompt-editor-preview { white-space:pre-wrap; overflow-wrap:anywhere; font: .9375rem/1.85 var(--font-body); margin:0; tab-size:4; }
+.prompt-paste { margin:var(--space-md) 0 var(--space-lg); padding:var(--space-md); background:var(--color-paper-2); border-radius:var(--radius-panel); }
+.prompt-paste label { display:block; margin-bottom:var(--space-xs); font-weight:500; }
+.prompt-paste .page-muted { font-size:.875rem; line-height:1.6; }
+.prompt-editor .el-select { width:100%; }
+.prompt-editor .el-radio-group { margin-bottom:var(--space-xs); }
+.prompt-editor .el-textarea__inner { line-height:1.7; font-family:var(--font-body); }
+.prompt-editor .el-form-item { margin-bottom:var(--space-lg); }
+.prompt-category-field { display:flex; gap:var(--space-xs); width:100%; }
+.prompt-category-field .el-select { flex:1; min-width:0; }
+.prompt-field-help { margin:var(--space-xs) 0 0; color:var(--color-muted); font-size:.8125rem; line-height:1.6; }
+.prompt-form-heading { margin:var(--space-lg) 0 var(--space-md); padding-bottom:var(--space-xs); border-bottom:1px solid var(--color-rule); font-size:1rem; }
+.prompt-identification { display:flex; gap:var(--space-xs); padding:var(--space-md); background:var(--color-success-paper); color:var(--color-success); border-radius:var(--radius-control); overflow-wrap:anywhere; }
+.prompt-identification .el-icon { flex-shrink:0; margin-top:var(--space-2xs); }
+.prompt-identification strong { font-weight:500; }
+.prompt-identification p { margin:var(--space-2xs) 0 0; font-size:.8125rem; }
+.prompt-conflict { padding:var(--space-sm); border:1px solid var(--color-rule); margin-bottom:var(--space-md); }
+.prompt-conflict .prompt-editor-preview { max-height:240px; overflow:auto; margin-bottom:var(--space-md); }
+@media(max-width:640px) {
+ .prompt-category-field { flex-wrap:wrap; }
+ .prompt-category-field .el-select { flex-basis:180px; }
+ .prompt-editor .el-input__inner, .prompt-editor .el-textarea__inner { font-size:1rem; }
+}
